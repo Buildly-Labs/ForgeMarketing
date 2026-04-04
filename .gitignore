@@ -41,5 +41,10 @@ data/analytics/
 data/reports/
 reports/
 
+# Environment
+.env
+.env.local
+.env.production
+
 # Test artifacts
 email_test_results_*.json

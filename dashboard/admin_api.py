@@ -3,6 +3,7 @@ Admin API endpoints for managing brands and their configurations
 """
 
 from flask import Blueprint, request, jsonify
+from flask_login import login_required
 from datetime import datetime
 from typing import Dict, Any, Tuple
 import logging
@@ -12,6 +13,13 @@ from dashboard.models import db, Brand, BrandEmailConfig, BrandSettings, APICred
 logger = logging.getLogger(__name__)
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/api/admin')
+
+
+@admin_bp.before_request
+@login_required
+def require_login():
+    """All admin API endpoints require authentication."""
+    pass
 
 
 # ============================================================================

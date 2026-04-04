@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sign In — Buildly</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] },
+                    colors: {
+                        buildly: {
+                            400: '#5B9DE2',
+                            500: '#4A90D9',
+                            600: '#3A73AE',
+                            700: '#1E3A5F',
+                            900: '#0E1D30',
+                        },
+                    },
+                },
+            },
+        }
+    </script>
+    <style>
+        .dot-pattern {
+            background-image: radial-gradient(circle, rgba(74,144,217,.12) 1px, transparent 1px);
+            background-size: 24px 24px;
+        }
+    </style>
+</head>
+<body class="h-full font-sans bg-buildly-900 text-white antialiased">
+    <div class="fixed inset-0 dot-pattern pointer-events-none"></div>
+
+    <div class="relative min-h-full flex flex-col items-center justify-center px-4">
+        <!-- Logo -->
+        <div class="flex items-center space-x-3 mb-10">
+            <div class="w-10 h-10 rounded-lg bg-buildly-500 flex items-center justify-center">
+                <span class="text-white font-bold text-xl">B</span>
+            </div>
+            <span class="text-2xl font-semibold tracking-tight">Buildly</span>
+        </div>
+
+        <!-- Card -->
+        <div class="w-full max-w-sm rounded-2xl bg-white/[.06] border border-white/10 backdrop-blur p-8">
+            <h2 class="text-xl font-semibold text-center mb-1">Sign in</h2>
+            <p class="text-buildly-400 text-sm text-center mb-8">Enter your credentials to continue</p>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+            <div class="mb-5">
+                {% for category, message in messages %}
+                <div class="p-3 rounded-lg text-sm
+                    {% if category == 'error' %}bg-red-500/20 text-red-300
+                    {% else %}bg-buildly-500/20 text-buildly-400{% endif %}">
+                    {{ message }}
+                </div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            {% endwith %}
+
+            <form method="POST" action="/login" class="space-y-5">
+                <div>
+                    <label for="email" class="block text-xs font-medium text-buildly-400 mb-1.5">Email</label>
+                    <input type="email" id="email" name="email" required autofocus
+                        class="w-full px-4 py-2.5 rounded-lg bg-white/[.08] border border-white/10 text-white placeholder-white/30
+                               focus:outline-none focus:ring-2 focus:ring-buildly-500/50 focus:border-buildly-500 transition"
+                        placeholder="you@example.com">
+                </div>
+                <div>
+                    <label for="password" class="block text-xs font-medium text-buildly-400 mb-1.5">Password</label>
+                    <input type="password" id="password" name="password" required
+                        class="w-full px-4 py-2.5 rounded-lg bg-white/[.08] border border-white/10 text-white placeholder-white/30
+                               focus:outline-none focus:ring-2 focus:ring-buildly-500/50 focus:border-buildly-500 transition"
+                        placeholder="••••••••">
+                </div>
+                <button type="submit"
+                    class="w-full py-2.5 px-4 rounded-lg bg-buildly-500 hover:bg-buildly-600 text-white font-medium transition-colors">
+                    Sign In
+                </button>
+            </form>
+        </div>
+
+        <p class="mt-8 text-buildly-400/40 text-xs">&copy; 2026 Buildly</p>
+    </div>
+</body>
+</html>

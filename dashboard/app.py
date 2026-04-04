@@ -4,7 +4,8 @@ Unified Marketing Automation Dashboard
 Main web interface for managing all brand marketing activities
 """
 
-from flask import Flask, render_template, request, jsonify, redirect, url_for, send_from_directory, abort
+from flask import Flask, render_template, request, jsonify, redirect, url_for, send_from_directory, abort, session, g
+from flask_login import LoginManager, login_required, current_user
 import asyncio
 import json
 import yaml
@@ -180,8 +181,22 @@ else:
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Initialize database
-from dashboard.models import db
+from dashboard.models import db, User, Brand, BrandTheme
 db.init_app(app)
+
+# ── Flask-Login ──────────────────────────────────────────────
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'auth.login'
+login_manager.login_message_category = 'info'
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
+# ── Auth blueprint ───────────────────────────────────────────
+from dashboard.auth import auth_bp
+app.register_blueprint(auth_bp)
 
 # Initialize admin API blueprint
 from dashboard.admin_api import admin_bp
@@ -189,6 +204,38 @@ from dashboard.marketing_calendar_api import marketing_calendar_bp
 
 app.register_blueprint(admin_bp)
 app.register_blueprint(marketing_calendar_bp)
+
+# ── Brand context middleware ─────────────────────────────────
+@app.before_request
+def set_brand_context():
+    """Make the active brand + theme available on every request via g."""
+    g.active_brand = None
+    g.brand_theme = None
+    g.user_brands = []
+
+    if current_user.is_authenticated:
+        g.user_brands = current_user.get_brands()
+        brand_id = session.get('active_brand_id')
+        if brand_id:
+            g.active_brand = Brand.query.get(brand_id)
+            if g.active_brand:
+                g.brand_theme = g.active_brand.theme
+        # fallback: first available brand
+        if not g.active_brand and g.user_brands:
+            g.active_brand = g.user_brands[0]
+            session['active_brand_id'] = g.active_brand.id
+            g.brand_theme = g.active_brand.theme
+
+@app.context_processor
+def inject_brand_context():
+    """Expose brand data to every Jinja template."""
+    theme = g.get('brand_theme')
+    return {
+        'active_brand': g.get('active_brand'),
+        'brand_theme': theme.to_dict() if theme else {},
+        'user_brands': g.get('user_brands', []),
+        'current_user': current_user,
+    }
 
 # Initialize database on app startup
 @app.before_request
@@ -209,8 +256,10 @@ def initialize_database():
 @app.before_request
 def check_onboarding():
     """Redirect to onboarding if system not configured"""
-    # Skip onboarding check for static files and API endpoints
+    # Skip onboarding check for static files, API endpoints, and auth routes
     if request.path.startswith('/static') or request.path.startswith('/api/onboarding'):
+        return
+    if request.path in ('/login', '/logout'):
         return
     
     # Skip if already on onboarding page
@@ -512,17 +561,20 @@ def onboarding_save_ai():
 
 # Admin UI route
 @app.route('/admin/brands')
+@login_required
 def admin_brands():
     """Admin panel for managing brands and email configurations"""
     return render_template('admin_brands.html')
 
 # Marketing Calendar UI route
 @app.route('/marketing-calendar')
+@login_required
 def marketing_calendar_ui():
     """Marketing calendar dashboard interface"""
     return render_template('marketing_calendar.html')
 
 @app.route('/content-calendar')
+@login_required
 def content_calendar_ui():
     """Content calendar with full CRUD and AI generation"""
     return render_template('content_calendar.html')
@@ -1309,6 +1361,7 @@ class MarketingDashboard:
 dashboard = MarketingDashboard()
 
 @app.route('/')
+@login_required
 def index():
     """Main dashboard page"""
     return render_template('dashboard.html', 
@@ -1317,6 +1370,7 @@ def index():
                          title=dashboard.config['dashboard']['title'])
 
 @app.route('/brands')
+@login_required
 def brands():
     """Brand management page with real configuration status"""
     brand_stats = {}
@@ -1353,6 +1407,7 @@ def brands():
                          environment_config=ENVIRONMENT_CONFIG)
 
 @app.route('/generate')
+@login_required
 def generate():
     """Content generation page"""
     return render_template('generate.html',
@@ -1360,6 +1415,7 @@ def generate():
                          title='Content Generation')
 
 @app.route('/outreach')
+@login_required
 def outreach():
     """Outreach management page"""
     return render_template('outreach.html',
@@ -1367,6 +1423,7 @@ def outreach():
                          title='Outreach Management')
 
 @app.route('/api/generate', methods=['POST'])
+@login_required
 def api_generate():
     """API endpoint for content generation"""
     data = request.get_json()
@@ -1414,6 +1471,7 @@ def api_generate():
         loop.close()
 
 @app.route('/activity')
+@login_required
 def activity():
     """Real-time activity dashboard page"""
     return render_template('activity.html',
@@ -1421,6 +1479,7 @@ def activity():
                          activity_tracker_available=ACTIVITY_TRACKER_AVAILABLE)
 
 @app.route('/analytics')
+@login_required
 def analytics():
     """Enhanced Analytics and reporting page with real Google Analytics and email data"""
     return render_template('analytics.html',
@@ -1430,6 +1489,7 @@ def analytics():
 
 @app.route('/settings')
 @app.route('/admin')
+@login_required
 def admin_settings():
     """Combined admin and settings page for system management"""
     return render_template('admin.html',
@@ -1437,48 +1497,56 @@ def admin_settings():
                          title='Admin Panel')
 
 @app.route('/automation')
+@login_required
 def automation():
     """Automation monitoring page"""
     return render_template('automation.html',
                          title='Automation Monitor')
 
 @app.route('/campaigns')
+@login_required
 def campaigns():
     """Campaign execution and management page"""
     return render_template('campaigns.html',
                          title='Campaign Manager')
 
 @app.route('/reports')
+@login_required
 def reports():
     """Comprehensive reporting dashboard"""
     return render_template('reports.html',
                          title='Reports & Analytics')
 
 @app.route('/email-reports')
+@login_required
 def email_reports():
     """Email campaign reports and analytics"""
     return render_template('email_reports.html',
                          title='Email Campaign Reports')
 
 @app.route('/engagement-report')
+@login_required
 def engagement_report():
     """Email engagement report with detailed campaign and recipient tracking"""
     return render_template('engagement_report.html',
                          title='Email Engagement Report')
 
 @app.route('/google-ads')
+@login_required
 def google_ads():
     """Google Ads campaign management dashboard"""
     return render_template('google_ads.html',
                          title='Google Ads Management')
 
 @app.route('/influencers')
+@login_required
 def influencers():
     """Social media influencer discovery and management"""
     return render_template('influencers.html',
                          title='Influencer Discovery')
 
 @app.route('/contacts')
+@login_required
 def contacts():
     """Unified contact management system - CRM"""
     return render_template('contacts.html',

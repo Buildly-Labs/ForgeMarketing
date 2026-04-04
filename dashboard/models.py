@@ -4,11 +4,119 @@ Stores brand configurations, API credentials, and system settings
 """
 
 from flask_sqlalchemy import SQLAlchemy
+from flask_login import UserMixin
 from datetime import datetime
 from typing import Dict, Any, Optional, List
 import json
+import bcrypt
 
 db = SQLAlchemy()
+
+
+# ============================================================================
+# USER & AUTH MODELS
+# ============================================================================
+
+class User(UserMixin, db.Model):
+    """A user who can log in and manage one or more brands"""
+    __tablename__ = 'users'
+
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(255), unique=True, nullable=False, index=True)
+    password_hash = db.Column(db.String(255), nullable=False)
+    display_name = db.Column(db.String(255), default='')
+    is_admin = db.Column(db.Boolean, default=False)
+    is_active_user = db.Column(db.Boolean, default=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    last_login_at = db.Column(db.DateTime, nullable=True)
+
+    # Relationships
+    brand_memberships = db.relationship('UserBrand', backref='user', lazy='dynamic', cascade='all, delete-orphan')
+
+    def set_password(self, password: str) -> None:
+        self.password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+    def check_password(self, password: str) -> bool:
+        return bcrypt.checkpw(password.encode('utf-8'), self.password_hash.encode('utf-8'))
+
+    @property
+    def is_active(self):
+        return self.is_active_user
+
+    def get_brands(self) -> list:
+        """Return Brand objects this user may access"""
+        return [ub.brand for ub in self.brand_memberships.all() if ub.brand.is_active]
+
+    def has_brand_access(self, brand_id: int) -> bool:
+        if self.is_admin:
+            return True
+        return self.brand_memberships.filter_by(brand_id=brand_id).first() is not None
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'id': self.id,
+            'email': self.email,
+            'display_name': self.display_name,
+            'is_admin': self.is_admin,
+            'brands': [ub.brand.name for ub in self.brand_memberships.all()],
+            'last_login_at': self.last_login_at.isoformat() if self.last_login_at else None,
+        }
+
+
+class UserBrand(db.Model):
+    """Links a user to one or more brands they can manage"""
+    __tablename__ = 'user_brands'
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    brand_id = db.Column(db.Integer, db.ForeignKey('brands.id'), nullable=False, index=True)
+    role = db.Column(db.String(50), default='editor')  # owner, editor, viewer
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    brand = db.relationship('Brand', backref='user_memberships')
+
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'brand_id', name='unique_user_brand'),
+    )
+
+
+# ============================================================================
+# BRAND THEME MODEL
+# ============================================================================
+
+class BrandTheme(db.Model):
+    """Data-driven visual theme for each brand"""
+    __tablename__ = 'brand_themes'
+
+    id = db.Column(db.Integer, primary_key=True)
+    brand_id = db.Column(db.Integer, db.ForeignKey('brands.id'), nullable=False, unique=True, index=True)
+
+    primary_color = db.Column(db.String(7), default='#4A90D9')    # hex
+    secondary_color = db.Column(db.String(7), default='#1E3A5F')
+    accent_color = db.Column(db.String(7), default='#10B981')
+    nav_gradient_from = db.Column(db.String(7), default='#667eea')
+    nav_gradient_to = db.Column(db.String(7), default='#764ba2')
+    logo_url = db.Column(db.String(500), default='')
+    favicon_url = db.Column(db.String(500), default='')
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    brand = db.relationship('Brand', backref=db.backref('theme', uselist=False, cascade='all, delete-orphan'))
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'primary_color': self.primary_color,
+            'secondary_color': self.secondary_color,
+            'accent_color': self.accent_color,
+            'nav_gradient_from': self.nav_gradient_from,
+            'nav_gradient_to': self.nav_gradient_to,
+            'logo_url': self.logo_url,
+            'favicon_url': self.favicon_url,
+        }
 
 
 class Brand(db.Model):

@@ -5,7 +5,10 @@ Database initialization and migration utilities
 import os
 from pathlib import Path
 from datetime import datetime
-from dashboard.models import db, Brand, BrandEmailConfig, BrandSettings, BrandAPICredential, SystemConfig, APICredentialLog
+from dashboard.models import (
+    db, Brand, BrandEmailConfig, BrandSettings, BrandAPICredential,
+    SystemConfig, APICredentialLog, User, UserBrand, BrandTheme,
+)
 
 
 class DatabaseManager:
@@ -30,8 +33,14 @@ class DatabaseManager:
                 db.create_all()
                 print("✅ Database schema initialized successfully")
                 
-                # No longer auto-loading default brands
-                # Brands are created through onboarding or admin panel
+                # Seed brands + admin user if the DB is empty
+                brand_count = Brand.query.count()
+                user_count = User.query.count()
+                if brand_count == 0:
+                    self._seed_brands_and_themes()
+                if user_count == 0:
+                    self._seed_admin_user()
+                
                 brand_count = Brand.query.count()
                 if brand_count == 0:
                     print("ℹ️  No brands configured. Complete onboarding to add brands.")
@@ -42,6 +51,93 @@ class DatabaseManager:
         except Exception as e:
             print(f"❌ Database initialization failed: {e}")
             return False
+
+    # ── Seed helpers ─────────────────────────────────────────
+
+    def _seed_brands_and_themes(self) -> None:
+        """Create Buildly and Foundry brands with data-driven themes."""
+        seed = [
+            {
+                'name': 'buildly',
+                'display_name': 'Buildly',
+                'description': 'Low-code automation platform',
+                'website_url': 'https://buildly.io',
+                'theme': {
+                    'primary_color': '#4A90D9',
+                    'secondary_color': '#1E3A5F',
+                    'accent_color': '#10B981',
+                    'nav_gradient_from': '#4A90D9',
+                    'nav_gradient_to': '#1E3A5F',
+                },
+            },
+            {
+                'name': 'foundry',
+                'display_name': 'The Foundry',
+                'description': 'Founder-first startup accelerator',
+                'website_url': 'https://firstcityfoundry.com',
+                'theme': {
+                    'primary_color': '#F97316',
+                    'secondary_color': '#1E3A5F',
+                    'accent_color': '#10B981',
+                    'nav_gradient_from': '#F97316',
+                    'nav_gradient_to': '#1E3A5F',
+                },
+            },
+        ]
+
+        for item in seed:
+            try:
+                brand = Brand(
+                    name=item['name'],
+                    display_name=item['display_name'],
+                    description=item['description'],
+                    website_url=item['website_url'],
+                    is_active=True,
+                )
+                db.session.add(brand)
+                db.session.flush()
+
+                # Theme
+                theme = BrandTheme(brand_id=brand.id, **item['theme'])
+                db.session.add(theme)
+
+                # Default settings
+                db.session.add(BrandSettings(brand_id=brand.id))
+                print(f"✅ Seeded brand: {item['display_name']}")
+            except Exception as e:
+                print(f"⚠️  Failed to seed brand {item['display_name']}: {e}")
+
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            print(f"❌ Brand seed commit failed: {e}")
+
+    def _seed_admin_user(self) -> None:
+        """Create a default admin user linked to all brands."""
+        admin_email = os.getenv('ADMIN_EMAIL', 'admin@firstcityfoundry.com')
+        admin_password = os.getenv('ADMIN_PASSWORD', 'changeme')
+
+        user = User(email=admin_email, display_name='Admin', is_admin=True)
+        user.set_password(admin_password)
+        db.session.add(user)
+        db.session.flush()
+
+        # Link to every active brand
+        for brand in Brand.query.filter_by(is_active=True).all():
+            db.session.add(UserBrand(user_id=user.id, brand_id=brand.id, role='owner'))
+
+        # Mark setup as complete so onboarding check passes
+        if not SystemConfig.query.filter_by(key='setup_completed').first():
+            db.session.add(SystemConfig(
+                key='setup_completed',
+                value='{"completed": true, "source": "seed"}',
+                category='system',
+                description='Seeded during initial setup',
+            ))
+
+        db.session.commit()
+        print(f"✅ Seeded admin user: {admin_email}  (change password immediately!)")
     
     def _load_default_brands(self) -> None:
         """Load default brands from environment"""
