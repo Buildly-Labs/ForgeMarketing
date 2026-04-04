@@ -1,0 +1,17 @@
+.git
+.gitignore
+.github
+.env
+.env.*
+!.env.example
+*.pyc
+__pycache__
+*.pyo
+*.pyd
+.venv
+venv
+node_modules
+logs/
+data/
+devdocs/
+docs/

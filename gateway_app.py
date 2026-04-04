@@ -71,6 +71,10 @@ def index():
                            producer_url=PRODUCER_URL,
                            user=current_user)
 
+@app.route('/health')
+def health():
+    return 'ok', 200
+
 if __name__ == '__main__':
     port = int(os.getenv('GATEWAY_PORT', 5000))
     print(f"🚀 Buildly Gateway running on http://localhost:{port}")

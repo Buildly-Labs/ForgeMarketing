@@ -3,38 +3,42 @@ region: nyc
 
 services:
   - name: web
-    dockerfile_path: Dockerfile
     github:
       repo: Buildly-Marketplace/ForgeMarketing
       branch: main
       deploy_on_push: true
+    dockerfile_path: Dockerfile
     http_port: 8080
     instance_count: 1
     instance_size_slug: basic-s
     health_check:
-      http_path: /
-      initial_delay_seconds: 30
-      period_seconds: 10
-      timeout_seconds: 5
+      http_path: /health
+      initial_delay_seconds: 60
+      period_seconds: 15
+      timeout_seconds: 10
       success_threshold: 1
-      failure_threshold: 5
+      failure_threshold: 6
     envs:
       - key: DJANGO_SETTINGS_MODULE
+        scope: RUN_TIME
         value: logic_service.settings.docker
       - key: RUNNING_IN_DOCKER
+        scope: RUN_TIME
         value: "1"
       - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${db.DATABASE_URL}
+      - key: DATABASE_CA_CERT
+        scope: RUN_TIME
+        value: ${db.CA_CERT}
+      - key: SECRET_KEY
+        scope: RUN_TIME
         type: SECRET
-      - key: DATABASE_NAME
+      - key: FLASK_SECRET_KEY
+        scope: RUN_TIME
         type: SECRET
-      - key: DATABASE_USER
-        type: SECRET
-      - key: DATABASE_PASSWORD
-        type: SECRET
-      - key: DATABASE_HOST
-        type: SECRET
-      - key: DATABASE_PORT
-        type: SECRET
+    routes:
+      - path: /
 
 databases:
   - name: db
