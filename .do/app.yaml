@@ -1,0 +1,44 @@
+name: forgemarketing
+region: nyc
+
+services:
+  - name: web
+    dockerfile_path: Dockerfile
+    github:
+      repo: Buildly-Marketplace/ForgeMarketing
+      branch: main
+      deploy_on_push: true
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: basic-s
+    health_check:
+      http_path: /
+      initial_delay_seconds: 30
+      period_seconds: 10
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 5
+    envs:
+      - key: DJANGO_SETTINGS_MODULE
+        value: logic_service.settings.docker
+      - key: RUNNING_IN_DOCKER
+        value: "1"
+      - key: DATABASE_URL
+        type: SECRET
+      - key: DATABASE_NAME
+        type: SECRET
+      - key: DATABASE_USER
+        type: SECRET
+      - key: DATABASE_PASSWORD
+        type: SECRET
+      - key: DATABASE_HOST
+        type: SECRET
+      - key: DATABASE_PORT
+        type: SECRET
+
+databases:
+  - name: db
+    engine: PG
+    version: "16"
+    size: db-s-1vcpu-1gb
+    num_nodes: 1

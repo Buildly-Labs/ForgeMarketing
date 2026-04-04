@@ -38,6 +38,6 @@ COPY deploy/supervisord.conf /etc/supervisor/conf.d/buildly.conf
 # ── Data dir for SQLite ──────────────────────────────────────
 RUN mkdir -p /app/data
 
-EXPOSE 80
+EXPOSE 8080
 
 CMD ["supervisord", "-n", "-c", "/etc/supervisor/conf.d/buildly.conf"]
