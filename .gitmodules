@@ -1,0 +1,3 @@
+[submodule "Producer"]
+	path = Producer
+	url = https://github.com/Buildly-Labs/Producer.git
