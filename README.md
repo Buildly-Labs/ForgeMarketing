@@ -18,8 +18,8 @@
 ## ⚡ Quick Start (30 seconds)
 
 ```bash
-# Clone and navigate
-git clone https://github.com/Buildly-Marketplace/ForgeMarketing.git
+# Clone (include submodules like Producer)
+git clone --recurse-submodules https://github.com/Buildly-Marketplace/ForgeMarketing.git
 cd ForgeMarketing
 
 # Setup (one-time)
@@ -68,7 +68,11 @@ The script will:
 
 ### Option 4: Docker
 ```bash
-docker-compose -f ops/docker-compose.yml up -d
+# Initialise submodules and build the image
+./build.sh
+
+# Start services
+docker compose up -d
 ```
 
 ### Option 5: Kubernetes/Helm
@@ -93,6 +97,8 @@ pytest tests/smoke/ tests/crud/ -v
 
 ```
 ForgeMarketing/
+├── build.sh                     Submodule init + Docker build
+├── Producer/                    Git submodule — Podcast Studio (Django)
 ├── ops/                         ✓ Deployment & setup
 │   ├── startup.sh               Main setup/start/stop/restart script ⭐
 │   ├── Dockerfile               Docker image
