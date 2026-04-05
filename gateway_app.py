@@ -26,24 +26,40 @@ app = Flask(__name__, template_folder='gateway/templates', static_folder='gatewa
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'marketing-automation-dashboard-2025')
 
 # ── Database (same URI as ForgeMarketing) ────────────────────
-_database_url = os.getenv('DATABASE_URL')
-if _database_url:
-    # Strip query params (e.g. ?ssl-mode=REQUIRED) that break SQLAlchemy's parser
-    _database_url = _database_url.split('?')[0]
-    if _database_url.startswith('postgres://'):
-        _database_url = _database_url.replace('postgres://', 'postgresql://', 1)
-    elif _database_url.startswith('mysql://'):
-        _database_url = _database_url.replace('mysql://', 'mysql+mysqldb://', 1)
-    app.config['SQLALCHEMY_DATABASE_URI'] = _database_url
-    # Enable SSL for managed databases and set pool options
+def _build_database_url():
+    """Resolve database URL from environment, with fallbacks."""
+    url = os.getenv('DATABASE_URL', '')
+    # Strip query params that can break SQLAlchemy (e.g. ?ssl-mode=REQUIRED)
+    url = url.split('?')[0] if url else ''
+    # Rewrite schemes
+    if url.startswith('postgres://'):
+        url = url.replace('postgres://', 'postgresql://', 1)
+    elif url.startswith('mysql://'):
+        url = url.replace('mysql://', 'mysql+mysqldb://', 1)
+    # Validate it looks like a real URL (not an unresolved ${...} reference)
+    if url and '://' in url and not url.startswith('$'):
+        return url
+    # Fallback: build from individual env vars
+    db_host = os.getenv('DATABASE_HOST') or os.getenv('DB_HOST')
+    if db_host:
+        db_user = os.getenv('DATABASE_USER') or os.getenv('DB_USER', 'root')
+        db_pass = os.getenv('DATABASE_PASSWORD') or os.getenv('DB_PASSWORD', '')
+        db_port = os.getenv('DATABASE_PORT') or os.getenv('DB_PORT', '25060')
+        db_name = os.getenv('DATABASE_NAME') or os.getenv('DB_NAME', 'defaultdb')
+        db_engine = os.getenv('DATABASE_ENGINE', 'mysql+mysqldb')
+        return f"{db_engine}://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}"
+    # Final fallback: local SQLite
+    return 'sqlite:///' + os.path.join(PROJECT_ROOT, 'data', 'marketing_dashboard.db')
+
+_database_url = _build_database_url()
+print(f"[gateway] DB URL scheme: {_database_url.split('://')[0] if '://' in _database_url else 'UNKNOWN'}")
+app.config['SQLALCHEMY_DATABASE_URI'] = _database_url
+if not _database_url.startswith('sqlite'):
     app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
         'pool_size': 10,
         'pool_recycle': 300,
         'pool_pre_ping': True,
     }
-else:
-    _db_path = os.path.join(PROJECT_ROOT, 'data', 'marketing_dashboard.db')
-    app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + _db_path
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 from dashboard.models import db, User, Brand, BrandTheme
