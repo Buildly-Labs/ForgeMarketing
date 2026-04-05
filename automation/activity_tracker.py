@@ -164,7 +164,7 @@ class ActivityTracker:
     
     def _initialize_database(self):
         """Create all tables if they don't exist"""
-        self.sa_metadata.create_all(self.engine)
+        self.sa_metadata.create_all(self.engine, checkfirst=True)
         self.logger.info("✅ Activity tracking database initialized")
     
     # AI Activity Tracking

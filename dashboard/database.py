@@ -31,6 +31,7 @@ class DatabaseManager:
         try:
             with self.app.app_context():
                 db.create_all()
+                self._apply_schema_migrations()
                 print("✅ Database schema initialized successfully")
                 
                 # Seed brands + admin user if the DB is empty
@@ -54,6 +55,34 @@ class DatabaseManager:
         except Exception as e:
             print(f"❌ Database initialization failed: {e}")
             return False
+
+    # ── Schema migrations (lightweight ALTER TABLE for MySQL) ──
+
+    def _apply_schema_migrations(self) -> None:
+        """Add missing columns to existing tables.
+        
+        SQLAlchemy's create_all() only creates new tables — it won't add
+        new columns to tables that already exist.  This method inspects
+        the live schema and runs ALTER TABLE for any columns the models
+        define but the database doesn't have yet.
+        """
+        from sqlalchemy import inspect as sa_inspect, text
+
+        inspector = sa_inspect(db.engine)
+        migrations = [
+            # (table, column_name, column_sql_type)
+            ('users', 'must_change_password', 'BOOLEAN DEFAULT 0'),
+        ]
+
+        for table, col, col_type in migrations:
+            if not inspector.has_table(table):
+                continue
+            existing = {c['name'] for c in inspector.get_columns(table)}
+            if col not in existing:
+                stmt = f'ALTER TABLE `{table}` ADD COLUMN `{col}` {col_type}'
+                db.session.execute(text(stmt))
+                db.session.commit()
+                print(f"  ↳ Added column {table}.{col}")
 
     # ── Seed helpers ─────────────────────────────────────────
 
