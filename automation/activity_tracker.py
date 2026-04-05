@@ -37,6 +37,12 @@ class ActivityTracker:
             # Fix Heroku-style postgres:// -> postgresql://
             if self.database_url.startswith('postgres://'):
                 self.database_url = self.database_url.replace('postgres://', 'postgresql://', 1)
+            # Fix mysql:// -> mysql+mysqldb:// for mysqlclient driver
+            if self.database_url.startswith('mysql://'):
+                self.database_url = self.database_url.replace('mysql://', 'mysql+mysqldb://', 1)
+            # Strip query params (e.g. ?ssl-mode=REQUIRED) that break mysqlclient
+            if '?' in self.database_url:
+                self.database_url = self.database_url.split('?')[0]
         else:
             db_path = str(Path(__file__).parent.parent / 'data' / 'activity_tracker.db')
             Path(db_path).parent.mkdir(parents=True, exist_ok=True)

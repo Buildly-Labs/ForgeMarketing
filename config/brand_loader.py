@@ -50,6 +50,10 @@ class BrandLoader:
             if db_url:
                 if db_url.startswith('postgres://'):
                     db_url = db_url.replace('postgres://', 'postgresql://', 1)
+                if db_url.startswith('mysql://'):
+                    db_url = db_url.replace('mysql://', 'mysql+mysqldb://', 1)
+                if '?' in db_url:
+                    db_url = db_url.split('?')[0]
             else:
                 db_path = os.path.join(project_root, 'data', 'marketing_dashboard.db')
                 if not os.path.exists(db_path):
