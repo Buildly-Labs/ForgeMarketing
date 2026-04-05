@@ -88,8 +88,8 @@ def ensure_db():
         app._db_ready = True
 
 # ── Landing page ─────────────────────────────────────────────
-MARKETING_URL = os.getenv('MARKETING_URL', 'http://localhost:8002')
-PRODUCER_URL = os.getenv('PRODUCER_URL', 'http://localhost:8080')
+MARKETING_URL = os.getenv('MARKETING_URL', '/marketing/')
+PRODUCER_URL = os.getenv('PRODUCER_URL', '/producer/')
 
 @app.route('/')
 @login_required
