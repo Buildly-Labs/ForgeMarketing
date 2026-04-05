@@ -1,0 +1,54 @@
+name: orca-app
+region: nyc
+
+services:
+  - name: forgemarketing
+    github:
+      repo: Buildly-Labs/ForgeMarketing
+      branch: main
+      deploy_on_push: true
+    dockerfile_path: Dockerfile
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: apps-s-1vcpu-0.5gb
+    health_check:
+      http_path: /health
+      initial_delay_seconds: 60
+      period_seconds: 15
+      timeout_seconds: 10
+      success_threshold: 1
+      failure_threshold: 6
+    envs:
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        value: ${db-mysql-nyc3-40163.DATABASE_URL}
+      - key: DJANGO_SETTINGS_MODULE
+        scope: RUN_TIME
+        value: logic_service.settings.docker
+      - key: RUNNING_IN_DOCKER
+        scope: RUN_TIME
+        value: "1"
+
+features:
+  - buildpack-stack=ubuntu-22
+
+ingress:
+  rules:
+    - component:
+        name: forgemarketing
+      match:
+        path:
+          prefix: /
+
+databases:
+  - cluster_name: db-mysql-nyc3-40163
+    db_name: marketingdb
+    db_user: doadmin
+    engine: MYSQL
+    name: db-mysql-nyc3-40163
+    production: true
+
+alerts:
+  - rule: DEPLOYMENT_FAILED
+  - rule: DOMAIN_FAILED
+    num_nodes: 1
