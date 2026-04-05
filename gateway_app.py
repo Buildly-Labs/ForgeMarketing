@@ -78,11 +78,13 @@ def load_user(user_id):
 from dashboard.auth import auth_bp
 app.register_blueprint(auth_bp)
 
-# ── Ensure DB tables exist ───────────────────────────────────
+# ── Ensure DB tables + seed admin ────────────────────────────
 @app.before_request
 def ensure_db():
     if not hasattr(app, '_db_ready'):
-        db.create_all()
+        from dashboard.database import DatabaseManager
+        db_manager = DatabaseManager(app)
+        db_manager.init_db()
         app._db_ready = True
 
 # ── Landing page ─────────────────────────────────────────────

@@ -81,6 +81,46 @@ def logout():
     return redirect('/login')
 
 
+# ── Force password change ────────────────────────────────────
+
+@auth_bp.route('/change-password', methods=['GET', 'POST'])
+@login_required
+def change_password():
+    if request.method == 'GET':
+        return render_template('change_password.html')
+
+    if request.is_json:
+        data = request.get_json()
+    else:
+        data = request.form
+
+    new_password = (data.get('new_password') or '').strip()
+    confirm_password = (data.get('confirm_password') or '').strip()
+
+    if not new_password or len(new_password) < 8:
+        msg = 'Password must be at least 8 characters.'
+        if request.is_json:
+            return jsonify({'success': False, 'error': msg}), 400
+        flash(msg, 'error')
+        return render_template('change_password.html'), 400
+
+    if new_password != confirm_password:
+        msg = 'Passwords do not match.'
+        if request.is_json:
+            return jsonify({'success': False, 'error': msg}), 400
+        flash(msg, 'error')
+        return render_template('change_password.html'), 400
+
+    current_user.set_password(new_password)
+    current_user.must_change_password = False
+    db.session.commit()
+
+    if request.is_json:
+        return jsonify({'success': True, 'redirect': '/'})
+    flash('Password updated successfully.', 'success')
+    return redirect('/')
+
+
 # ── Brand switching ──────────────────────────────────────────
 
 @auth_bp.route('/switch-brand/<int:brand_id>', methods=['POST'])

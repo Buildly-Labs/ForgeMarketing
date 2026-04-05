@@ -27,6 +27,7 @@ class User(UserMixin, db.Model):
     display_name = db.Column(db.String(255), default='')
     is_admin = db.Column(db.Boolean, default=False)
     is_active_user = db.Column(db.Boolean, default=True)
+    must_change_password = db.Column(db.Boolean, default=False)
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

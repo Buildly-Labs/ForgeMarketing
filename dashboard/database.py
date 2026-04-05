@@ -41,6 +41,9 @@ class DatabaseManager:
                 if user_count == 0:
                     self._seed_admin_user()
                 
+                # Seed system config defaults (idempotent – skips existing keys)
+                self._seed_system_configs()
+                
                 brand_count = Brand.query.count()
                 if brand_count == 0:
                     print("ℹ️  No brands configured. Complete onboarding to add brands.")
@@ -118,7 +121,7 @@ class DatabaseManager:
         admin_email = os.getenv('ADMIN_EMAIL', 'admin@firstcityfoundry.com')
         admin_password = os.getenv('ADMIN_PASSWORD', 'changeme')
 
-        user = User(email=admin_email, display_name='Admin', is_admin=True)
+        user = User(email=admin_email, display_name='Admin', is_admin=True, must_change_password=True)
         user.set_password(admin_password)
         db.session.add(user)
         db.session.flush()
@@ -138,6 +141,67 @@ class DatabaseManager:
 
         db.session.commit()
         print(f"✅ Seeded admin user: {admin_email}  (change password immediately!)")
+
+    def _seed_system_configs(self) -> None:
+        """Seed SystemConfig rows from env vars (idempotent – skips keys that already exist)."""
+        defaults = [
+            # Email / SMTP
+            ('BREVO_SMTP_KEY',   'email', True),
+            ('BREVO_SMTP_LOGIN', 'email', False),
+            ('BREVO_SMTP_HOST',  'email', False),
+            ('BREVO_SMTP_PORT',  'email', False),
+            ('FROM_EMAIL',       'email', False),
+            ('FROM_NAME',        'email', False),
+            ('REPLY_TO_EMAIL',   'email', False),
+            # AI
+            ('OPENAI_API_KEY',   'ai', True),
+            ('OPENAI_MODEL',     'ai', False),
+            ('OLLAMA_HOST',      'ai', False),
+            # Social
+            ('TWITTER_API_KEY',             'social', True),
+            ('TWITTER_API_SECRET',          'social', True),
+            ('TWITTER_ACCESS_TOKEN',        'social', True),
+            ('TWITTER_ACCESS_TOKEN_SECRET', 'social', True),
+            ('LINKEDIN_CLIENT_ID',          'social', False),
+            ('LINKEDIN_CLIENT_SECRET',      'social', True),
+            # Analytics
+            ('GOOGLE_ANALYTICS_PROPERTY_ID','analytics', False),
+            ('GOOGLE_ANALYTICS_API_KEY',    'analytics', True),
+            ('YOUTUBE_CHANNEL_ID',          'analytics', False),
+            ('YOUTUBE_API_KEY',             'analytics', True),
+            # Notifications
+            ('DAILY_NOTIFICATION_EMAIL',    'notifications', False),
+            ('DAILY_CC_EMAIL',              'notifications', False),
+            ('PUSHOVER_USER_KEY',           'notifications', True),
+            ('PUSHOVER_API_TOKEN',          'notifications', True),
+            # Outreach
+            ('MAX_DAILY_OUTREACH',   'outreach', False),
+            ('MAX_PER_ORGANIZATION', 'outreach', False),
+            ('MIN_DELAY_SECONDS',    'outreach', False),
+            ('MAX_DELAY_SECONDS',    'outreach', False),
+            # Site
+            ('WEBSITE_URL', 'site', False),
+            ('SITE_NAME',   'site', False),
+        ]
+
+        added = 0
+        for key, category, is_secret in defaults:
+            if SystemConfig.query.filter_by(key=key).first():
+                continue
+            env_val = os.getenv(key, '')
+            db.session.add(SystemConfig(
+                key=key,
+                value=env_val,
+                category=category,
+                is_secret=is_secret,
+                description=f'Auto-seeded from environment',
+                updated_by='seed',
+            ))
+            added += 1
+
+        if added:
+            db.session.commit()
+            print(f"✅ Seeded {added} system config entries from environment")
     
     def _load_default_brands(self) -> None:
         """Load default brands from environment"""

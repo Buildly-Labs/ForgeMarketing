@@ -264,6 +264,15 @@ def initialize_database():
                 print(f"⚠️  Warning: Database initialization error: {e}")
         app.db_initialized = True
 
+# Force password change for seeded admin
+@app.before_request
+def force_password_change():
+    """Redirect to change-password if user.must_change_password is set"""
+    if request.path.startswith('/static') or request.path in ('/login', '/logout', '/change-password'):
+        return
+    if current_user.is_authenticated and getattr(current_user, 'must_change_password', False):
+        return redirect('/change-password')
+
 # Check if onboarding is needed
 @app.before_request
 def check_onboarding():

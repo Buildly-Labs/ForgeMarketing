@@ -8,7 +8,7 @@ from datetime import datetime
 from typing import Dict, Any, Tuple
 import logging
 
-from dashboard.models import db, Brand, BrandEmailConfig, BrandSettings, APICredentialLog
+from dashboard.models import db, Brand, BrandEmailConfig, BrandSettings, APICredentialLog, SystemConfig
 
 logger = logging.getLogger(__name__)
 
@@ -447,6 +447,163 @@ def update_brand_settings(brand_name: str) -> Tuple[Dict[str, Any], int]:
     except Exception as e:
         db.session.rollback()
         logger.error(f"Error updating settings for {brand_name}: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ============================================================================
+# SYSTEM CONFIGURATION ENDPOINTS
+# ============================================================================
+
+# Config categories and their keys (defines the wizard steps)
+CONFIG_SCHEMA = {
+    'email': {
+        'label': 'Email (SMTP)',
+        'fields': [
+            {'key': 'BREVO_SMTP_KEY',  'label': 'Brevo SMTP Key',  'secret': True},
+            {'key': 'BREVO_SMTP_LOGIN','label': 'Brevo SMTP Login', 'secret': False},
+            {'key': 'BREVO_SMTP_HOST', 'label': 'SMTP Host',       'secret': False, 'default': 'smtp-relay.brevo.com'},
+            {'key': 'BREVO_SMTP_PORT', 'label': 'SMTP Port',       'secret': False, 'default': '587'},
+            {'key': 'FROM_EMAIL',      'label': 'Default From Email', 'secret': False},
+            {'key': 'FROM_NAME',       'label': 'Default From Name',  'secret': False},
+            {'key': 'REPLY_TO_EMAIL',  'label': 'Reply-To Email',     'secret': False},
+        ]
+    },
+    'ai': {
+        'label': 'AI Service',
+        'fields': [
+            {'key': 'OPENAI_API_KEY',  'label': 'OpenAI API Key', 'secret': True},
+            {'key': 'OPENAI_MODEL',    'label': 'OpenAI Model',   'secret': False, 'default': 'gpt-4o'},
+            {'key': 'OLLAMA_HOST',     'label': 'Ollama Host',    'secret': False, 'default': 'localhost:11434'},
+        ]
+    },
+    'social': {
+        'label': 'Social Media',
+        'fields': [
+            {'key': 'TWITTER_API_KEY',            'label': 'Twitter API Key',      'secret': True},
+            {'key': 'TWITTER_API_SECRET',         'label': 'Twitter API Secret',   'secret': True},
+            {'key': 'TWITTER_ACCESS_TOKEN',       'label': 'Twitter Access Token', 'secret': True},
+            {'key': 'TWITTER_ACCESS_TOKEN_SECRET','label': 'Twitter Access Secret','secret': True},
+            {'key': 'LINKEDIN_CLIENT_ID',         'label': 'LinkedIn Client ID',   'secret': False},
+            {'key': 'LINKEDIN_CLIENT_SECRET',     'label': 'LinkedIn Client Secret','secret': True},
+        ]
+    },
+    'analytics': {
+        'label': 'Analytics',
+        'fields': [
+            {'key': 'GOOGLE_ANALYTICS_PROPERTY_ID', 'label': 'GA Property ID',     'secret': False},
+            {'key': 'GOOGLE_ANALYTICS_API_KEY',      'label': 'Google API Key',     'secret': True},
+            {'key': 'YOUTUBE_CHANNEL_ID',            'label': 'YouTube Channel ID', 'secret': False},
+            {'key': 'YOUTUBE_API_KEY',               'label': 'YouTube API Key',    'secret': True},
+        ]
+    },
+    'notifications': {
+        'label': 'Notifications',
+        'fields': [
+            {'key': 'DAILY_NOTIFICATION_EMAIL', 'label': 'Daily Notification Email', 'secret': False},
+            {'key': 'DAILY_CC_EMAIL',           'label': 'Daily CC Email',           'secret': False},
+            {'key': 'PUSHOVER_USER_KEY',        'label': 'Pushover User Key',        'secret': True},
+            {'key': 'PUSHOVER_API_TOKEN',       'label': 'Pushover API Token',       'secret': True},
+        ]
+    },
+    'outreach': {
+        'label': 'Outreach Limits',
+        'fields': [
+            {'key': 'MAX_DAILY_OUTREACH',     'label': 'Max Daily Outreach',     'secret': False, 'default': '50'},
+            {'key': 'MAX_PER_ORGANIZATION',   'label': 'Max Per Organization',   'secret': False, 'default': '4'},
+            {'key': 'MIN_DELAY_SECONDS',      'label': 'Min Delay (seconds)',    'secret': False, 'default': '30'},
+            {'key': 'MAX_DELAY_SECONDS',      'label': 'Max Delay (seconds)',    'secret': False, 'default': '60'},
+        ]
+    },
+    'site': {
+        'label': 'Site Identity',
+        'fields': [
+            {'key': 'WEBSITE_URL', 'label': 'Website URL', 'secret': False},
+            {'key': 'SITE_NAME',   'label': 'Site Name',   'secret': False},
+        ]
+    },
+}
+
+
+@admin_bp.route('/config/schema', methods=['GET'])
+def config_schema():
+    """Return the config wizard schema (categories + fields)"""
+    return jsonify({'success': True, 'schema': CONFIG_SCHEMA}), 200
+
+
+@admin_bp.route('/config', methods=['GET'])
+def list_configs():
+    """List all system config values (secrets masked)"""
+    try:
+        category = request.args.get('category')
+        query = SystemConfig.query
+        if category:
+            query = query.filter_by(category=category)
+        configs = query.order_by(SystemConfig.category, SystemConfig.key).all()
+        return jsonify({
+            'success': True,
+            'configs': [c.to_dict() for c in configs],
+        }), 200
+    except Exception as e:
+        logger.error(f"Error listing configs: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@admin_bp.route('/config', methods=['PUT'])
+def save_configs():
+    """Bulk-save config key/value pairs. Body: {items: [{key, value, category, is_secret}]}"""
+    try:
+        data = request.get_json() or {}
+        items = data.get('items', [])
+        if not items:
+            return jsonify({'success': False, 'error': 'No items provided'}), 400
+
+        from flask_login import current_user
+        saved = []
+        for item in items:
+            key = item.get('key', '').strip()
+            value = item.get('value', '').strip()
+            if not key:
+                continue
+            cfg = SystemConfig.query.filter_by(key=key).first()
+            if cfg:
+                cfg.value = value
+                cfg.is_secret = item.get('is_secret', cfg.is_secret)
+                cfg.category = item.get('category', cfg.category)
+                cfg.updated_by = current_user.email if current_user.is_authenticated else 'system'
+                cfg.updated_at = datetime.utcnow()
+            else:
+                cfg = SystemConfig(
+                    key=key,
+                    value=value,
+                    category=item.get('category', 'general'),
+                    is_secret=item.get('is_secret', False),
+                    description=item.get('description', ''),
+                    updated_by=current_user.email if current_user.is_authenticated else 'system',
+                )
+                db.session.add(cfg)
+            saved.append(key)
+
+        db.session.commit()
+        return jsonify({'success': True, 'saved': saved}), 200
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error saving configs: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@admin_bp.route('/config/<key>', methods=['DELETE'])
+def delete_config(key: str):
+    """Delete a single config entry"""
+    try:
+        cfg = SystemConfig.query.filter_by(key=key).first()
+        if not cfg:
+            return jsonify({'success': False, 'error': 'Not found'}), 404
+        db.session.delete(cfg)
+        db.session.commit()
+        return jsonify({'success': True}), 200
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error deleting config {key}: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
