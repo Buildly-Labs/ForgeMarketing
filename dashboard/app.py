@@ -57,6 +57,8 @@ except ImportError as e:
     print("   Make sure to run: pip install aiohttp requests")
     AIContentGenerator = None
 
+from config.config_loader import ConfigLoader
+
 try:
     from automation.activity_tracker import ActivityTracker
     ACTIVITY_TRACKER_AVAILABLE = True
@@ -160,6 +162,25 @@ except ImportError as e:
 
 app = Flask(__name__)
 app.secret_key = os.getenv('DASHBOARD_SECRET_KEY', 'marketing-automation-dashboard-2025')
+
+# ── Reverse-proxy prefix support ─────────────────────────────
+# When served behind nginx at /marketing/, the SCRIPT_NAME header tells
+# Flask to prefix all generated URLs with /marketing.
+class PrefixMiddleware:
+    """Respect the SCRIPT_NAME / X-Forwarded-Prefix header from the reverse proxy."""
+    def __init__(self, wsgi_app):
+        self._app = wsgi_app
+    def __call__(self, environ, start_response):
+        script_name = environ.get('HTTP_SCRIPT_NAME', '')
+        if script_name:
+            environ['SCRIPT_NAME'] = script_name
+            # Strip the prefix from PATH_INFO so Flask routes still match
+            path_info = environ.get('PATH_INFO', '')
+            if path_info.startswith(script_name):
+                environ['PATH_INFO'] = path_info[len(script_name):] or '/'
+        return self._app(environ, start_response)
+
+app.wsgi_app = PrefixMiddleware(app.wsgi_app)
 
 # Database configuration
 def _build_database_url():
@@ -625,7 +646,7 @@ def validate_environment_config():
             'missing_vars': []
         },
         'ai': {
-            'openai_configured': bool(os.getenv('OPENAI_API_KEY')),
+            'openai_configured': bool(ConfigLoader().get_system_config('OPENAI_API_KEY')),
             'missing_vars': []
         },
         'social': {
@@ -1318,7 +1339,7 @@ class MarketingDashboard:
                 if self.test_ai_connection():
                     return {'success': True, 'message': 'AI service connection successful'}
                 else:
-                    ollama_host = os.getenv('OLLAMA_HOST', 'http://localhost:11434')
+                    ollama_host = ConfigLoader().get_system_config('OLLAMA_HOST', 'http://localhost:11434')
                     return {'success': False, 'error': f'Cannot connect to AI service at {ollama_host}'}
             
             # Mock connection test for social platforms - in production, make actual API calls

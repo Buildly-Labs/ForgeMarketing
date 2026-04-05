@@ -1,5 +1,5 @@
 # Ollama AI Integration for Marketing Automation
-# Integrates with Ollama instance (configured via OLLAMA_HOST env var)
+# Integrates with Ollama instance (configured via admin panel or OLLAMA_HOST env var)
 
 import aiohttp
 import asyncio
@@ -11,14 +11,22 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 import yaml
 
-DEFAULT_OLLAMA_HOST = os.getenv('OLLAMA_HOST', 'http://localhost:11434')
+
+def _get_ai_config(key, default=None):
+    """Get AI config from DB (if Flask context available) or fall back to env var."""
+    try:
+        from config.config_loader import ConfigLoader
+        return ConfigLoader().get_system_config(key, default)
+    except Exception:
+        return os.getenv(key, default)
+
 
 class OllamaClient:
     """Client for interacting with Ollama AI instance"""
     
     def __init__(self, base_url: str = None):
         if base_url is None:
-            base_url = DEFAULT_OLLAMA_HOST
+            base_url = _get_ai_config('OLLAMA_HOST', 'http://localhost:11434')
         self.base_url = base_url.rstrip('/')
         self.models_cache = {}
         self.logger = logging.getLogger('OllamaClient')
@@ -144,7 +152,7 @@ class AIContentGenerator:
     
     def __init__(self, ollama_url: str = None):
         if ollama_url is None:
-            ollama_url = DEFAULT_OLLAMA_HOST
+            ollama_url = _get_ai_config('OLLAMA_HOST', 'http://localhost:11434')
         self.ollama = OllamaClient(ollama_url)
         self.config_dir = Path(__file__).parent.parent.parent / 'config'
         self.templates_dir = Path(__file__).parent.parent.parent / 'templates'
@@ -416,7 +424,7 @@ async def test_ollama_integration():
     connected = await client.test_connection()
     
     if not connected:
-        print(f"❌ Cannot connect to Ollama. Make sure it's running at {DEFAULT_OLLAMA_HOST}")
+        print(f"❌ Cannot connect to Ollama. Make sure it's running at {_get_ai_config('OLLAMA_HOST', 'http://localhost:11434')}")
         return
     
     # List available models

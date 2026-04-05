@@ -471,9 +471,12 @@ CONFIG_SCHEMA = {
     'ai': {
         'label': 'AI Service',
         'fields': [
+            {'key': 'ai_provider',     'label': 'AI Provider',    'secret': False, 'default': 'ollama',
+             'type': 'select', 'options': ['ollama', 'openai', 'gemini']},
+            {'key': 'ai_model',        'label': 'Model Name',     'secret': False, 'default': 'llama3'},
             {'key': 'OPENAI_API_KEY',  'label': 'OpenAI API Key', 'secret': True},
-            {'key': 'OPENAI_MODEL',    'label': 'OpenAI Model',   'secret': False, 'default': 'gpt-4o'},
-            {'key': 'OLLAMA_HOST',     'label': 'Ollama Host',    'secret': False, 'default': 'localhost:11434'},
+            {'key': 'GEMINI_API_KEY',  'label': 'Gemini API Key', 'secret': True},
+            {'key': 'OLLAMA_HOST',     'label': 'Ollama Host',    'secret': False, 'default': 'http://localhost:11434'},
         ]
     },
     'social': {

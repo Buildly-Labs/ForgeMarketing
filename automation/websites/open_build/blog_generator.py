@@ -26,10 +26,19 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class BlogArticleGenerator:
+    @staticmethod
+    def _get_config(key, default=None):
+        """Get config from DB (if Flask context available) or fall back to env var."""
+        try:
+            from config.config_loader import ConfigLoader
+            return ConfigLoader().get_system_config(key, default)
+        except Exception:
+            return os.getenv(key, default)
+
     def __init__(self):
-        # Configuration from environment
-        self.ollama_host = os.getenv("OLLAMA_HOST", "http://localhost:11434")
-        self.ollama_model = os.getenv("OLLAMA_MODEL", "llama3.2:1b")
+        # Configuration from DB (with env var fallback)
+        self.ollama_host = self._get_config("OLLAMA_HOST", "http://localhost:11434")
+        self.ollama_model = self._get_config("ai_model", "llama3.2:1b")
         self.blog_enabled = os.getenv("BLOG_ENABLED", "true").lower() == "true"
         
         # Blog settings
