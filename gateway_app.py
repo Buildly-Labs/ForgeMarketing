@@ -28,17 +28,20 @@ app.secret_key = os.getenv('FLASK_SECRET_KEY', 'marketing-automation-dashboard-2
 # ── Database (same URI as ForgeMarketing) ────────────────────
 _database_url = os.getenv('DATABASE_URL')
 if _database_url:
-    # Log URL scheme for debugging (mask credentials)
-    _scheme = _database_url.split('://')[0] if '://' in _database_url else 'NO_SCHEME'
-    print(f"[gateway] DATABASE_URL scheme: {_scheme}, length: {len(_database_url)}, first 30 chars: {_database_url[:30]}")
+    # Strip query params (e.g. ?ssl-mode=REQUIRED) that break SQLAlchemy's parser
+    _database_url = _database_url.split('?')[0]
     if _database_url.startswith('postgres://'):
         _database_url = _database_url.replace('postgres://', 'postgresql://', 1)
     elif _database_url.startswith('mysql://'):
         _database_url = _database_url.replace('mysql://', 'mysql+mysqldb://', 1)
     app.config['SQLALCHEMY_DATABASE_URI'] = _database_url
-    print(f"[gateway] Final SQLALCHEMY_DATABASE_URI scheme: {_database_url.split('://')[0]}")
+    # Enable SSL for managed databases and set pool options
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        'pool_size': 10,
+        'pool_recycle': 300,
+        'pool_pre_ping': True,
+    }
 else:
-    print("[gateway] No DATABASE_URL set, using SQLite")
     _db_path = os.path.join(PROJECT_ROOT, 'data', 'marketing_dashboard.db')
     app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + _db_path
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False

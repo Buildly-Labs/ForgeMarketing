@@ -165,6 +165,8 @@ app.secret_key = os.getenv('DASHBOARD_SECRET_KEY', 'marketing-automation-dashboa
 # Supports DATABASE_URL env var for PostgreSQL/MySQL, falls back to local SQLite
 _database_url = os.getenv('DATABASE_URL')
 if _database_url:
+    # Strip query params (e.g. ?ssl-mode=REQUIRED) that break SQLAlchemy's parser
+    _database_url = _database_url.split('?')[0]
     # Fix Heroku-style postgres:// -> postgresql://
     if _database_url.startswith('postgres://'):
         _database_url = _database_url.replace('postgres://', 'postgresql://', 1)
