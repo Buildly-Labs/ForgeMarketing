@@ -1,4 +1,4 @@
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 ARG DEBIAN_FRONTEND=noninteractive
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -8,6 +8,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 RUN apt-get update && apt-get install -y --no-install-recommends \
         nginx supervisor netcat-traditional poppler-utils \
         libsm6 libxext6 libxrender-dev postgresql-client \
+        pkg-config default-libmysqlclient-dev build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
