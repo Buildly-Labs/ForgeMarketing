@@ -168,6 +168,8 @@ if _database_url:
     # Fix Heroku-style postgres:// -> postgresql://
     if _database_url.startswith('postgres://'):
         _database_url = _database_url.replace('postgres://', 'postgresql://', 1)
+    elif _database_url.startswith('mysql://'):
+        _database_url = _database_url.replace('mysql://', 'mysql+mysqldb://', 1)
     app.config['SQLALCHEMY_DATABASE_URI'] = _database_url
     # Connection pool settings for remote databases
     app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
