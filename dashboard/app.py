@@ -638,7 +638,12 @@ def add_no_cache_headers(response):
 
 # Configuration validation
 def validate_environment_config():
-    """Validate environment configuration and return status"""
+    """Validate environment configuration and return status.
+
+    Called at module-load time (no Flask app-context available) so we
+    can only check environment variables here.  At *request* time the
+    ConfigLoader (DB-first) is used instead.
+    """
     config_status = {
         'email': {
             'mailersend_configured': bool(os.getenv('MAILERSEND_API_TOKEN')),
@@ -646,7 +651,7 @@ def validate_environment_config():
             'missing_vars': []
         },
         'ai': {
-            'openai_configured': bool(ConfigLoader().get_system_config('OPENAI_API_KEY')),
+            'openai_configured': bool(os.getenv('OPENAI_API_KEY')),
             'missing_vars': []
         },
         'social': {
@@ -684,6 +689,19 @@ def validate_environment_config():
 
 # Global configuration status
 ENVIRONMENT_CONFIG = validate_environment_config()
+
+
+@app.before_request
+def _refresh_ai_config_from_db():
+    """Once per request, re-check AI config from DB (ConfigLoader) so the
+    admin-panel values are reflected without a restart."""
+    try:
+        key = ConfigLoader().get_system_config('OPENAI_API_KEY')
+        ENVIRONMENT_CONFIG['ai']['openai_configured'] = bool(key)
+        if bool(key):
+            ENVIRONMENT_CONFIG['ai']['missing_vars'] = []
+    except Exception:
+        pass  # Outside app context or DB not ready yet — keep env-var value
 
 # Campaign progress tracking
 import threading

@@ -79,7 +79,8 @@ class MarketingCalendar(db.Model):
     
     # Relationships
     brand = db.relationship('Brand', backref='marketing_campaigns')
-    tasks = db.relationship('MarketingTask', cascade='all, delete-orphan')
+    tasks = db.relationship('MarketingTask', cascade='all, delete-orphan',
+                            overlaps='calendar,calendar_tasks')
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -130,7 +131,8 @@ class MarketingTask(db.Model):
     
     # Relationships
     brand = db.relationship('Brand', backref='marketing_tasks')
-    calendar = db.relationship('MarketingCalendar', backref='calendar_tasks')
+    calendar = db.relationship('MarketingCalendar', backref='calendar_tasks',
+                               overlaps='tasks')
     
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

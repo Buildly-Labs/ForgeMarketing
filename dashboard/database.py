@@ -27,34 +27,47 @@ class DatabaseManager:
         return None
     
     def init_db(self) -> bool:
-        """Initialize database with schema (no default brands)"""
-        try:
-            with self.app.app_context():
-                db.create_all()
-                self._apply_schema_migrations()
-                print("✅ Database schema initialized successfully")
-                
-                # Seed brands + admin user if the DB is empty
-                brand_count = Brand.query.count()
-                user_count = User.query.count()
-                if brand_count == 0:
-                    self._seed_brands_and_themes()
-                if user_count == 0:
-                    self._seed_admin_user()
-                
-                # Seed system config defaults (idempotent – skips existing keys)
-                self._seed_system_configs()
-                
-                brand_count = Brand.query.count()
-                if brand_count == 0:
-                    print("ℹ️  No brands configured. Complete onboarding to add brands.")
-                else:
-                    print(f"✅ Found {brand_count} existing brand(s)")
-                
-                return True
-        except Exception as e:
-            print(f"❌ Database initialization failed: {e}")
-            return False
+        """Initialize database with schema (no default brands).
+
+        Retries once on transient concurrent-DDL errors that occur when
+        multiple gunicorn workers race to initialise the same tables.
+        """
+        import time
+        max_attempts = 3
+        for attempt in range(1, max_attempts + 1):
+            try:
+                with self.app.app_context():
+                    db.create_all()
+                    self._apply_schema_migrations()
+                    print("✅ Database schema initialized successfully")
+
+                    # Seed brands + admin user if the DB is empty
+                    brand_count = Brand.query.count()
+                    user_count = User.query.count()
+                    if brand_count == 0:
+                        self._seed_brands_and_themes()
+                    if user_count == 0:
+                        self._seed_admin_user()
+
+                    # Seed system config defaults (idempotent – skips existing keys)
+                    self._seed_system_configs()
+
+                    brand_count = Brand.query.count()
+                    if brand_count == 0:
+                        print("ℹ️  No brands configured. Complete onboarding to add brands.")
+                    else:
+                        print(f"✅ Found {brand_count} existing brand(s)")
+
+                    return True
+            except Exception as e:
+                msg = str(e)
+                if attempt < max_attempts and ('concurrent DDL' in msg or 'being modified' in msg):
+                    print(f"⚠️  Concurrent DDL detected (attempt {attempt}/{max_attempts}), retrying…")
+                    time.sleep(2 * attempt)
+                    continue
+                print(f"❌ Database initialization failed: {e}")
+                return False
+        return False
 
     # ── Schema migrations (lightweight ALTER TABLE for MySQL) ──
 
