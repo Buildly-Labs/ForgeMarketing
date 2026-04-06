@@ -305,41 +305,24 @@ class GoogleAnalyticsIntegration:
         return sorted(locations, key=lambda x: x['sessions'], reverse=True)[:20]
     
     def _get_mock_analytics(self, brand: str, days: int) -> Dict[str, Any]:
-        """Return mock analytics data when GA is not available"""
-        base_sessions = {'buildly': 1250, 'foundry': 850, 'openbuild': 2100, 'radical': 650}
-        
+        """Return empty analytics data when GA is not configured"""
         return {
             'brand': brand,
             'website': self.brand_properties.get(brand, {}).get('website', ''),
-            'period': f"Last {days} days (mock data)",
+            'period': f"Last {days} days",
             'overview': {
-                'sessions': base_sessions.get(brand, 1000),
-                'users': int(base_sessions.get(brand, 1000) * 0.75),
-                'pageviews': int(base_sessions.get(brand, 1000) * 2.3),
-                'avg_session_duration': 145.5,
-                'bounce_rate': 0.42
+                'sessions': 0,
+                'users': 0,
+                'pageviews': 0,
+                'avg_session_duration': 0,
+                'bounce_rate': 0
             },
-            'pages': [
-                {'path': '/', 'title': 'Home Page', 'pageviews': 450, 'sessions': 380, 'avg_duration': 180.0},
-                {'path': '/about', 'title': 'About Us', 'pageviews': 125, 'sessions': 110, 'avg_duration': 95.0},
-                {'path': '/contact', 'title': 'Contact', 'pageviews': 85, 'sessions': 75, 'avg_duration': 120.0}
-            ],
-            'traffic_sources': [
-                {'channel': 'Organic Search', 'source': 'google', 'sessions': 420, 'users': 380},
-                {'channel': 'Direct', 'source': '(direct)', 'sessions': 280, 'users': 245},
-                {'channel': 'Social', 'source': 'twitter', 'sessions': 150, 'users': 135}
-            ],
-            'devices': {
-                'devices': {'Desktop': 650, 'Mobile': 400, 'Tablet': 100},
-                'browsers': {'Chrome': 580, 'Safari': 290, 'Firefox': 180, 'Edge': 100}
-            },
-            'geographic': [
-                {'country': 'United States', 'city': 'New York', 'sessions': 280, 'users': 245},
-                {'country': 'United States', 'city': 'San Francisco', 'sessions': 190, 'users': 165},
-                {'country': 'Canada', 'city': 'Toronto', 'sessions': 95, 'users': 85}
-            ],
+            'pages': [],
+            'traffic_sources': [],
+            'devices': {'devices': {}, 'browsers': {}},
+            'geographic': [],
             'last_updated': datetime.now().isoformat(),
-            'note': 'Mock data - configure GA credentials for real analytics'
+            'note': 'Google Analytics not configured — add GA credentials in Settings'
         }
 
     async def get_all_brands_analytics(self, days: int = 30) -> Dict[str, Any]:

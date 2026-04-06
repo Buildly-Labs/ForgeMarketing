@@ -490,30 +490,14 @@ class StartupOutreachBot:
         return unique_targets
 
     def search_for_targets(self, query: str) -> List[OutreachTarget]:
-        """Search for potential targets (placeholder for actual search implementation)"""
-        # In production, integrate with search APIs like Google Custom Search, Bing API, etc.
-        # For now, return some example discoveries
-        
-        sample_discoveries = [
-            OutreachTarget(
-                name="The Next Web",
-                website="https://thenextweb.com",
-                category="publication",
-                focus_areas=["tech", "startups", "AI", "innovation"],
-                contact_methods=["email", "twitter"],
-                priority=4
-            ),
-            OutreachTarget(
-                name="Startup Stash",
-                website="https://startupstash.com",
-                category="platform",
-                focus_areas=["startup_tools", "resources", "founders"],
-                contact_methods=["email", "contact_form"],
-                priority=3
-            )
-        ]
-        
-        return sample_discoveries[:random.randint(0, 2)]  # Return 0-2 random discoveries
+        """Search for potential targets.
+
+        Returns an empty list until a real search API (Google Custom Search,
+        Bing API, etc.) is integrated.
+        """
+        # TODO: Integrate with search APIs like Google Custom Search, Bing API, etc.
+        logger.info(f"Target search not yet implemented — no results for: {query}")
+        return []
 
     def scrape_contacts_from_target(self, target: OutreachTarget) -> List[Contact]:
         """Enhanced contact scraping with better source discovery"""

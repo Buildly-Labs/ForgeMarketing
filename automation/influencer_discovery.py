@@ -2144,130 +2144,14 @@ class PodcastSearcher(PlatformSearcher):
         return podcasts
     
     async def _search_podcasts_via_google(self, keywords: List[str], max_results: int) -> List[Dict]:
-        """Search for podcasts using Google search and generate sample data for testing"""
-        podcasts = []
-        
-        # For testing, generate some sample podcast data based on keywords
-        if keywords:
-            sample_podcasts = self._generate_sample_podcast_data(keywords, max_results)
-            podcasts.extend(sample_podcasts)
-        
-        # TODO: Uncomment and fix the real Google search when needed
-        # try:
-        #     for keyword in keywords[:2]:  # Limit searches
-        #         search_query = f'"{keyword}" podcast guest booking contact'
-        #         url = "https://www.google.com/search"
-        #         params = {
-        #             'q': search_query,
-        #             'num': 10
-        #         }
-        #         headers = {
-        #             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
-        #         }
-        #         
-        #         async with self.session.get(url, params=params, headers=headers) as response:
-        #             if response.status == 200:
-        #                 html = await response.text()
-        #                 
-        #                 # Extract podcast information from search results
-        #                 podcast_results = self._parse_google_podcast_results(html)
-        #                 podcasts.extend(podcast_results)
-        #         
-        #         await asyncio.sleep(2)  # Rate limiting
-        #         
-        # except Exception as e:
-        #     logger.warning(f"Google podcast search failed: {e}")
-        
-        logger.info(f"🌐 Google found {len(podcasts)} podcast mentions")
-        return podcasts
-    
-    def _generate_sample_podcast_data(self, keywords: List[str], max_results: int) -> List[Dict]:
-        """Generate sample podcast data for testing purposes"""
-        sample_podcasts = []
-        
-        # Sample podcast templates based on keywords
-        podcast_templates = {
-            'entrepreneur': [
-                {
-                    'name': 'The Entrepreneur Show',
-                    'host_name': 'Sarah Johnson',
-                    'description': 'Weekly interviews with successful entrepreneurs sharing their stories and insights.',
-                    'episode_count': 156,
-                    'website': 'https://entrepreneurshow.com',
-                    'email': 'sarah@entrepreneurshow.com',
-                    'guest_application_url': 'https://entrepreneurshow.com/be-a-guest',
-                },
-                {
-                    'name': 'Startup Stories Podcast',
-                    'host_name': 'Mike Chen',
-                    'description': 'Deep dives into startup journeys from idea to exit.',
-                    'episode_count': 89,
-                    'website': 'https://startupstories.fm',
-                    'email': 'mike@startupstories.fm',
-                    'guest_application_url': 'https://startupstories.fm/guest-form',
-                }
-            ],
-            'programming': [
-                {
-                    'name': 'Code & Coffee',
-                    'host_name': 'Alex Rivera',
-                    'description': 'Conversations about programming, technology, and developer life.',
-                    'episode_count': 203,
-                    'website': 'https://codeandcoffee.dev',
-                    'email': 'alex@codeandcoffee.dev',
-                    'guest_application_url': 'https://codeandcoffee.dev/guests',
-                }
-            ],
-            'mental health': [
-                {
-                    'name': 'Mindful Conversations',
-                    'host_name': 'Dr. Lisa Thompson',
-                    'description': 'Exploring mental health, wellness, and personal growth.',
-                    'episode_count': 124,
-                    'website': 'https://mindfulconversations.com',
-                    'email': 'lisa@mindfulconversations.com',
-                    'guest_application_url': 'https://mindfulconversations.com/be-a-guest',
-                }
-            ]
-        }
-        
-        # Find matching templates based on keywords
-        for keyword in keywords[:max_results]:
-            for template_key, template_podcasts in podcast_templates.items():
-                if template_key.lower() in keyword.lower():
-                    sample_podcasts.extend(template_podcasts)
-                    break
-        
-        return sample_podcasts[:max_results]
-    
-    def _parse_google_podcast_results(self, html: str) -> List[Dict]:
-        """Parse Google search results for podcast information"""
-        podcasts = []
-        
-        try:
-            import re
-            
-            # Look for podcast-related links and titles
-            # This is a simplified implementation
-            podcast_patterns = [
-                r'<h3[^>]*>([^<]*podcast[^<]*)</h3>',
-                r'<a[^>]*href="[^"]*podcast[^"]*"[^>]*>([^<]+)</a>'
-            ]
-            
-            for pattern in podcast_patterns:
-                matches = re.findall(pattern, html, re.IGNORECASE)
-                for match in matches[:5]:  # Limit results
-                    if 'podcast' in match.lower() and len(match) > 5:
-                        podcasts.append({
-                            'name': match.strip(),
-                            'source': 'google_search',
-                            'description': f"Podcast found via Google search",
-                        })
-        
-        except Exception as e:
-            logger.warning(f"Failed to parse Google podcast results: {e}")
-        
-        return podcasts
+        """Search for podcasts using Google search.
+
+        Real Google search is not yet implemented.  Return an empty list
+        so no fabricated data ends up in the database.
+        """
+        # TODO: Implement real Google search for podcast discovery
+        logger.info("Google podcast search not yet implemented — skipping")
+        return []
     
     async def _search_rss_directories(self, keywords: List[str], max_results: int) -> List[Dict]:
         """Search RSS directories for podcasts"""

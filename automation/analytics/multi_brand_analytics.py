@@ -200,38 +200,18 @@ class MultiBrandAnalyticsCollector:
             raise e
     
     def _generate_realistic_website_data(self, brand_config: Dict, days_back: int) -> Dict[str, Any]:
-        """Generate realistic website analytics based on brand characteristics"""
-        brand_name = brand_config['name']
-        
-        # Base metrics vary by brand type and size
-        if 'buildly' in brand_config['website'].lower():
-            base_sessions = 450  # Larger tech platform
-            base_users = 380
-        elif 'foundry' in brand_config['website'].lower():
-            base_sessions = 200  # Startup incubator
-            base_users = 160
-        elif 'open' in brand_config['website'].lower():
-            base_sessions = 180  # Open source community
-            base_users = 145
-        else:
-            base_sessions = 120  # Smaller specialized sites
-            base_users = 95
-        
-        # Scale by time period
-        sessions = int(base_sessions * (days_back / 30))
-        users = int(base_users * (days_back / 30))
-        pageviews = int(sessions * 1.4)  # Average 1.4 pages per session
-        
+        """Return empty website analytics when GA is not configured"""
         return {
-            'sessions': sessions,
-            'users': users,
-            'pageviews': pageviews,
-            'bounce_rate': round(random.uniform(0.35, 0.65), 2),
-            'avg_session_duration': round(random.uniform(120, 240), 1),
-            'top_pages': self._generate_top_pages(brand_config, sessions),
-            'traffic_sources': self._generate_traffic_sources(sessions),
-            'conversions': int(sessions * 0.03),  # 3% conversion rate
-            'data_source': 'generated_realistic'
+            'sessions': 0,
+            'users': 0,
+            'pageviews': 0,
+            'bounce_rate': 0,
+            'avg_session_duration': 0,
+            'top_pages': [],
+            'traffic_sources': [],
+            'conversions': 0,
+            'data_source': 'not_configured',
+            'note': 'Google Analytics not configured for this brand'
         }
     
     def _generate_top_pages(self, brand_config: Dict, total_sessions: int) -> List[Dict]:

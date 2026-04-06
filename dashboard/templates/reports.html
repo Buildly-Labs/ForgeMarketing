@@ -405,7 +405,7 @@
                                 color: 'bg-purple-500',
                                 targets: data.data.foundry?.total_targets || 0,
                                 emailsSent: data.data.foundry?.total_outreach || 0,
-                                responseRate: Math.round(Math.random() * 25 + 5), // Mock for now
+                                responseRate: 0,
                                 lastActivity: new Date().toISOString(),
                                 status: 'active'
                             },
@@ -416,7 +416,7 @@
                                 color: 'bg-blue-500',
                                 targets: data.data.openbuild?.total_targets || 0,
                                 emailsSent: data.data.openbuild?.total_outreach || 0,
-                                responseRate: Math.round(Math.random() * 25 + 5),
+                                responseRate: 0,
                                 lastActivity: new Date().toISOString(),
                                 status: 'active'
                             },

@@ -107,34 +107,32 @@ class AnalyticsManager:
         return analytics_data
     
     async def _get_social_analytics(self, brand: str, days: int) -> Dict[str, Any]:
-        """Get social media analytics (placeholder - integrate with social media manager)"""
+        """Get social media analytics — returns empty data until social APIs are integrated"""
         # TODO: Integrate with existing social_media_manager.py
-        base_followers = {'buildly': 1850, 'foundry': 1200, 'openbuild': 2800, 'radical': 950}
-        
         return {
             'platforms': {
                 'twitter': {
-                    'followers': base_followers.get(brand, 1500),
-                    'posts': 12,
-                    'engagement': 156,
-                    'impressions': 4800,
-                    'engagement_rate': 3.25
+                    'followers': 0,
+                    'posts': 0,
+                    'engagement': 0,
+                    'impressions': 0,
+                    'engagement_rate': 0
                 },
                 'linkedin': {
-                    'followers': int(base_followers.get(brand, 1500) * 0.8),
-                    'posts': 8,
-                    'engagement': 89,
-                    'impressions': 2400,
-                    'engagement_rate': 3.71
+                    'followers': 0,
+                    'posts': 0,
+                    'engagement': 0,
+                    'impressions': 0,
+                    'engagement_rate': 0
                 }
             },
             'summary': {
-                'total_followers': int(base_followers.get(brand, 1500) * 1.8),
-                'total_posts': 20,
-                'total_engagement': 245,
-                'avg_engagement_rate': 3.45
+                'total_followers': 0,
+                'total_posts': 0,
+                'total_engagement': 0,
+                'avg_engagement_rate': 0
             },
-            'note': 'Mock data - integrate with social media APIs for real data'
+            'note': 'Social analytics not configured — integrate social media APIs in Settings'
         }
     
     def _calculate_brand_summary(self, analytics_data: Dict[str, Any]) -> Dict[str, Any]:
