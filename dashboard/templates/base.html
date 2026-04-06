@@ -22,6 +22,15 @@
         /* Global brand context — available to every page script */
         const SCRIPT_ROOT  = {{ request.script_root | tojson }};
         const ACTIVE_BRAND = {{ (active_brand.name if active_brand else '') | tojson }};
+
+        /* Auto-prepend SCRIPT_ROOT to relative fetch URLs */
+        const _origFetch = window.fetch;
+        window.fetch = function(resource, init) {
+            if (typeof resource === 'string' && resource.startsWith('/') && !resource.startsWith('//') && SCRIPT_ROOT && !resource.startsWith(SCRIPT_ROOT)) {
+                resource = SCRIPT_ROOT + resource;
+            }
+            return _origFetch.call(this, resource, init);
+        };
     </script>
     <style>
         .gradient-bg {

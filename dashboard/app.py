@@ -701,10 +701,19 @@ def _refresh_ai_config_from_db():
     """Once per request, re-check AI config from DB (ConfigLoader) so the
     admin-panel values are reflected without a restart."""
     try:
-        key = ConfigLoader().get_system_config('OPENAI_API_KEY')
-        ENVIRONMENT_CONFIG['ai']['openai_configured'] = bool(key)
-        if bool(key):
+        loader = ConfigLoader()
+        provider = loader.get_system_config('ai_provider', 'ollama')
+        if provider == 'openai':
+            configured = bool(loader.get_system_config('OPENAI_API_KEY'))
+        elif provider == 'gemini':
+            configured = bool(loader.get_system_config('GEMINI_API_KEY'))
+        else:  # ollama
+            configured = bool(loader.get_system_config('OLLAMA_HOST', 'http://localhost:11434'))
+        ENVIRONMENT_CONFIG['ai']['openai_configured'] = configured
+        if configured:
             ENVIRONMENT_CONFIG['ai']['missing_vars'] = []
+        else:
+            ENVIRONMENT_CONFIG['ai']['missing_vars'] = [f'{provider.upper()}_API_KEY']
     except Exception:
         pass  # Outside app context or DB not ready yet — keep env-var value
 
@@ -1647,7 +1656,7 @@ def api_status():
     status = {
         'timestamp': datetime.now().isoformat(),
         'brands_configured': len(dashboard.brands),
-        'ai_available': dashboard.ai_generator is not None and ENVIRONMENT_CONFIG['ai']['openai_configured'],
+        'ai_available': ENVIRONMENT_CONFIG['ai']['openai_configured'],
         'features': dashboard.config.get('features', {}),
         'brands': dashboard.brands,
         'environment_config': ENVIRONMENT_CONFIG,
