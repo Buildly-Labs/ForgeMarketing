@@ -115,11 +115,11 @@
                                     <div class="relative">
                                         <!-- Select dropdown for enum fields -->
                                         <template x-if="field.type === 'select'">
-                                            <select :value="values[field.key] || field.default || ''"
-                                                    @change="values[field.key] = $event.target.value; dirty = true"
+                                            <select x-model="values[field.key]"
+                                                    @change="dirty = true"
                                                     class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
                                                 <template x-for="opt in field.options" :key="opt">
-                                                    <option :value="opt" x-text="opt" :selected="(values[field.key] || field.default) === opt"></option>
+                                                    <option :value="opt" x-text="opt"></option>
                                                 </template>
                                             </select>
                                         </template>
@@ -127,8 +127,8 @@
                                         <template x-if="field.type !== 'select'">
                                             <div class="relative">
                                                 <input :type="field.secret && !showSecrets[field.key] ? 'password' : 'text'"
-                                                       :value="values[field.key] || ''"
-                                                       @input="values[field.key] = $event.target.value; dirty = true"
+                                                       x-model="values[field.key]"
+                                                       @input="dirty = true"
                                                        :placeholder="field.default || ''"
                                                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 pr-10">
                                                 <button x-show="field.secret" @click="showSecrets[field.key] = !showSecrets[field.key]"
@@ -175,7 +175,6 @@
 </div>
 
 <script>
-const SCRIPT_ROOT = {{ request.script_root | tojson }};
 function adminPanel() {
     return {
         activeTab: '',
@@ -226,6 +225,13 @@ function adminPanel() {
                 const data = await res.json();
                 if (data.success) {
                     const map = {};
+                    // Pre-populate every schema field key so x-model binds correctly
+                    for (const cat of Object.values(this.schema)) {
+                        for (const f of cat.fields) {
+                            map[f.key] = f.default || '';
+                        }
+                    }
+                    // Overlay stored values
                     for (const c of data.configs) {
                         map[c.key] = c.value;
                     }
