@@ -160,7 +160,12 @@ except ImportError as e:
     GoogleAdsManager = None
     GOOGLE_ADS_AVAILABLE = False
 
-app = Flask(__name__, template_folder='templates')
+_dashboard_dir = Path(__file__).resolve().parent
+app = Flask(
+    __name__,
+    template_folder=str(_dashboard_dir / 'templates'),
+    static_folder=str(_dashboard_dir / 'static'),
+)
 app.secret_key = os.getenv('DASHBOARD_SECRET_KEY', 'marketing-automation-dashboard-2025')
 
 # ── Reverse-proxy prefix support ─────────────────────────────
