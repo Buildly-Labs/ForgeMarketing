@@ -262,13 +262,13 @@ function analyticsPage() {
         showExportOptions: false,
         metrics: {
             totalContent: 0,
-            contentGrowth: '+12%',
+            contentGrowth: '—',
             engagementRate: '0%',
-            engagementGrowth: '+8%',
+            engagementGrowth: '—',
             aiGenerations: 0,
-            aiGrowth: '+25%',
+            aiGrowth: '—',
             responseRate: '0%',
-            responseGrowth: '+15%'
+            responseGrowth: '—'
         },
         brandPerformance: [],
         recentActivity: [],
@@ -292,14 +292,14 @@ function analyticsPage() {
                         
                         // Update metrics with real data from the comprehensive API
                         this.metrics = {
-                            totalContent: summary.total_website_sessions || 1070,
+                            totalContent: summary.total_website_sessions || 0,
                             engagementRate: ((outreachOverview.overall_response_rate || 0) * 100).toFixed(1) + '%',
-                            aiGenerations: summary.total_emails_sent || 365,
+                            aiGenerations: summary.total_emails_sent || 0,
                             responseRate: ((outreachOverview.overall_response_rate || 0) * 100).toFixed(1) + '%',
-                            contentGrowth: '+12%',
-                            engagementGrowth: '+8%',
-                            aiGrowth: '+25%',
-                            responseGrowth: '+15%'
+                            contentGrowth: '—',
+                            engagementGrowth: '—',
+                            aiGrowth: '—',
+                            responseGrowth: '—'
                         };
                         
                         // Convert brand data to performance format using comprehensive data
@@ -328,40 +328,23 @@ function analyticsPage() {
                     }
                 }
                 
-                // Enhanced fallback with real unified database stats
-                if (!this.brandPerformance.length) {
-                    this.brandPerformance = [
-                        { name: 'foundry', posts: 170, engagement: '11.8%', score: 87 },
-                        { name: 'openbuild', posts: 9, engagement: '8.7%', score: 75 },
-                        { name: 'buildly', posts: 0, engagement: '0%', score: 70 },
-                        { name: 'radical', posts: 0, engagement: '0%', score: 70 },
-                        { name: 'oregonsoftware', posts: 0, engagement: '0%', score: 70 }
-                    ];
-                }
-                
-                if (!this.recentActivity.length) {
-                    this.recentActivity = [
-                        { id: 1, type: 'email', title: 'Foundry outreach campaign', brand: 'Foundry', time: '2h ago', metric: 'Delivered' },
-                        { id: 2, type: 'email', title: 'OpenBuild target discovery', brand: 'OpenBuild', time: '4h ago', metric: '5 new targets' },
-                        { id: 3, type: 'system', title: 'Daily analytics report', brand: 'System', time: '6h ago', metric: 'Generated' },
-                        { id: 4, type: 'email', title: 'Follow-up sequence', brand: 'Foundry', time: '1d ago', metric: 'In Progress' }
-                    ];
-                }
+                // No fake fallback data — if API returned no brands/activity, leave empty
+                // brandPerformance and recentActivity remain as initialized (empty arrays)
                 
             } catch (error) {
                 console.error('Failed to load analytics:', error);
-                showNotification('Failed to load real-time analytics, using cached data', 'warning');
+                showNotification('Failed to load analytics data', 'warning');
                 
-                // Emergency fallback with known unified database values
+                // Emergency fallback — show zeros, not fake data
                 this.metrics = {
-                    totalContent: 118,
-                    engagementRate: '10.6%',
-                    aiGenerations: 179,
-                    responseRate: '10.6%',
-                    contentGrowth: '+12%',
-                    engagementGrowth: '+8%',
-                    aiGrowth: '+25%',
-                    responseGrowth: '+15%'
+                    totalContent: 0,
+                    engagementRate: '0%',
+                    aiGenerations: 0,
+                    responseRate: '0%',
+                    contentGrowth: '—',
+                    engagementGrowth: '—',
+                    aiGrowth: '—',
+                    responseGrowth: '—'
                 };
             }
         },
