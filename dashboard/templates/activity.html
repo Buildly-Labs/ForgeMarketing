@@ -59,8 +59,8 @@
             </a>
             <div class="navbar-nav ms-auto">
                 <a class="nav-link" href="/">Dashboard</a>
-                <a class="nav-link" href="/analytics">Analytics</a>
-                <a class="nav-link" href="/generate">AI Generate</a>
+                <a class="nav-link" href="{{ request.script_root }}/analytics">Analytics</a>
+                <a class="nav-link" href="{{ request.script_root }}/generate">AI Generate</a>
             </div>
         </div>
     </nav>
@@ -236,7 +236,7 @@
         
         function updateBrandActivity(data) {
             const brandContainer = document.getElementById('brandActivity');
-            const brands = ['foundry', 'buildly', 'open_build', 'radical_therapy'];
+            const brands = {{ user_brands | map(attribute='name') | list | tojson }};
             
             let html = '';
             

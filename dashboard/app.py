@@ -717,6 +717,25 @@ def _refresh_ai_config_from_db():
     except Exception:
         pass  # Outside app context or DB not ready yet — keep env-var value
 
+
+@app.before_request
+def _refresh_email_config_from_db():
+    """Once per request, re-check email config from DB (BrandEmailConfig) so
+    the admin-panel values are reflected without a restart."""
+    try:
+        from dashboard.models import BrandEmailConfig
+        # Check if ANY brand has email configured in the database
+        has_email = BrandEmailConfig.query.filter(
+            BrandEmailConfig.is_active == True
+        ).first() is not None
+        if has_email:
+            ENVIRONMENT_CONFIG['email']['mailersend_configured'] = True
+            ENVIRONMENT_CONFIG['email']['brevo_configured'] = True
+            ENVIRONMENT_CONFIG['email']['missing_vars'] = []
+    except Exception:
+        pass  # Outside app context or DB not ready yet — keep env-var value
+
+
 # Campaign progress tracking
 import threading
 import time
@@ -1004,9 +1023,9 @@ class MarketingDashboard:
                         },
                         'social_analytics': {
                             'summary': {
-                                'total_followers': 1500,  # Placeholder for now
-                                'total_posts': 20,
-                                'avg_engagement_rate': 3.2
+                                'total_followers': 0,
+                                'total_posts': 0,
+                                'avg_engagement_rate': 0
                             }
                         },
                         'summary': {
@@ -1025,8 +1044,8 @@ class MarketingDashboard:
                     'total_emails_sent': summary_data.get('total_emails', 0),
                     'total_social_followers': sum(r['social_analytics']['summary']['total_followers'] for r in results.values() if isinstance(r, dict) and 'social_analytics' in r),
                     'number_of_brands': summary_data.get('total_brands', 0),
-                    'average_performance_score': 7.8,  # Calculate from real data
-                    'overall_rating': 'good',
+                    'average_performance_score': 0,
+                    'overall_rating': 'no data',
                     'data_source': 'real_analytics'
                 }
                 
@@ -1041,68 +1060,69 @@ class MarketingDashboard:
             return self.get_fallback_analytics()
     
     def get_fallback_analytics(self) -> Dict[str, Any]:
-        """Enhanced fallback analytics when real data unavailable"""
-        brands = ['buildly', 'foundry', 'openbuild', 'radical', 'oregonsoftware']
+        """Fallback analytics when real data unavailable — returns zeros for actual brands from DB"""
+        # Load brands dynamically from database
+        try:
+            from config.brand_loader import get_all_brands
+            brands = get_all_brands()
+        except Exception:
+            brands = []
+
         results = {}
         
         for brand in brands:
             results[brand] = {
                 'brand': brand,
-                'period': 'Last 30 days (fallback data)',
+                'period': 'Last 30 days (no data available)',
                 'collected_at': datetime.now().isoformat(),
                 'website_analytics': {
                     'overview': {
-                        'sessions': 1200 + hash(brand) % 500,
-                        'users': 950 + hash(brand) % 300,
-                        'pageviews': 2800 + hash(brand) % 800,
-                        'avg_session_duration': 145.5,
-                        'bounce_rate': 0.42
+                        'sessions': 0,
+                        'users': 0,
+                        'pageviews': 0,
+                        'avg_session_duration': 0,
+                        'bounce_rate': 0
                     }
                 },
                 'email_analytics': {
                     'statistics': {
-                        'total_sent': 2500 + hash(brand) % 1000,
-                        'total_delivered': 2375 + hash(brand) % 950,
-                        'avg_open_rate': 22.0 + (hash(brand) % 10),
-                        'avg_click_rate': 3.5 + (hash(brand) % 3)
+                        'total_sent': 0,
+                        'total_delivered': 0,
+                        'avg_open_rate': 0,
+                        'avg_click_rate': 0
                     }
                 },
                 'social_analytics': {
                     'summary': {
-                        'total_followers': 1500 + hash(brand) % 700,
-                        'total_posts': 20,
-                        'avg_engagement_rate': 3.2 + (hash(brand) % 3)
+                        'total_followers': 0,
+                        'total_posts': 0,
+                        'avg_engagement_rate': 0
                     }
                 },
                 'summary': {
                     'overall_performance': {
-                        'score': 7.5 + (hash(brand) % 2),
-                        'rating': 'good',
+                        'score': 0,
+                        'rating': 'no data',
                         'trend': 'stable'
                     }
                 }
             }
         
         results['summary'] = {
-            'total_website_sessions': sum(r['website_analytics']['overview']['sessions'] for r in results.values()),
-            'total_emails_sent': sum(r['email_analytics']['statistics']['total_sent'] for r in results.values()),
-            'total_social_followers': sum(r['social_analytics']['summary']['total_followers'] for r in results.values()),
+            'total_website_sessions': 0,
+            'total_emails_sent': 0,
+            'total_social_followers': 0,
             'number_of_brands': len(brands),
-            'average_performance_score': 7.8,
-            'overall_rating': 'good',
-            'data_source': 'fallback_mock'
+            'average_performance_score': 0,
+            'overall_rating': 'no data',
+            'data_source': 'fallback_empty'
         }
         
         return results
     
     def get_mock_analytics_summary(self) -> Dict[str, Any]:
-        """Return mock analytics summary"""
-        return {
-            'buildly': {'overall_performance': {'score': 8.2, 'rating': 'good', 'trend': 'up'}},
-            'foundry': {'overall_performance': {'score': 7.8, 'rating': 'good', 'trend': 'stable'}},
-            'openbuild': {'overall_performance': {'score': 8.5, 'rating': 'excellent', 'trend': 'up'}},
-            'radical': {'overall_performance': {'score': 7.2, 'rating': 'good', 'trend': 'down'}}
-        }
+        """Return empty analytics summary"""
+        return {}
     
     def _categorize_cron_job(self, command):
         """Categorize cron job by type"""

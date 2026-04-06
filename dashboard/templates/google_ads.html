@@ -321,7 +321,7 @@
 function googleAds() {
     return {
         overview: {},
-        brands: ['foundry', 'buildly', 'open_build', 'radical_therapy'],
+        brands: {{ user_brands | map(attribute='name') | list | tojson }},
         selectedBrand: ACTIVE_BRAND,
         brandPerformance: {},
         brandCampaigns: [],
@@ -404,7 +404,7 @@ function googleAds() {
                     alert('Campaign created successfully!');
                     this.showCreateModal = false;
                     this.createForm = {
-                        brand: 'foundry',
+                        brand: ACTIVE_BRAND,
                         campaign_type: 'Search',
                         campaign_name: '',
                         budget_daily: '',

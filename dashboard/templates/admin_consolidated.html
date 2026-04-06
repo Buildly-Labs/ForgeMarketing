@@ -133,11 +133,9 @@
                                     <div class="mb-3">
                                         <label class="form-label">Brand</label>
                                         <select class="form-select" id="testBrand">
-                                            <option value="foundry">First City Foundry</option>
-                                            <option value="buildly">Buildly</option>
-                                            <option value="openbuild">Open Build</option>
-                                            <option value="radical">Radical Therapy</option>
-                                            <option value="oregonsoftware">Oregon Software</option>
+                                            {% for brand in user_brands %}
+                                            <option value="{{ brand.name }}">{{ brand.display_name }}</option>
+                                            {% endfor %}
                                         </select>
                                     </div>
                                     <div class="mb-3">
@@ -258,23 +256,17 @@
                             <div class="mb-3">
                                 <label for="ga-api-key" class="form-label">API Key</label>
                                 <input type="password" class="form-control" id="ga-api-key" value="<your-google-analytics-api-key>" readonly>
-                                <small class="form-text text-muted">Using foundry's proven configuration</small>
+                                <small class="form-text text-muted">Google Analytics configuration</small>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Property IDs by Brand</label>
                                 <div id="property-ids-container">
+                                    {% for brand in user_brands %}
                                     <div class="input-group mb-2">
-                                        <span class="input-group-text">Foundry</span>
-                                        <input type="text" class="form-control" value="GA4-PROPERTY-ID-1" placeholder="GA4 Property ID">
+                                        <span class="input-group-text">{{ brand.display_name }}</span>
+                                        <input type="text" class="form-control" value="" placeholder="GA4 Property ID">
                                     </div>
-                                    <div class="input-group mb-2">
-                                        <span class="input-group-text">OpenBuild</span>
-                                        <input type="text" class="form-control" value="GA4-PROPERTY-ID-2" placeholder="GA4 Property ID">
-                                    </div>
-                                    <div class="input-group mb-2">
-                                        <span class="input-group-text">Buildly</span>
-                                        <input type="text" class="form-control" value="GA4-PROPERTY-ID-3" placeholder="GA4 Property ID">
-                                    </div>
+                                    {% endfor %}
                                 </div>
                             </div>
                             <button type="button" class="btn btn-success" onclick="testAnalyticsConnection()">

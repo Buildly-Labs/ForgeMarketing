@@ -13,7 +13,7 @@
                 <p class="text-gray-600 mt-1">Execute and manage outreach campaigns across all brands</p>
             </div>
             <div class="flex space-x-3">
-                <a href="/influencers" 
+                <a href="{{ request.script_root }}/influencers" 
                    class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 inline-flex items-center">
                     <i class="fas fa-users mr-2"></i>Influencer Discovery
                 </a>
@@ -221,7 +221,7 @@
         </table>
         
         <div x-show="campaignReports.length > 5" class="px-6 py-4 bg-gray-50 border-t">
-            <a href="/reports" class="text-blue-600 hover:text-blue-800 text-sm font-medium">
+            <a href="{{ request.script_root }}/reports" class="text-blue-600 hover:text-blue-800 text-sm font-medium">
                 View all reports →
             </a>
         </div>
@@ -311,11 +311,9 @@ function campaignManager() {
             totalTargets: 0
         },
         brands: [
-            { key: 'foundry', name: 'Foundry', targets: 100, emails_sent: 0, total_targets: 0, status: 'active', icon: 'fas fa-industry', color: 'bg-blue-600' },
-            { key: 'openbuild', name: 'Open Build', targets: 18, emails_sent: 0, total_targets: 0, status: 'active', icon: 'fas fa-code', color: 'bg-green-600' },
-            { key: 'buildly', name: 'Buildly', targets: 0, emails_sent: 0, total_targets: 0, status: 'inactive', icon: 'fas fa-cubes', color: 'bg-purple-600' },
-            { key: 'radical', name: 'Radical Therapy', targets: 0, emails_sent: 0, total_targets: 0, status: 'inactive', icon: 'fas fa-heart', color: 'bg-red-600' },
-            { key: 'oregonsoftware', name: 'Oregon Software', targets: 0, emails_sent: 0, total_targets: 0, status: 'inactive', icon: 'fas fa-laptop-code', color: 'bg-indigo-600' }
+            {% for brand in user_brands %}
+            { key: '{{ brand.name }}', name: '{{ brand.display_name }}', targets: 0, emails_sent: 0, total_targets: 0, status: 'inactive', icon: 'fas fa-briefcase', color: 'bg-blue-600' },
+            {% endfor %}
         ],
         recentActivity: [],
         campaignReports: [],
@@ -655,7 +653,7 @@ function executeCampaign() {
 
 function executeAllCampaigns() {
     if (confirm('Execute campaigns for all brands? This will send outreach emails.')) {
-        const brands = ['foundry', 'openbuild', 'buildly'];
+        const brands = {{ user_brands | map(attribute='name') | list | tojson }};
         
         brands.forEach((brand, index) => {
             setTimeout(() => {

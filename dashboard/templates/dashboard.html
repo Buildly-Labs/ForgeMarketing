@@ -54,7 +54,7 @@
                 <h3 class="text-lg font-semibold">Quick Generate</h3>
             </div>
             <p class="text-gray-600 mb-4">Generate content instantly for any brand</p>
-            <a href="/generate" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors">
+            <a href="{{ request.script_root }}/generate" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors">
                 Start Generating
             </a>
         </div>
@@ -65,7 +65,7 @@
                 <h3 class="text-lg font-semibold">Brand Management</h3>
             </div>
             <p class="text-gray-600 mb-4">Configure and manage your brand voices</p>
-            <a href="/brands" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+            <a href="{{ request.script_root }}/brands" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
                 Manage Brands
             </a>
         </div>
@@ -76,7 +76,7 @@
                 <h3 class="text-lg font-semibold">Email Outreach</h3>
             </div>
             <p class="text-gray-600 mb-4">Manage user outreach campaigns by brand</p>
-            <a href="/outreach" class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors">
+            <a href="{{ request.script_root }}/outreach" class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors">
                 Manage Outreach
             </a>
         </div>
@@ -87,7 +87,7 @@
                 <h3 class="text-lg font-semibold">View Analytics</h3>
             </div>
             <p class="text-gray-600 mb-4">Track performance and engagement metrics</p>
-            <a href="/analytics" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors">
+            <a href="{{ request.script_root }}/analytics" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors">
                 View Reports
             </a>
         </div>
@@ -97,23 +97,23 @@
     <div class="bg-white rounded-lg p-6 card-shadow">
         <h3 class="text-xl font-semibold mb-6">Brand Overview</h3>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {% for brand in brands %}
+            {% for brand in user_brands %}
             <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
                 <div class="flex items-center justify-between mb-2">
-                    <h4 class="font-semibold capitalize">{{ brand }}</h4>
+                    <h4 class="font-semibold">{{ brand.display_name }}</h4>
                     <span class="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">Active</span>
                 </div>
                 <p class="text-gray-600 text-sm mb-3">AI-powered content generation ready</p>
                 <div class="flex space-x-2">
-                    <button @click="generateContent('{{ brand }}', 'social')" 
+                    <button @click="generateContent('{{ brand.name }}', 'social')" 
                             class="bg-blue-500 text-white text-xs px-2 py-1 rounded hover:bg-blue-600">
                         <i class="fas fa-share-alt mr-1"></i>Social
                     </button>
-                    <button @click="generateContent('{{ brand }}', 'blog')" 
+                    <button @click="generateContent('{{ brand.name }}', 'blog')" 
                             class="bg-purple-500 text-white text-xs px-2 py-1 rounded hover:bg-purple-600">
                         <i class="fas fa-blog mr-1"></i>Blog
                     </button>
-                    <button @click="generateContent('{{ brand }}', 'email')" 
+                    <button @click="generateContent('{{ brand.name }}', 'email')" 
                             class="bg-green-500 text-white text-xs px-2 py-1 rounded hover:bg-green-600">
                         <i class="fas fa-envelope mr-1"></i>Email
                     </button>
@@ -240,9 +240,7 @@ function dashboard() {
                 this.contentGenerated = 0;
                 this.lastUpdate = 'Error';
                 this.recentActivity = [
-                    { id: 1, title: 'Connection Error', description: 'Failed to load dashboard data', time: 'Error', type: 'error' },
-                    { id: 2, title: 'OpenBuild Discovery', description: 'New targets identified', time: '08:15 AM' },
-                    { id: 3, title: 'Analytics Report', description: 'Daily summary generated', time: '07:00 AM' }
+                    { id: 1, title: 'Connection Error', description: 'Failed to load dashboard data', time: 'Error', type: 'error' }
                 ];
             }
         },

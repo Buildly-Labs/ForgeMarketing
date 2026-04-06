@@ -384,7 +384,7 @@ function influencerManager() {
         selectedInfluencer: null,
         selectedBrand: ACTIVE_BRAND,
         platformFilter: 'all',
-        brands: ['foundry', 'buildly', 'open_build', 'radical_therapy'],
+        brands: {{ user_brands | map(attribute='name') | list | tojson }},
         influencers: [],
         stats: {
             total_influencers: 0,
