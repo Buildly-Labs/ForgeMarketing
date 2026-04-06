@@ -19,7 +19,7 @@ auth_bp = Blueprint('auth', __name__)
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
-        return redirect('/')
+        return redirect(url_for('index'))
 
     if request.method == 'GET':
         return render_template('login.html')
@@ -69,8 +69,8 @@ def login():
             session['active_brand_id'] = first.id
 
     if request.is_json:
-        return jsonify({'success': True, 'redirect': '/'})
-    return redirect('/')
+        return jsonify({'success': True, 'redirect': url_for('index')})
+    return redirect(url_for('index'))
 
 
 @auth_bp.route('/logout')
@@ -78,7 +78,7 @@ def login():
 def logout():
     session.pop('active_brand_id', None)
     logout_user()
-    return redirect('/login')
+    return redirect(url_for('auth.login'))
 
 
 # ── Force password change ────────────────────────────────────
@@ -116,9 +116,9 @@ def change_password():
     db.session.commit()
 
     if request.is_json:
-        return jsonify({'success': True, 'redirect': '/'})
+        return jsonify({'success': True, 'redirect': url_for('index')})
     flash('Password updated successfully.', 'success')
-    return redirect('/')
+    return redirect(url_for('index'))
 
 
 # ── Brand switching ──────────────────────────────────────────

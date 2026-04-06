@@ -160,7 +160,7 @@ except ImportError as e:
     GoogleAdsManager = None
     GOOGLE_ADS_AVAILABLE = False
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder='templates')
 app.secret_key = os.getenv('DASHBOARD_SECRET_KEY', 'marketing-automation-dashboard-2025')
 
 # ── Reverse-proxy prefix support ─────────────────────────────
@@ -292,7 +292,7 @@ def force_password_change():
     if request.path.startswith('/static') or request.path in ('/login', '/logout', '/change-password'):
         return
     if current_user.is_authenticated and getattr(current_user, 'must_change_password', False):
-        return redirect('/change-password')
+        return redirect(url_for('auth.change_password'))
 
 # Check if onboarding is needed
 @app.before_request

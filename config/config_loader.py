@@ -32,8 +32,8 @@ class ConfigLoader:
                 value = config.value
                 self._cache[cache_key] = value
                 return value
-        except Exception as e:
-            print(f"Error loading system config {key}: {e}")
+        except Exception:
+            pass  # Expected outside Flask app context (e.g. module-level init)
         
         # Fallback to environment variable
         env_value = os.getenv(key.upper(), default)
