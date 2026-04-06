@@ -17,18 +17,7 @@
 
     <!-- Filters -->
     <div class="bg-white rounded-lg p-4 card-shadow">
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Brand</label>
-                <select x-model="filters.brand" @change="loadCampaigns()" 
-                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                    <option value="">All Brands</option>
-                    <option value="buildly">Buildly</option>
-                    <option value="foundry">First City Foundry</option>
-                    <option value="openbuild">Open.Build</option>
-                    <option value="radical">Radical</option>
-                </select>
-            </div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-2">Status</label>
                 <select x-model="filters.status" @change="loadCampaigns()" 
@@ -221,14 +210,8 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">Brand</label>
-                    <select x-model="newCampaign.brand_name" 
-                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" required>
-                        <option value="">Select Brand</option>
-                        <option value="buildly">Buildly</option>
-                        <option value="foundry">First City Foundry</option>
-                        <option value="openbuild">Open.Build</option>
-                        <option value="radical">Radical</option>
-                    </select>
+                    <input type="text" :value="ACTIVE_BRAND" class="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-600" readonly>
+                    <input type="hidden" x-model="newCampaign.brand_name">
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">Campaign Name</label>
@@ -283,14 +266,14 @@ function marketingCalendar() {
     return {
         campaigns: [],
         tasks: [],
-        filters: { brand: '', status: '' },
+        filters: { brand: ACTIVE_BRAND, status: '' },
         viewMode: 'campaigns',
         loading: false,
         showNewCampaign: false,
         currentMonth: new Date(),
         calendarDays: [],
         newCampaign: {
-            brand_name: '',
+            brand_name: ACTIVE_BRAND,
             campaign_name: '',
             description: '',
             start_date: '',
@@ -339,7 +322,7 @@ function marketingCalendar() {
                 if (data.success) {
                     alert('Campaign created successfully!');
                     this.showNewCampaign = false;
-                    this.newCampaign = { brand_name: '', campaign_name: '', description: '', start_date: '', end_date: '', budget: 0 };
+                    this.newCampaign = { brand_name: ACTIVE_BRAND, campaign_name: '', description: '', start_date: '', end_date: '', budget: 0 };
                     await this.loadCampaigns();
                 }
             } catch (error) {

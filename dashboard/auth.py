@@ -140,6 +140,7 @@ def switch_brand(brand_id):
         return redirect('/')
 
     session['active_brand_id'] = brand_id
+    session['active_brand_name'] = brand.name
 
     if request.is_json:
         return jsonify({'success': True, 'brand': brand.to_dict()})

@@ -1312,44 +1312,67 @@ class MarketingDashboard:
     
     def test_all_connections(self):
         """Test all configured platform connections"""
+        from config.config_loader import ConfigLoader
+        loader = ConfigLoader()
         status = {}
         
         # Test AI connection first
         status['ai'] = self.test_ai_connection()
         
-        # Test each platform if credentials exist
-        for platform in ['twitter', 'bluesky', 'instagram', 'linkedin', 'email']:
-            try:
-                # Mock connection test for now
-                status[platform] = bool(os.getenv(f'{platform.upper()}_API_KEY') or 
-                                      os.getenv(f'{platform.upper()}_USERNAME') or
-                                      os.getenv(f'{platform.upper()}_CLIENT_ID'))
-            except:
-                status[platform] = False
+        # Test email
+        status['email'] = bool(loader.get_system_config('BREVO_SMTP_KEY', ''))
+        
+        # Test each social platform
+        status['twitter'] = bool(loader.get_system_config('TWITTER_API_KEY', ''))
+        status['bluesky'] = bool(loader.get_system_config('BLUESKY_HANDLE', ''))
+        status['linkedin'] = bool(loader.get_system_config('LINKEDIN_CLIENT_ID', ''))
         
         return status
     
     def test_ai_connection(self):
-        """Test AI service connection"""
+        """Test AI service connection based on configured provider"""
         try:
-            if not self.ai_generator:
-                return False
-                
-            # Use requests to test the Ollama connection directly (avoid asyncio in Flask)
-            
-            try:
-                response = requests.get(
-                    f"{self.ai_generator.ollama.base_url}/api/tags",
-                    timeout=5
-                )
-                if response.status_code == 200:
-                    models = response.json().get('models', [])
-                    return len(models) > 0
-                else:
+            from config.config_loader import ConfigLoader
+            loader = ConfigLoader()
+            provider = loader.get_system_config('ai_provider', 'ollama')
+
+            if provider == 'openai':
+                api_key = loader.get_system_config('OPENAI_API_KEY', '')
+                if not api_key:
                     return False
-            except requests.exceptions.RequestException:
-                return False
-                
+                try:
+                    resp = requests.get(
+                        'https://api.openai.com/v1/models',
+                        headers={'Authorization': f'Bearer {api_key}'},
+                        timeout=10,
+                    )
+                    return resp.status_code == 200
+                except requests.exceptions.RequestException:
+                    return False
+
+            elif provider == 'gemini':
+                api_key = loader.get_system_config('GEMINI_API_KEY', '')
+                if not api_key:
+                    return False
+                try:
+                    resp = requests.get(
+                        f'https://generativelanguage.googleapis.com/v1beta/models?key={api_key}',
+                        timeout=10,
+                    )
+                    return resp.status_code == 200
+                except requests.exceptions.RequestException:
+                    return False
+
+            else:  # ollama
+                ollama_host = loader.get_system_config('OLLAMA_HOST', 'http://localhost:11434')
+                try:
+                    resp = requests.get(f"{ollama_host}/api/tags", timeout=5)
+                    if resp.status_code == 200:
+                        return len(resp.json().get('models', [])) > 0
+                    return False
+                except requests.exceptions.RequestException:
+                    return False
+
         except Exception as e:
             print(f"AI connection test failed: {e}")
             return False
@@ -1360,10 +1383,11 @@ class MarketingDashboard:
             # Test AI connection
             if platform == 'ai':
                 if self.test_ai_connection():
-                    return {'success': True, 'message': 'AI service connection successful'}
+                    provider = ConfigLoader().get_system_config('ai_provider', 'ollama')
+                    return {'success': True, 'message': f'AI service ({provider}) connection successful'}
                 else:
-                    ollama_host = ConfigLoader().get_system_config('OLLAMA_HOST', 'http://localhost:11434')
-                    return {'success': False, 'error': f'Cannot connect to AI service at {ollama_host}'}
+                    provider = ConfigLoader().get_system_config('ai_provider', 'ollama')
+                    return {'success': False, 'error': f'Cannot connect to AI service ({provider}). Check your credentials.'}
             
             # Mock connection test for social platforms - in production, make actual API calls
             elif platform == 'twitter':
@@ -1957,7 +1981,7 @@ def api_test_connections():
         status = dashboard.test_all_connections()
         return jsonify({
             'success': True,
-            'status': status
+            'results': status
         })
     except Exception as e:
         return jsonify({
@@ -1998,7 +2022,7 @@ def api_comprehensive_analytics():
     """API endpoint for comprehensive analytics across all brands with unified outreach data"""
     try:
         # Get query parameters
-        brand = request.args.get('brand')
+        brand = request.args.get('brand') or session.get('active_brand_name')
         days = int(request.args.get('days', 30))
         
         # Start with base analytics
@@ -2640,7 +2664,7 @@ def api_analyze_outreach_campaign():
         
         if request.method == 'GET':
             # Simple brand validation for GET requests
-            brand = request.args.get('brand')
+            brand = request.args.get('brand') or session.get('active_brand_name')
             if not brand:
                 return jsonify({
                     'success': False,
@@ -3404,7 +3428,7 @@ def api_list_campaign_reports():
         if not OUTREACH_AUTOMATION_AVAILABLE or not CampaignReportGenerator:
             return jsonify({'error': 'Campaign reporting not available'}), 503
         
-        brand = request.args.get('brand')
+        brand = request.args.get('brand') or session.get('active_brand_name')
         limit = request.args.get('limit', 20, type=int)
         
         generator = CampaignReportGenerator()
@@ -4967,7 +4991,7 @@ def api_list_influencers():
     
     try:
         # Get query parameters
-        brand = request.args.get('brand')
+        brand = request.args.get('brand') or session.get('active_brand_name')
         platform = request.args.get('platform')
         min_followers = int(request.args.get('min_followers', 0))
         min_alignment = float(request.args.get('min_alignment', 0.0))
@@ -5262,7 +5286,7 @@ def api_list_contacts():
         manager = UnifiedContactsManager()
         
         # Get query parameters
-        brand = request.args.get('brand')
+        brand = request.args.get('brand') or session.get('active_brand_name')
         contact_type = request.args.get('contact_type') 
         status = request.args.get('status')
         search = request.args.get('search')
@@ -5294,7 +5318,7 @@ def api_contacts_stats():
     
     try:
         manager = UnifiedContactsManager()
-        brand = request.args.get('brand')
+        brand = request.args.get('brand') or session.get('active_brand_name')
         stats = manager.get_contact_stats(brand=brand)
         return jsonify(stats)
         

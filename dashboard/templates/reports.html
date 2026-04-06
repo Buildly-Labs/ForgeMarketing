@@ -26,29 +26,15 @@
         </div>
     </div>
     
-    <!-- Brand Filter -->
+    <!-- Time Range Filter -->
     <div class="bg-white rounded-lg p-6 card-shadow">
-        <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold">Filter by Brand</h3>
+        <div class="flex items-center justify-between">
+            <h3 class="text-lg font-semibold">Time Range</h3>
             <select x-model="selectedTimeRange" @change="loadData()" class="px-3 py-2 border border-gray-300 rounded-lg">
                 <option value="7d">Last 7 days</option>
                 <option value="30d">Last 30 days</option>
                 <option value="90d">Last 90 days</option>
             </select>
-        </div>
-        <div class="flex flex-wrap gap-2">
-            <button @click="selectedBrand = 'all'" :class="selectedBrand === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'"
-                    class="px-4 py-2 rounded-lg font-medium">
-                All Brands
-            </button>
-            <template x-for="brand in brands" :key="brand.key">
-                <button @click="selectedBrand = brand.key" 
-                        :class="selectedBrand === brand.key ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'"
-                        class="px-4 py-2 rounded-lg font-medium">
-                    <i :class="brand.icon" class="mr-2"></i>
-                    <span x-text="brand.name"></span>
-                </button>
-            </template>
         </div>
     </div>
 
@@ -368,7 +354,7 @@
 <script>
     function reportsManager() {
         return {
-            selectedBrand: 'all',
+            selectedBrand: ACTIVE_BRAND,
             timeRange: '30d',
             totalEmailsSent: 0,
             totalTargets: 0,

@@ -77,26 +77,6 @@
         </div>
     </div>
 
-    <!-- Brand Filter -->
-    <div class="bg-white rounded-lg p-6 card-shadow">
-        <div class="flex items-center justify-between mb-4">
-            <h3 class="text-lg font-semibold">Filter by Brand</h3>
-            <button @click="selectedBrand = 'all'" :class="selectedBrand === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'"
-                    class="px-3 py-1 rounded-lg text-sm font-medium">
-                All Brands
-            </button>
-        </div>
-        <div class="flex flex-wrap gap-2">
-            <template x-for="brand in brands" :key="`brand-filter-${brand}`">
-                <button @click="selectedBrand = brand" 
-                        :class="selectedBrand === brand ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'"
-                        class="px-4 py-2 rounded-lg font-medium capitalize">
-                    <span x-text="brand"></span>
-                </button>
-            </template>
-        </div>
-    </div>
-
     <!-- Brand Discovery Controls -->
     <div class="bg-white rounded-lg p-6 card-shadow">
         <h3 class="text-lg font-semibold mb-6">Brand Discovery</h3>
@@ -402,7 +382,7 @@ function influencerManager() {
         syncing: false,
         showInfluencerModal: false,
         selectedInfluencer: null,
-        selectedBrand: 'all',
+        selectedBrand: ACTIVE_BRAND,
         platformFilter: 'all',
         brands: ['foundry', 'buildly', 'open_build', 'radical_therapy'],
         influencers: [],

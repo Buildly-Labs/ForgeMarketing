@@ -27,16 +27,6 @@
     <div class="bg-white rounded-lg p-4 card-shadow">
         <div class="flex flex-wrap items-center gap-4">
             <div>
-                <label class="block text-xs font-medium text-gray-500 mb-1">Brand</label>
-                <select x-model="filters.brand" @change="reload()"
-                    class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
-                    <option value="">All Brands</option>
-                    <template x-for="b in brands" :key="b.name">
-                        <option :value="b.name" x-text="b.display_name"></option>
-                    </template>
-                </select>
-            </div>
-            <div>
                 <label class="block text-xs font-medium text-gray-500 mb-1">Campaign</label>
                 <select x-model="filters.campaign" @change="reload()"
                     class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500">
@@ -415,7 +405,7 @@ function contentCalendar() {
         brands: [],
         campaigns: [],
         tasks: [],
-        filters: { brand: '', campaign: '', status: '' },
+        filters: { brand: ACTIVE_BRAND, campaign: '', status: '' },
         viewMode: 'calendar',
         currentMonth: new Date(),
 
