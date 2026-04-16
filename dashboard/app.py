@@ -613,6 +613,14 @@ def admin_brands():
     """Admin panel for managing brands and email configurations"""
     return render_template('admin_brands.html')
 
+@app.route('/admin/users')
+@login_required
+def admin_users():
+    """Admin panel for managing users and brand access"""
+    if not current_user.is_admin:
+        return redirect(url_for('index'))
+    return render_template('admin_users.html')
+
 # Marketing Calendar UI route
 @app.route('/marketing-calendar')
 @login_required

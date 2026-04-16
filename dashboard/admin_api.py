@@ -1,18 +1,29 @@
 """
-Admin API endpoints for managing brands and their configurations
+Admin API endpoints for managing brands, users, and their configurations
 """
 
 from flask import Blueprint, request, jsonify
-from flask_login import login_required
+from flask_login import login_required, current_user
+from functools import wraps
 from datetime import datetime
 from typing import Dict, Any, Tuple
 import logging
 
-from dashboard.models import db, Brand, BrandEmailConfig, BrandSettings, APICredentialLog, SystemConfig
+from dashboard.models import db, Brand, BrandEmailConfig, BrandSettings, APICredentialLog, SystemConfig, User, UserBrand
 
 logger = logging.getLogger(__name__)
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/api/admin')
+
+
+def admin_required(fn):
+    """Decorator that requires the current user to be an admin."""
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not current_user.is_admin:
+            return jsonify({'success': False, 'error': 'Admin access required'}), 403
+        return fn(*args, **kwargs)
+    return wrapper
 
 
 @admin_bp.before_request
@@ -666,3 +677,160 @@ def _log_action(brand_id: int, config_id: int = None, action: str = '',
         db.session.commit()
     except Exception as e:
         logger.error(f"Failed to log action: {e}")
+
+
+# ============================================================================
+# USER MANAGEMENT ENDPOINTS
+# ============================================================================
+
+@admin_bp.route('/users', methods=['GET'])
+@admin_required
+def list_users():
+    """List all users with their brand memberships."""
+    try:
+        users = User.query.order_by(User.email).all()
+        return jsonify({
+            'success': True,
+            'users': [u.to_dict() for u in users],
+            'total': len(users),
+        }), 200
+    except Exception as e:
+        logger.error(f"Error listing users: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@admin_bp.route('/users', methods=['POST'])
+@admin_required
+def create_user():
+    """Create a new user and optionally assign brands.
+
+    JSON body:
+        email (str, required)
+        password (str, required)
+        display_name (str)
+        is_admin (bool)
+        brand_ids (list[int])  — brands to grant access to
+        role (str)             — role for all assigned brands (default: editor)
+    """
+    try:
+        data = request.get_json() or {}
+        email = (data.get('email') or '').strip().lower()
+        password = data.get('password', '')
+
+        if not email or not password:
+            return jsonify({'success': False, 'error': 'Email and password are required'}), 400
+
+        if User.query.filter_by(email=email).first():
+            return jsonify({'success': False, 'error': 'A user with that email already exists'}), 409
+
+        user = User(
+            email=email,
+            display_name=data.get('display_name', ''),
+            is_admin=bool(data.get('is_admin', False)),
+            must_change_password=bool(data.get('must_change_password', True)),
+        )
+        user.set_password(password)
+        db.session.add(user)
+        db.session.flush()
+
+        role = data.get('role', 'editor')
+        for bid in data.get('brand_ids', []):
+            if Brand.query.get(bid):
+                db.session.add(UserBrand(user_id=user.id, brand_id=bid, role=role))
+
+        db.session.commit()
+        logger.info(f"User created: {email} by {current_user.email}")
+        return jsonify({'success': True, 'user': user.to_dict()}), 201
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error creating user: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@admin_bp.route('/users/<int:user_id>', methods=['GET'])
+@admin_required
+def get_user(user_id: int):
+    """Get a single user's details."""
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'success': False, 'error': 'User not found'}), 404
+
+    data = user.to_dict()
+    data['brand_memberships'] = [
+        {'brand_id': ub.brand_id, 'brand_name': ub.brand.name, 'role': ub.role}
+        for ub in user.brand_memberships.all()
+    ]
+    return jsonify({'success': True, 'user': data}), 200
+
+
+@admin_bp.route('/users/<int:user_id>', methods=['PUT', 'PATCH'])
+@admin_required
+def update_user(user_id: int):
+    """Update an existing user.
+
+    JSON body (all optional):
+        email, display_name, is_admin, is_active, password,
+        brand_ids (replaces current list), role
+    """
+    try:
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({'success': False, 'error': 'User not found'}), 404
+
+        data = request.get_json() or {}
+
+        if 'email' in data:
+            new_email = data['email'].strip().lower()
+            existing = User.query.filter(User.email == new_email, User.id != user_id).first()
+            if existing:
+                return jsonify({'success': False, 'error': 'Email already in use'}), 409
+            user.email = new_email
+        if 'display_name' in data:
+            user.display_name = data['display_name']
+        if 'is_admin' in data:
+            user.is_admin = bool(data['is_admin'])
+        if 'is_active' in data:
+            user.is_active_user = bool(data['is_active'])
+        if 'password' in data and data['password']:
+            user.set_password(data['password'])
+            user.must_change_password = False
+
+        # Replace brand memberships if provided
+        if 'brand_ids' in data:
+            UserBrand.query.filter_by(user_id=user.id).delete()
+            role = data.get('role', 'editor')
+            for bid in data['brand_ids']:
+                if Brand.query.get(bid):
+                    db.session.add(UserBrand(user_id=user.id, brand_id=bid, role=role))
+
+        db.session.commit()
+        logger.info(f"User updated: {user.email} by {current_user.email}")
+        return jsonify({'success': True, 'user': user.to_dict()}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error updating user: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@admin_bp.route('/users/<int:user_id>', methods=['DELETE'])
+@admin_required
+def delete_user(user_id: int):
+    """Deactivate (soft-delete) a user. Does not remove the row."""
+    try:
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({'success': False, 'error': 'User not found'}), 404
+        if user.id == current_user.id:
+            return jsonify({'success': False, 'error': 'Cannot delete your own account'}), 400
+
+        user.is_active_user = False
+        db.session.commit()
+        logger.info(f"User deactivated: {user.email} by {current_user.email}")
+        return jsonify({'success': True, 'message': f'User {user.email} deactivated'}), 200
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error deactivating user: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
