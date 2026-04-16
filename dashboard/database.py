@@ -48,6 +48,8 @@ class DatabaseManager:
                         self._seed_brands_and_themes()
                     if user_count == 0:
                         self._seed_admin_user()
+                    else:
+                        self._sync_admin_user()
 
                     # Seed system config defaults (idempotent – skips existing keys)
                     self._seed_system_configs()
@@ -183,6 +185,29 @@ class DatabaseManager:
 
         db.session.commit()
         print(f"✅ Seeded admin user: {admin_email}  (change password immediately!)")
+
+    def _sync_admin_user(self) -> None:
+        """Update existing admin user credentials from env vars if set."""
+        admin_email = os.getenv('ADMIN_EMAIL', '').strip()
+        admin_password = os.getenv('ADMIN_PASSWORD', '').strip()
+        if not admin_email or not admin_password:
+            return
+
+        user = User.query.filter_by(is_admin=True).first()
+        if not user:
+            return
+
+        changed = False
+        if user.email != admin_email:
+            user.email = admin_email
+            changed = True
+        if not user.check_password(admin_password):
+            user.set_password(admin_password)
+            changed = True
+
+        if changed:
+            db.session.commit()
+            print(f"✅ Synced admin credentials from env vars: {admin_email}")
 
     def _seed_system_configs(self) -> None:
         """Seed SystemConfig rows from env vars (idempotent – skips keys that already exist)."""
