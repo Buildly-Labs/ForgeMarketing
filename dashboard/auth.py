@@ -2,16 +2,38 @@
 Authentication blueprint — login, logout, brand switching.
 """
 
-from flask import Blueprint, request, jsonify, render_template, redirect, url_for, session, flash
+from flask import Blueprint, request, jsonify, render_template, redirect, url_for, session, flash, make_response
 from flask_login import login_user, logout_user, login_required, current_user
 from datetime import datetime
+import hashlib
+import hmac
+import json
 import logging
+import os
+import time
 
 from dashboard.models import db, User, UserBrand, Brand
 
 logger = logging.getLogger(__name__)
 
 auth_bp = Blueprint('auth', __name__)
+
+# Shared secret for cross-app auth cookie (must match Django setting)
+_AUTH_COOKIE_SECRET = os.getenv('SHARED_AUTH_SECRET', 'forge-shared-auth-2025')
+AUTH_COOKIE_NAME = 'forge_auth'
+AUTH_COOKIE_MAX_AGE = 60 * 60 * 24 * 14  # 14 days
+
+
+def _sign_auth_cookie(email: str, display_name: str) -> str:
+    """Create a signed auth token: base64(json) + '.' + hmac signature."""
+    payload = json.dumps({
+        'email': email,
+        'name': display_name,
+        'ts': int(time.time()),
+    }, separators=(',', ':'))
+    sig = hmac.new(_AUTH_COOKIE_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()
+    import base64
+    return base64.urlsafe_b64encode(payload.encode()).decode() + '.' + sig
 
 
 # ── HTML routes ──────────────────────────────────────────────
@@ -68,9 +90,23 @@ def login():
         if first:
             session['active_brand_id'] = first.id
 
+    # Build the auth cookie for cross-app SSO
+    auth_token = _sign_auth_cookie(user.email, user.display_name or user.email)
+
     if request.is_json:
-        return jsonify({'success': True, 'redirect': url_for('index')})
-    return redirect(url_for('index'))
+        resp = make_response(jsonify({'success': True, 'redirect': url_for('index')}))
+    else:
+        resp = make_response(redirect(url_for('index')))
+
+    resp.set_cookie(
+        AUTH_COOKIE_NAME, auth_token,
+        max_age=AUTH_COOKIE_MAX_AGE,
+        path='/',
+        httponly=True,
+        samesite='Lax',
+        secure=request.is_secure,
+    )
+    return resp
 
 
 @auth_bp.route('/logout')
@@ -78,7 +114,9 @@ def login():
 def logout():
     session.pop('active_brand_id', None)
     logout_user()
-    return redirect(url_for('auth.login'))
+    resp = make_response(redirect(url_for('auth.login')))
+    resp.delete_cookie(AUTH_COOKIE_NAME, path='/')
+    return resp
 
 
 # ── Force password change ────────────────────────────────────
