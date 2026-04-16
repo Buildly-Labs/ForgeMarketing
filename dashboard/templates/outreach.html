@@ -668,6 +668,7 @@
     </div>
 
     <script>
+        const ACTIVE_BRAND = {{ (active_brand.name if active_brand else '') | tojson }};
         function outreachManager() {
             return {
                 selectedBrand: ACTIVE_BRAND,

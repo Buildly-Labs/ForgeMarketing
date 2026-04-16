@@ -219,7 +219,7 @@ if not _database_url.startswith('sqlite'):
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Initialize database
-from dashboard.models import db, User, Brand, BrandTheme
+from dashboard.models import db, User, Brand, BrandTheme, BrandEmailConfig
 db.init_app(app)
 
 # ── Flask-Login ──────────────────────────────────────────────
@@ -720,8 +720,9 @@ def _refresh_ai_config_from_db():
 
 @app.before_request
 def _refresh_email_config_from_db():
-    """Once per request, re-check email config from DB (BrandEmailConfig) so
-    the admin-panel values are reflected without a restart."""
+    """Once per request, re-check email config from DB (BrandEmailConfig
+    *and* SystemConfig) so the admin-panel values are reflected without a
+    restart."""
     try:
         from dashboard.models import BrandEmailConfig
         # Check if ANY brand has email configured in the database
@@ -732,8 +733,33 @@ def _refresh_email_config_from_db():
             ENVIRONMENT_CONFIG['email']['mailersend_configured'] = True
             ENVIRONMENT_CONFIG['email']['brevo_configured'] = True
             ENVIRONMENT_CONFIG['email']['missing_vars'] = []
+            return  # already confirmed — skip further checks
     except Exception:
-        pass  # Outside app context or DB not ready yet — keep env-var value
+        pass  # Outside app context or DB not ready yet
+
+    # Also check SystemConfig (admin-panel / ConfigLoader values)
+    try:
+        loader = ConfigLoader()
+        mailersend_ok = bool(loader.get_system_config('MAILERSEND_API_TOKEN'))
+        brevo_ok = bool(
+            loader.get_system_config('BREVO_SMTP_USER')
+            and loader.get_system_config('BREVO_SMTP_PASSWORD')
+        ) or bool(loader.get_system_config('BREVO_SMTP_KEY'))
+
+        if mailersend_ok:
+            ENVIRONMENT_CONFIG['email']['mailersend_configured'] = True
+        if brevo_ok:
+            ENVIRONMENT_CONFIG['email']['brevo_configured'] = True
+
+        # Rebuild missing list
+        missing = []
+        if not ENVIRONMENT_CONFIG['email']['mailersend_configured']:
+            missing.append('MAILERSEND_API_TOKEN')
+        if not ENVIRONMENT_CONFIG['email']['brevo_configured']:
+            missing.extend(['BREVO_SMTP_USER', 'BREVO_SMTP_PASSWORD'])
+        ENVIRONMENT_CONFIG['email']['missing_vars'] = missing
+    except Exception:
+        pass  # Outside app context or DB not ready yet — keep current value
 
 
 # Campaign progress tracking
@@ -1478,6 +1504,23 @@ class MarketingDashboard:
 # Initialize dashboard
 dashboard = MarketingDashboard()
 
+
+def _is_known_brand(name: str) -> bool:
+    """Check whether *name* is a known active brand.
+
+    Checks the cached ``dashboard.brands`` list first (fast path).
+    Falls back to a live DB query so that brands added after startup are
+    still recognised — and back-fills the cache when it finds one.
+    """
+    if name in dashboard.brands:
+        return True
+    # Live DB fallback
+    brand = Brand.query.filter_by(name=name, is_active=True).first()
+    if brand:
+        dashboard.brands.append(brand.name)
+        return True
+    return False
+
 @app.route('/')
 @login_required
 def index():
@@ -1555,7 +1598,7 @@ def api_generate():
     if not content_type or not brand:
         return jsonify({'error': 'Content type and brand are required'}), 400
     
-    if brand not in dashboard.brands:
+    if not _is_known_brand(brand):
         return jsonify({'error': f'Unknown brand: {brand}'}), 400
     
     # Remove brand from data to avoid duplicate parameter error
@@ -1673,6 +1716,11 @@ def contacts():
 @app.route('/api/status')
 def api_status():
     """API endpoint for system status with environment configuration"""
+    # Refresh brands list from DB so newly-added brands appear
+    db_brands = [b.name for b in Brand.query.filter_by(is_active=True).order_by(Brand.name).all()]
+    if db_brands:
+        dashboard.brands = db_brands
+
     status = {
         'timestamp': datetime.now().isoformat(),
         'brands_configured': len(dashboard.brands),
@@ -1712,7 +1760,7 @@ def api_status():
 @app.route('/api/brands/<brand_name>')
 def api_brand_info(brand_name):
     """API endpoint for brand information"""
-    if brand_name not in dashboard.brands:
+    if not _is_known_brand(brand_name):
         return jsonify({'error': 'Brand not found'}), 404
     
     if dashboard.ai_generator and brand_name in dashboard.ai_generator.brand_configs:
@@ -2610,33 +2658,46 @@ def api_email_campaign_detail(campaign_id):
 
 @app.route('/api/outreach/brand-configs')
 def api_get_brand_configs():
-    """Get all brand configurations for outreach"""
+    """Get all brand configurations for outreach from the database."""
     try:
-        config_file = project_root / 'config' / 'outreach_config.yaml'
-        if config_file.exists():
-            with open(config_file, 'r') as f:
-                config = yaml.safe_load(f)
-            return jsonify(config['brands'])
-        else:
-            return jsonify({}), 404
+        brands = Brand.query.filter_by(is_active=True).all()
+        result = {}
+        for b in brands:
+            email_cfg = BrandEmailConfig.query.filter_by(
+                brand_id=b.id, is_active=True
+            ).first()
+            result[b.name] = {
+                'name': b.display_name,
+                'description': b.description or '',
+                'website_url': b.website_url or '',
+                'from_email': email_cfg.from_email if email_cfg else '',
+                'from_name': email_cfg.from_name if email_cfg else b.display_name,
+                'bcc_email': '',
+            }
+        return jsonify(result)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/outreach/brand-config/<brand>')
 def api_get_brand_config(brand):
-    """Get configuration for a specific brand"""
+    """Get configuration for a specific brand from the database."""
     try:
-        config_file = project_root / 'config' / 'outreach_config.yaml'
-        if config_file.exists():
-            with open(config_file, 'r') as f:
-                config = yaml.safe_load(f)
-            
-            if brand in config['brands']:
-                return jsonify(config['brands'][brand])
-            else:
-                return jsonify({'error': f'Brand {brand} not found'}), 404
-        else:
-            return jsonify({'error': 'Configuration file not found'}), 404
+        b = Brand.query.filter_by(name=brand, is_active=True).first()
+        if not b:
+            return jsonify({'error': f'Unknown brand: {brand}'}), 404
+
+        email_cfg = BrandEmailConfig.query.filter_by(
+            brand_id=b.id, is_active=True
+        ).first()
+
+        return jsonify({
+            'name': b.display_name,
+            'description': b.description or '',
+            'website_url': b.website_url or '',
+            'from_email': email_cfg.from_email if email_cfg else '',
+            'from_name': email_cfg.from_name if email_cfg else b.display_name,
+            'bcc_email': '',
+        })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -4934,7 +4995,9 @@ def serve_brand_dashboard(brand):
         }
         
         if brand not in dashboard_paths:
-            return f"Unknown brand: {brand}", 404
+            if not _is_known_brand(brand):
+                return f"Unknown brand: {brand}", 404
+            return f"Dashboard not found for {brand}. Try generating it first.", 404
         
         dashboard_path = project_root / dashboard_paths[brand]
         
