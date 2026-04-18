@@ -581,19 +581,20 @@ function influencerManager() {
         
         getSocialLinks(socialLinks) {
             if (!socialLinks) return [];
-            // socialLinks format: "platform:url,platform:url"
+            // socialLinks format: "platform:https://url,platform:https://url"
             const links = socialLinks.split(',');
             return links.map(link => {
                 if (link.includes(':')) {
-                    const [platform, ...urlParts] = link.split(':');
-                    const url = urlParts.join(':').trim();
-                    const platformName = platform.trim();
+                    // Split only on the FIRST colon to preserve the URL scheme (https://)
+                    const colonIndex = link.indexOf(':');
+                    const platform = link.substring(0, colonIndex).trim();
+                    const url = link.substring(colonIndex + 1).trim();
                     
                     // Skip links with empty URLs
                     if (!url) return null;
                     
                     return {
-                        platform: platformName,
+                        platform: platform,
                         url: url
                     };
                 }
