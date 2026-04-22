@@ -5037,6 +5037,7 @@ def serve_brand_dashboard(brand):
 try:
     from automation.influencer_discovery import BrandInfluencerDiscovery, BRAND_INFLUENCER_STRATEGIES
     from automation.influencer_report_generator import InfluencerReportGenerator
+    from automation.influencer_enrichment import InfluencerEnrichmentEngine
     INFLUENCER_SYSTEM_AVAILABLE = True
 except ImportError as e:
     print(f"⚠️  Influencer system not available: {e}")
@@ -5364,6 +5365,114 @@ def api_sync_influencers_to_contacts():
             'success': False,
             'error': str(e)
         }), 500
+
+# =============================================================================
+# INFLUENCER ENRICHMENT API ENDPOINTS
+# =============================================================================
+
+@app.route('/api/influencers/enrich', methods=['POST'])
+def api_enrich_influencers():
+    """Run enrichment on stale influencer profiles"""
+    if not INFLUENCER_SYSTEM_AVAILABLE:
+        return jsonify({'error': 'Influencer system not available'}), 503
+
+    try:
+        data = request.get_json() or {}
+        brand = data.get('brand')
+        max_influencers = int(data.get('max', 50))
+
+        async def run_enrichment():
+            engine = InfluencerEnrichmentEngine()
+            return await engine.enrich_all(brand=brand, max_influencers=max_influencers)
+
+        stats = asyncio.run(run_enrichment())
+        return jsonify({'success': True, 'stats': stats})
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/influencers/<int:influencer_id>/enrich', methods=['POST'])
+def api_enrich_single_influencer(influencer_id):
+    """Enrich a single influencer profile"""
+    if not INFLUENCER_SYSTEM_AVAILABLE:
+        return jsonify({'error': 'Influencer system not available'}), 503
+
+    try:
+        async def run_enrichment():
+            engine = InfluencerEnrichmentEngine()
+            return await engine.enrich_influencer(influencer_id)
+
+        result = asyncio.run(run_enrichment())
+        return jsonify({'success': True, 'result': result})
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/influencers/<int:influencer_id>/content')
+def api_influencer_content(influencer_id):
+    """Get tracked content for an influencer"""
+    if not INFLUENCER_SYSTEM_AVAILABLE:
+        return jsonify({'error': 'Influencer system not available'}), 503
+
+    try:
+        min_relevance = float(request.args.get('min_relevance', 0.0))
+        content_type = request.args.get('content_type')
+        limit = int(request.args.get('limit', 50))
+
+        engine = InfluencerEnrichmentEngine()
+        content = engine.get_influencer_content(
+            influencer_id=influencer_id,
+            min_relevance=min_relevance,
+            content_type=content_type,
+            limit=limit
+        )
+        return jsonify({'success': True, 'count': len(content), 'content': content})
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/influencers/content')
+def api_all_influencer_content():
+    """Get all tracked content, optionally filtered by brand and relevance"""
+    if not INFLUENCER_SYSTEM_AVAILABLE:
+        return jsonify({'error': 'Influencer system not available'}), 503
+
+    try:
+        brand = request.args.get('brand')
+        min_relevance = float(request.args.get('min_relevance', 0.0))
+        content_type = request.args.get('content_type')
+        limit = int(request.args.get('limit', 100))
+
+        engine = InfluencerEnrichmentEngine()
+        content = engine.get_influencer_content(
+            brand=brand,
+            min_relevance=min_relevance,
+            content_type=content_type,
+            limit=limit
+        )
+        return jsonify({'success': True, 'count': len(content), 'content': content})
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/influencers/<int:influencer_id>/enrichment-history')
+def api_enrichment_history(influencer_id):
+    """Get enrichment history for an influencer"""
+    if not INFLUENCER_SYSTEM_AVAILABLE:
+        return jsonify({'error': 'Influencer system not available'}), 503
+
+    try:
+        engine = InfluencerEnrichmentEngine()
+        history = engine.get_enrichment_history(influencer_id)
+        return jsonify({'success': True, 'history': history})
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 # ============================================================================
 # CONTACTS MANAGEMENT API ENDPOINTS

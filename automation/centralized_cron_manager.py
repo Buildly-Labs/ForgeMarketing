@@ -90,6 +90,14 @@ class CentralizedCronManager:
                 'schedule': '0 6 * * 3',  # Wednesdays at 6 AM
                 'description': 'Automated influencer discovery across all platforms for all brands',
                 'args': ['--all-brands', '--max-per-platform', '10']
+            },
+            'influencer_enrichment': {
+                'name': 'Influencer Enrichment (All Brands)',
+                'brand': 'All Brands',
+                'script_path': str(project_root / 'automation' / 'influencer_enrichment.py'),
+                'schedule': '0 7 * * 1,4',  # Mondays & Thursdays at 7 AM
+                'description': 'Enrich influencer profiles with content, contacts, and updated metrics',
+                'args': ['--all', '--max', '50']
             }
         }
     
