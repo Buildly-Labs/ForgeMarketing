@@ -4858,68 +4858,50 @@ def api_daily_emails_status():
 
 @app.route('/api/brand-dashboards')
 def api_brand_dashboards_list():
-    """List all available brand dashboards"""
+    """List all available brand dashboards, driven by database brands"""
     try:
         dashboards = []
-        
-        # Define brand dashboard mapping
-        brand_dashboards = {
+
+        # Known path/generator overrides for specific brand slugs.
+        # New brands not listed here fall back to the conventional path.
+        path_overrides = {
             'foundry': {
-                'name': 'Buildly Labs Foundry',
                 'path': 'websites/foundry-website/reports/automation/dashboard.html',
                 'generator': 'websites/foundry-website/scripts/generate_dashboard.py',
                 'has_generator': True,
-                'url_path': '/brand-dashboard/foundry'
             },
             'openbuild': {
-                'name': 'Open Build',
-                'path': 'websites/open-build-new-website/reports/automation_dashboard.html', 
+                'path': 'websites/open-build-new-website/reports/automation_dashboard.html',
                 'generator': 'websites/open-build-new-website/reports/generate_report.py',
                 'has_generator': True,
-                'url_path': '/brand-dashboard/openbuild'
             },
-            'buildly': {
-                'name': 'Buildly',
-                'path': 'websites/buildly-website/reports/dashboard.html',
-                'generator': None,
-                'has_generator': False,
-                'url_path': '/brand-dashboard/buildly'
-            },
-            'oregonsoftware': {
-                'name': 'Oregon Software',
-                'path': 'websites/oregonsoftware-website/reports/dashboard.html',
-                'generator': None,
-                'has_generator': False,
-                'url_path': '/brand-dashboard/oregonsoftware'
-            },
-            'radical': {
-                'name': 'Radical Therapy',
-                'path': 'websites/radical-website/reports/dashboard.html',
-                'generator': None,
-                'has_generator': False,
-                'url_path': '/brand-dashboard/radical'
-            }
         }
-        
-        # Check which dashboards exist
-        for brand_key, info in brand_dashboards.items():
-            dashboard_path = project_root / info['path']
-            
+
+        active_brands = Brand.query.filter_by(is_active=True).order_by(Brand.display_name).all()
+
+        for brand in active_brands:
+            override = path_overrides.get(brand.name, {})
+            dashboard_path_str = override.get(
+                'path',
+                f'websites/{brand.name}-website/reports/dashboard.html'
+            )
+            dashboard_path = project_root / dashboard_path_str
+
             dashboards.append({
-                'brand': brand_key,
-                'name': info['name'],
+                'brand': brand.name,
+                'name': brand.display_name,
                 'exists': dashboard_path.exists(),
-                'has_generator': info['has_generator'],
+                'has_generator': override.get('has_generator', False),
                 'path': str(dashboard_path),
-                'url_path': info['url_path'],
+                'url_path': f'/brand-dashboard/{brand.name}',
                 'last_updated': dashboard_path.stat().st_mtime if dashboard_path.exists() else None
             })
-        
+
         return jsonify({
             'success': True,
             'dashboards': dashboards
         })
-        
+
     except Exception as e:
         return jsonify({
             'success': False,
@@ -4928,61 +4910,61 @@ def api_brand_dashboards_list():
 
 @app.route('/api/brand-dashboards/generate', methods=['POST'])
 def api_generate_all_brand_dashboards():
-    """Generate all brand dashboards"""
+    """Generate brand dashboards — only brands with a registered generator are supported"""
     try:
+        import subprocess
+
         data = request.get_json() or {}
-        brand = data.get('brand', 'all')
-        
+        requested = data.get('brand', 'all')
+
+        # Generator definitions keyed by brand slug
+        generators = {
+            'foundry': {
+                'cmd': ['python3', 'scripts/generate_dashboard.py'],
+                'cwd': project_root / 'websites' / 'foundry-website',
+            },
+            'openbuild': {
+                'cmd': ['python3', 'reports/generate_report.py'],
+                'cwd': project_root / 'websites' / 'open-build-new-website',
+            },
+        }
+
+        # Determine which brands to process
+        if requested == 'all':
+            active_brand_names = [
+                b.name for b in Brand.query.filter_by(is_active=True).all()
+            ]
+        else:
+            active_brand_names = [requested]
+
         results = {}
-        
-        if brand == 'all' or brand == 'foundry':
-            # Generate Foundry dashboard
-            try:
-                import subprocess
-                result = subprocess.run([
-                    'python3', 'scripts/generate_dashboard.py'
-                ], cwd=project_root / 'websites' / 'foundry-website', 
-                   capture_output=True, text=True, timeout=60)
-                
-                results['foundry'] = {
-                    'success': result.returncode == 0,
-                    'output': result.stdout,
-                    'error': result.stderr if result.returncode != 0 else None
-                }
-            except Exception as e:
-                results['foundry'] = {'success': False, 'error': str(e)}
-        
-        if brand == 'all' or brand == 'openbuild':
-            # Generate Open Build dashboard
-            try:
-                import subprocess
-                result = subprocess.run([
-                    'python3', 'reports/generate_report.py'
-                ], cwd=project_root / 'websites' / 'open-build-new-website',
-                   capture_output=True, text=True, timeout=60)
-                
-                results['openbuild'] = {
-                    'success': result.returncode == 0,
-                    'output': result.stdout,
-                    'error': result.stderr if result.returncode != 0 else None
-                }
-            except Exception as e:
-                results['openbuild'] = {'success': False, 'error': str(e)}
-        
-        # TODO: Create generators for other brands when needed
-        if brand == 'all' or brand in ['buildly', 'oregonsoftware', 'radical']:
-            for missing_brand in ['buildly', 'oregonsoftware', 'radical']:
-                if brand == 'all' or brand == missing_brand:
-                    results[missing_brand] = {
-                        'success': False,
-                        'error': f'Dashboard generator not yet implemented for {missing_brand}'
+        for brand_slug in active_brand_names:
+            if brand_slug in generators:
+                gen = generators[brand_slug]
+                try:
+                    proc = subprocess.run(
+                        gen['cmd'],
+                        cwd=gen['cwd'],
+                        capture_output=True, text=True, timeout=60
+                    )
+                    results[brand_slug] = {
+                        'success': proc.returncode == 0,
+                        'output': proc.stdout,
+                        'error': proc.stderr if proc.returncode != 0 else None
                     }
-        
+                except Exception as e:
+                    results[brand_slug] = {'success': False, 'error': str(e)}
+            else:
+                results[brand_slug] = {
+                    'success': False,
+                    'error': f'Dashboard generator not yet implemented for {brand_slug}'
+                }
+
         return jsonify({
             'success': True,
             'results': results
         })
-        
+
     except Exception as e:
         return jsonify({
             'success': False,
@@ -4993,39 +4975,34 @@ def api_generate_all_brand_dashboards():
 def serve_brand_dashboard(brand):
     """Serve brand-specific dashboard HTML"""
     try:
-        # Define dashboard paths
-        dashboard_paths = {
+        # Verify brand exists in the database
+        brand_obj = Brand.query.filter_by(name=brand, is_active=True).first()
+        if not brand_obj:
+            return f"Unknown brand: {brand}", 404
+
+        # Known path overrides; fall back to convention for other brands
+        path_overrides = {
             'foundry': 'websites/foundry-website/reports/automation/dashboard.html',
             'openbuild': 'websites/open-build-new-website/reports/automation_dashboard.html',
-            'buildly': 'websites/buildly-website/reports/dashboard.html',
-            'oregonsoftware': 'websites/oregonsoftware-website/reports/dashboard.html',
-            'radical': 'websites/radical-website/reports/dashboard.html'
         }
-        
-        if brand not in dashboard_paths:
-            if not _is_known_brand(brand):
-                return f"Unknown brand: {brand}", 404
-            return f"Dashboard not found for {brand}. Try generating it first.", 404
-        
-        dashboard_path = project_root / dashboard_paths[brand]
-        
+        relative_path = path_overrides.get(brand, f'websites/{brand}-website/reports/dashboard.html')
+        dashboard_path = project_root / relative_path
+
         if not dashboard_path.exists():
             return f"Dashboard not found for {brand}. Try generating it first.", 404
-        
-        # Read and serve the HTML file
+
         with open(dashboard_path, 'r', encoding='utf-8') as f:
             html_content = f.read()
-        
-        # Add some meta information to identify the dashboard source
+
         html_content = html_content.replace(
             '</head>',
             f'<meta name="dashboard-brand" content="{brand}">\n'
             f'<meta name="served-from" content="main-dashboard">\n'
             f'<meta name="generated-on" content="{datetime.now().isoformat()}">\n</head>'
         )
-        
+
         return html_content, 200, {'Content-Type': 'text/html; charset=utf-8'}
-        
+
     except Exception as e:
         return f"Error serving dashboard: {str(e)}", 500
 
