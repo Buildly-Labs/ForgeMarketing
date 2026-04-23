@@ -1,0 +1,554 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>[x-cloak] { display: none !important; }</style>
+<div class="space-y-6" x-data="pressReleaseManager()" x-cloak>
+
+    <!-- Header -->
+    <div class="bg-white rounded-lg p-6 card-shadow">
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-900">Press Releases</h1>
+                <p class="text-gray-600 mt-1">Create AI-assisted press releases and manage press contacts</p>
+            </div>
+            <div class="flex gap-3">
+                <button @click="activeTab = 'contacts'"
+                        :class="activeTab==='contacts' ? 'bg-gray-700 text-white' : 'border text-gray-700'"
+                        class="px-4 py-2 rounded-lg text-sm font-medium">
+                    <i class="fas fa-address-book mr-2"></i>Press Contacts
+                </button>
+                <button @click="openNewRelease()"
+                        class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-medium">
+                    <i class="fas fa-plus mr-2"></i>New Press Release
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabs: Releases / Contacts -->
+    <div class="flex gap-1 border-b">
+        <button @click="activeTab='releases'"
+                :class="activeTab==='releases' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600'"
+                class="px-4 py-2 text-sm font-medium">Press Releases</button>
+        <button @click="activeTab='contacts'; loadContacts()"
+                :class="activeTab==='contacts' ? 'border-b-2 border-blue-600 text-blue-600' : 'text-gray-600'"
+                class="px-4 py-2 text-sm font-medium">Press Contacts</button>
+    </div>
+
+    <!-- ── Press Releases Tab ── -->
+    <div x-show="activeTab === 'releases'">
+        <!-- Filters -->
+        <div class="bg-white rounded-lg p-4 card-shadow flex flex-wrap gap-3 mb-4">
+            <select x-model="filterBrand" @change="loadReleases()"
+                    class="border rounded-lg px-3 py-2 text-sm">
+                <option value="">All Brands</option>
+                {% for brand in user_brands %}
+                <option value="{{ brand.name }}">{{ brand.display_name }}</option>
+                {% endfor %}
+            </select>
+            <select x-model="filterStatus" @change="loadReleases()"
+                    class="border rounded-lg px-3 py-2 text-sm">
+                <option value="">All Statuses</option>
+                <option value="draft">Draft</option>
+                <option value="review">In Review</option>
+                <option value="approved">Approved</option>
+                <option value="distributed">Distributed</option>
+            </select>
+        </div>
+
+        <!-- Releases list -->
+        <div x-show="loadingReleases" class="text-center py-12">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+        </div>
+        <div x-show="!loadingReleases && releases.length === 0"
+             class="bg-white rounded-lg p-12 card-shadow text-center text-gray-500">
+            <i class="fas fa-newspaper text-5xl mb-4 block text-gray-300"></i>
+            <p class="font-semibold text-lg">No press releases yet</p>
+            <p class="text-sm mt-2">Create your first press release to start reaching media outlets</p>
+            <button @click="openNewRelease()"
+                    class="mt-5 bg-blue-600 text-white px-5 py-2 rounded-lg hover:bg-blue-700">
+                <i class="fas fa-plus mr-2"></i>Create Press Release
+            </button>
+        </div>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <template x-for="pr in releases" :key="pr.id">
+                <div class="bg-white rounded-lg p-5 card-shadow hover:shadow-lg transition-shadow cursor-pointer"
+                     @click="openRelease(pr)">
+                    <div class="flex items-start justify-between mb-3">
+                        <span class="px-2 py-0.5 rounded-full text-xs font-medium"
+                              :class="statusClass(pr.status)" x-text="pr.status"></span>
+                        <span class="text-xs text-gray-400" x-text="pr.brand_display_name"></span>
+                    </div>
+                    <h3 class="font-bold text-gray-900 line-clamp-2 mb-2" x-text="pr.title"></h3>
+                    <p class="text-sm text-gray-600 line-clamp-2" x-text="pr.headline || pr.news_event"></p>
+                    <div class="mt-3 flex items-center justify-between text-xs text-gray-400">
+                        <span x-text="new Date(pr.created_at).toLocaleDateString()"></span>
+                        <span x-text="pr.target_scope + ' distribution'"></span>
+                    </div>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- ── Press Contacts Tab ── -->
+    <div x-show="activeTab === 'contacts'">
+        <div class="bg-white rounded-lg p-4 card-shadow flex flex-wrap gap-3 mb-4 items-center">
+            <select x-model="contactScope" @change="loadContacts()"
+                    class="border rounded-lg px-3 py-2 text-sm">
+                <option value="">All Scopes</option>
+                <option value="local">Local</option>
+                <option value="national">National</option>
+                <option value="international">International</option>
+            </select>
+            <input x-model="contactBeat" @input.debounce.400ms="loadContacts()"
+                   placeholder="Filter by beat (e.g. tech, business)"
+                   class="border rounded-lg px-3 py-2 text-sm w-64">
+            <button @click="openAddContact()"
+                    class="ml-auto bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700">
+                <i class="fas fa-plus mr-2"></i>Add Contact
+            </button>
+        </div>
+
+        <div x-show="loadingContacts" class="text-center py-8">
+            <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
+        </div>
+        <div x-show="!loadingContacts && contacts.length === 0"
+             class="bg-white rounded-lg p-10 card-shadow text-center text-gray-500">
+            <i class="fas fa-users text-4xl mb-3 block text-gray-300"></i>
+            <p class="font-medium">No press contacts yet</p>
+            <p class="text-sm mt-1">Add journalists and media contacts to build your distribution list</p>
+        </div>
+
+        <div class="bg-white rounded-lg card-shadow overflow-hidden">
+            <table x-show="!loadingContacts && contacts.length > 0" class="w-full text-sm">
+                <thead class="bg-gray-50 border-b">
+                    <tr>
+                        <th class="text-left px-4 py-3 font-semibold text-gray-700">Name / Outlet</th>
+                        <th class="text-left px-4 py-3 font-semibold text-gray-700 hidden md:table-cell">Beat</th>
+                        <th class="text-left px-4 py-3 font-semibold text-gray-700 hidden md:table-cell">Scope</th>
+                        <th class="text-left px-4 py-3 font-semibold text-gray-700 hidden lg:table-cell">Email</th>
+                        <th class="text-right px-4 py-3 font-semibold text-gray-700">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <template x-for="contact in contacts" :key="contact.id">
+                        <tr class="border-b hover:bg-gray-50">
+                            <td class="px-4 py-3">
+                                <div class="font-medium text-gray-900" x-text="contact.name"></div>
+                                <div class="text-xs text-gray-500" x-text="contact.outlet"></div>
+                                <div class="text-xs text-gray-400" x-text="contact.title"></div>
+                            </td>
+                            <td class="px-4 py-3 hidden md:table-cell text-gray-600" x-text="contact.beat"></td>
+                            <td class="px-4 py-3 hidden md:table-cell">
+                                <span class="px-2 py-0.5 rounded-full text-xs font-medium"
+                                      :class="scopeClass(contact.scope)" x-text="contact.scope"></span>
+                            </td>
+                            <td class="px-4 py-3 hidden lg:table-cell text-gray-600" x-text="contact.email"></td>
+                            <td class="px-4 py-3 text-right">
+                                <button @click="copyEmail(contact.email)" title="Copy email"
+                                        class="p-1.5 text-gray-500 hover:text-blue-600 hover:bg-blue-50 rounded">
+                                    <i class="fas fa-copy text-xs"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- ── Edit / New Press Release Drawer ── -->
+    <div x-show="showEditor"
+         class="fixed inset-0 bg-black/50 z-50 flex justify-end"
+         @keydown.escape.window="showEditor = false">
+        <div class="bg-white w-full max-w-2xl h-full overflow-y-auto shadow-2xl" @click.stop>
+            <div class="sticky top-0 bg-white border-b px-6 py-4 flex items-center justify-between z-10">
+                <h2 class="text-lg font-bold" x-text="editingRelease?.id ? 'Edit Press Release' : 'New Press Release'"></h2>
+                <button @click="showEditor = false" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-lg"></i>
+                </button>
+            </div>
+            <div class="p-6 space-y-5">
+                <!-- News Event -->
+                <div>
+                    <label class="block text-sm font-semibold text-gray-700 mb-1">News Event / Announcement *</label>
+                    <textarea x-model="prForm.news_event" rows="3"
+                              placeholder="Describe the news: what happened, why it matters, key facts..."
+                              class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"></textarea>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Brand</label>
+                        <select x-model="prForm.brand"
+                                class="w-full border rounded-lg px-3 py-2 text-sm">
+                            {% for brand in user_brands %}
+                            <option value="{{ brand.name }}">{{ brand.display_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Distribution Scope</label>
+                        <select x-model="prForm.target_scope"
+                                class="w-full border rounded-lg px-3 py-2 text-sm">
+                            <option value="all">All (Local + National + International)</option>
+                            <option value="local">Local Only</option>
+                            <option value="national">National</option>
+                            <option value="international">International</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Title *</label>
+                    <input x-model="prForm.title" type="text"
+                           placeholder="Working title for your press release"
+                           class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="text-sm font-medium text-gray-700">Headline</label>
+                        <button @click="generateSection('headline')" :disabled="generating"
+                                class="text-xs text-blue-600 hover:text-blue-800 disabled:opacity-50">
+                            <i class="fas fa-magic mr-1"></i>Generate with AI
+                        </button>
+                    </div>
+                    <input x-model="prForm.headline" type="text"
+                           placeholder="Compelling headline (auto-generated or write your own)"
+                           class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Sub-headline</label>
+                    <input x-model="prForm.subheadline" type="text"
+                           class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div>
+                    <div class="flex items-center justify-between mb-1">
+                        <label class="text-sm font-medium text-gray-700">Press Release Body</label>
+                        <div class="flex gap-2">
+                            <button @click="generateSection('body')" :disabled="generating"
+                                    class="text-xs bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 disabled:opacity-50">
+                                <i class="fas fa-magic mr-1"></i>
+                                <span x-show="!generating">Generate</span>
+                                <span x-show="generating">Generating...</span>
+                            </button>
+                            <button @click="generateSection('all')" :disabled="generating"
+                                    class="text-xs bg-purple-600 text-white px-3 py-1 rounded hover:bg-purple-700 disabled:opacity-50">
+                                <i class="fas fa-wand-magic-sparkles mr-1"></i>Full Draft
+                            </button>
+                        </div>
+                    </div>
+                    <textarea x-model="prForm.body" rows="10"
+                              placeholder="Press release body (will be generated by AI)..."
+                              class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 font-mono text-xs"></textarea>
+                </div>
+                <!-- Feedback for AI improvement -->
+                <div x-show="editingRelease?.id">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">AI Feedback / Revision Notes</label>
+                    <div class="flex gap-2">
+                        <input x-model="aiFeedback" type="text"
+                               placeholder="e.g. Make it more concise, add a CEO quote, focus on technology..."
+                               class="flex-1 border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
+                        <button @click="improveWithFeedback()" :disabled="generating"
+                                class="bg-purple-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-purple-700 disabled:opacity-50">
+                            <i class="fas fa-magic"></i>
+                        </button>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Boilerplate (About the Company)</label>
+                    <textarea x-model="prForm.boilerplate" rows="3"
+                              placeholder="Standard 'About [Company]' paragraph..."
+                              class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500"></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                    <select x-model="prForm.status"
+                            class="w-full border rounded-lg px-3 py-2 text-sm">
+                        <option value="draft">Draft</option>
+                        <option value="review">In Review</option>
+                        <option value="approved">Approved</option>
+                        <option value="distributed">Distributed</option>
+                    </select>
+                </div>
+            </div>
+            <div class="sticky bottom-0 bg-white border-t px-6 py-4 flex justify-between">
+                <div>
+                    <button x-show="editingRelease?.id"
+                            @click="deleteRelease(editingRelease)"
+                            class="text-red-600 text-sm hover:text-red-800">
+                        <i class="fas fa-trash mr-1"></i>Delete
+                    </button>
+                </div>
+                <div class="flex gap-3">
+                    <button @click="showEditor = false"
+                            class="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50">Cancel</button>
+                    <button @click="saveRelease()" :disabled="savingRelease"
+                            class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50">
+                        <span x-show="!savingRelease" x-text="editingRelease?.id ? 'Save Changes' : 'Create'"></span>
+                        <span x-show="savingRelease"><i class="fas fa-spinner fa-spin mr-1"></i>Saving...</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Contact Modal -->
+    <div x-show="showContactModal"
+         class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+         @keydown.escape.window="showContactModal = false">
+        <div class="bg-white rounded-xl w-full max-w-md p-6" @click.stop>
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="font-bold text-lg">Add Press Contact</h3>
+                <button @click="showContactModal = false" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <div class="space-y-3">
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-sm font-medium text-gray-700 block mb-1">Name *</label>
+                        <input x-model="contactForm.name" type="text" class="w-full border rounded-lg px-3 py-2 text-sm">
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium text-gray-700 block mb-1">Email *</label>
+                        <input x-model="contactForm.email" type="email" class="w-full border rounded-lg px-3 py-2 text-sm">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-sm font-medium text-gray-700 block mb-1">Outlet / Publication</label>
+                        <input x-model="contactForm.outlet" type="text" class="w-full border rounded-lg px-3 py-2 text-sm">
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium text-gray-700 block mb-1">Title</label>
+                        <input x-model="contactForm.title" type="text" class="w-full border rounded-lg px-3 py-2 text-sm">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-sm font-medium text-gray-700 block mb-1">Beat / Coverage</label>
+                        <input x-model="contactForm.beat" type="text" placeholder="e.g. tech, business" class="w-full border rounded-lg px-3 py-2 text-sm">
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium text-gray-700 block mb-1">Scope</label>
+                        <select x-model="contactForm.scope" class="w-full border rounded-lg px-3 py-2 text-sm">
+                            <option value="local">Local</option>
+                            <option value="national">National</option>
+                            <option value="international">International</option>
+                        </select>
+                    </div>
+                </div>
+                <div x-show="contactForm.scope === 'local'">
+                    <label class="text-sm font-medium text-gray-700 block mb-1">Region / City</label>
+                    <input x-model="contactForm.region" type="text" placeholder="e.g. Portland, OR" class="w-full border rounded-lg px-3 py-2 text-sm">
+                </div>
+            </div>
+            <div class="flex justify-end gap-3 mt-5">
+                <button @click="showContactModal = false" class="px-4 py-2 border rounded-lg text-sm">Cancel</button>
+                <button @click="saveContact()" class="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
+                    Add Contact
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function pressReleaseManager() {
+    return {
+        activeTab: 'releases',
+        releases: [],
+        contacts: [],
+        loadingReleases: false,
+        loadingContacts: false,
+        savingRelease: false,
+        generating: false,
+        showEditor: false,
+        showContactModal: false,
+        editingRelease: null,
+        filterBrand: '',
+        filterStatus: '',
+        contactScope: '',
+        contactBeat: '',
+        aiFeedback: '',
+        prForm: {
+            title: '', headline: '', subheadline: '', body: '',
+            boilerplate: '', news_event: '', target_scope: 'all',
+            brand: ACTIVE_BRAND || '{{ user_brands[0].name if user_brands else "" }}',
+            status: 'draft',
+        },
+        contactForm: { name: '', email: '', outlet: '', title: '', beat: '', scope: 'national', region: '' },
+
+        async init() {
+            await this.loadReleases();
+        },
+
+        async loadReleases() {
+            this.loadingReleases = true;
+            try {
+                const params = new URLSearchParams();
+                if (this.filterBrand) params.append('brand', this.filterBrand);
+                if (this.filterStatus) params.append('status', this.filterStatus);
+                const res = await fetch(`/api/press-releases?${params}`);
+                const data = await res.json();
+                this.releases = data.press_releases || [];
+            } catch(e) { console.error(e); }
+            finally { this.loadingReleases = false; }
+        },
+
+        async loadContacts() {
+            this.loadingContacts = true;
+            try {
+                const params = new URLSearchParams();
+                if (this.contactScope) params.append('scope', this.contactScope);
+                if (this.contactBeat) params.append('beat', this.contactBeat);
+                const res = await fetch(`/api/press-contacts?${params}`);
+                const data = await res.json();
+                this.contacts = data.contacts || [];
+            } catch(e) { console.error(e); }
+            finally { this.loadingContacts = false; }
+        },
+
+        openNewRelease() {
+            this.editingRelease = null;
+            this.aiFeedback = '';
+            this.prForm = {
+                title: '', headline: '', subheadline: '', body: '',
+                boilerplate: '', news_event: '', target_scope: 'all',
+                brand: ACTIVE_BRAND || '{{ user_brands[0].name if user_brands else "" }}',
+                status: 'draft',
+            };
+            this.showEditor = true;
+        },
+
+        openRelease(pr) {
+            this.editingRelease = pr;
+            this.aiFeedback = '';
+            this.prForm = {
+                title: pr.title, headline: pr.headline, subheadline: pr.subheadline,
+                body: pr.body, boilerplate: pr.boilerplate, news_event: pr.news_event,
+                target_scope: pr.target_scope, brand: pr.brand_name, status: pr.status,
+            };
+            this.showEditor = true;
+        },
+
+        async saveRelease() {
+            if (!this.prForm.title) { showNotification('Title is required', 'warning'); return; }
+            this.savingRelease = true;
+            try {
+                const method = this.editingRelease?.id ? 'PUT' : 'POST';
+                const url = this.editingRelease?.id ? `/api/press-releases/${this.editingRelease.id}` : '/api/press-releases';
+                const res = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(this.prForm),
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showNotification(this.editingRelease?.id ? 'Saved' : 'Press release created', 'success');
+                    this.editingRelease = data.press_release;
+                    await this.loadReleases();
+                } else {
+                    showNotification(data.error || 'Save failed', 'error');
+                }
+            } catch(e) { showNotification('Error saving', 'error'); }
+            finally { this.savingRelease = false; }
+        },
+
+        async generateSection(section) {
+            if (!this.editingRelease?.id) {
+                // Must save first
+                await this.saveRelease();
+                if (!this.editingRelease?.id) return;
+            }
+            this.generating = true;
+            showNotification('Generating with AI...', 'info');
+            try {
+                const res = await fetch(`/api/press-releases/${this.editingRelease.id}/generate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ section, feedback: this.aiFeedback }),
+                });
+                const data = await res.json();
+                if (data.success) {
+                    const pr = data.press_release;
+                    if (section === 'headline' || section === 'all') this.prForm.headline = pr.headline;
+                    if (section === 'body' || section === 'all') this.prForm.body = pr.body;
+                    this.editingRelease = pr;
+                    showNotification('Content generated', 'success');
+                    await this.loadReleases();
+                } else {
+                    showNotification(data.error || 'Generation failed', 'error');
+                }
+            } catch(e) { showNotification('Error generating', 'error'); }
+            finally { this.generating = false; }
+        },
+
+        async improveWithFeedback() {
+            if (!this.aiFeedback) { showNotification('Enter feedback first', 'warning'); return; }
+            await this.saveRelease();
+            await this.generateSection('all');
+        },
+
+        async deleteRelease(pr) {
+            if (!confirm(`Delete "${pr.title}"?`)) return;
+            try {
+                const res = await fetch(`/api/press-releases/${pr.id}`, { method: 'DELETE' });
+                const data = await res.json();
+                if (data.success) {
+                    showNotification('Deleted', 'success');
+                    this.showEditor = false;
+                    await this.loadReleases();
+                }
+            } catch(e) { showNotification('Error deleting', 'error'); }
+        },
+
+        openAddContact() { 
+            this.contactForm = { name: '', email: '', outlet: '', title: '', beat: '', scope: 'national', region: '' };
+            this.showContactModal = true;
+        },
+
+        async saveContact() {
+            if (!this.contactForm.name || !this.contactForm.email) {
+                showNotification('Name and email required', 'warning'); return;
+            }
+            try {
+                const res = await fetch('/api/press-contacts', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(this.contactForm),
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showNotification('Contact added', 'success');
+                    this.showContactModal = false;
+                    await this.loadContacts();
+                } else {
+                    showNotification(data.error || 'Failed', 'error');
+                }
+            } catch(e) { showNotification('Error saving contact', 'error'); }
+        },
+
+        copyEmail(email) {
+            navigator.clipboard.writeText(email).then(() => showNotification('Email copied', 'success'));
+        },
+
+        statusClass(status) {
+            return {
+                'draft': 'bg-gray-100 text-gray-700',
+                'review': 'bg-yellow-100 text-yellow-700',
+                'approved': 'bg-green-100 text-green-700',
+                'distributed': 'bg-blue-100 text-blue-700',
+            }[status] || 'bg-gray-100 text-gray-700';
+        },
+
+        scopeClass(scope) {
+            return {
+                'local': 'bg-orange-100 text-orange-700',
+                'national': 'bg-blue-100 text-blue-700',
+                'international': 'bg-purple-100 text-purple-700',
+            }[scope] || 'bg-gray-100 text-gray-700';
+        },
+    };
+}
+</script>
+{% endblock %}

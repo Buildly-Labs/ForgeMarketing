@@ -52,7 +52,7 @@
 <body class="bg-gray-50">
     <!-- ── Navigation ──────────────────────────────────────── -->
     <nav class="gradient-bg shadow-lg"
-         x-data="{ mobileOpen: false, contentOpen: false, discoveryOpen: false, insightsOpen: false, brandOpen: false, userOpen: false }">
+         x-data="{ mobileOpen: false, contentOpen: false, discoveryOpen: false, insightsOpen: false, brandOpen: false, userOpen: false, prOpen: false }">
         <div class="max-w-7xl mx-auto px-3 sm:px-4 lg:px-6">
             <div class="flex items-center justify-between h-12">
 
@@ -101,6 +101,8 @@
                             <a href="{{ B }}/campaigns" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"><i class="fas fa-rocket mr-2 w-4"></i>Campaigns</a>
                             <a href="{{ B }}/content-calendar" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"><i class="fas fa-calendar-alt mr-2 w-4"></i>Calendar</a>
                             <a href="{{ B }}/automation" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"><i class="fas fa-robot mr-2 w-4"></i>Automation</a>
+                            <a href="{{ B }}/schedule" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"><i class="fas fa-clock mr-2 w-4"></i>Scheduler</a>
+                            <a href="{{ B }}/press-releases" class="block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"><i class="fas fa-newspaper mr-2 w-4"></i>Press Releases</a>
                         </div>
                     </div>
 
@@ -184,6 +186,8 @@
                 <a href="{{ B }}/engagement-report" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm"><i class="fas fa-envelope mr-3 w-4"></i>Engagement</a>
                 <a href="{{ B }}/google-ads" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm"><i class="fas fa-bullhorn mr-3 w-4"></i>Google Ads</a>
                 <a href="{{ B }}/brands" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm"><i class="fas fa-palette mr-3 w-4"></i>Brands</a>
+                <a href="{{ B }}/schedule" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm"><i class="fas fa-clock mr-3 w-4"></i>Scheduler</a>
+                <a href="{{ B }}/press-releases" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm"><i class="fas fa-newspaper mr-3 w-4"></i>Press Releases</a>
             </div>
         </div>
     </nav>

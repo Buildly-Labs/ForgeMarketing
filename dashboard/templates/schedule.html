@@ -1,0 +1,424 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>[x-cloak] { display: none !important; }</style>
+<div class="space-y-6" x-data="scheduleManager()" x-cloak>
+
+    <!-- Header -->
+    <div class="bg-white rounded-lg p-6 card-shadow">
+        <div class="flex items-center justify-between">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-900">Task Scheduler</h1>
+                <p class="text-gray-600 mt-1">Create and manage recurring automation tasks</p>
+            </div>
+            <button @click="openCreateModal()"
+                    class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
+                <i class="fas fa-plus mr-2"></i>New Task
+            </button>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="bg-white rounded-lg p-5 card-shadow text-center">
+            <p class="text-3xl font-bold text-blue-600" x-text="tasks.length">0</p>
+            <p class="text-sm text-gray-600 mt-1">Total Tasks</p>
+        </div>
+        <div class="bg-white rounded-lg p-5 card-shadow text-center">
+            <p class="text-3xl font-bold text-green-600" x-text="tasks.filter(t=>t.is_enabled).length">0</p>
+            <p class="text-sm text-gray-600 mt-1">Active</p>
+        </div>
+        <div class="bg-white rounded-lg p-5 card-shadow text-center">
+            <p class="text-3xl font-bold text-gray-600" x-text="tasks.filter(t=>!t.is_enabled).length">0</p>
+            <p class="text-sm text-gray-600 mt-1">Paused</p>
+        </div>
+        <div class="bg-white rounded-lg p-5 card-shadow text-center">
+            <p class="text-3xl font-bold text-purple-600" x-text="tasks.reduce((s,t)=>s+t.run_count,0)">0</p>
+            <p class="text-sm text-gray-600 mt-1">Total Runs</p>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div class="bg-white rounded-lg p-4 card-shadow flex flex-wrap gap-3 items-center">
+        <select x-model="filterBrand" @change="loadTasks()"
+                class="border rounded-lg px-3 py-2 text-sm">
+            <option value="">All Brands</option>
+            {% for brand in user_brands %}
+            <option value="{{ brand.name }}">{{ brand.display_name }}</option>
+            {% endfor %}
+        </select>
+        <select x-model="filterType" @change="loadTasks()"
+                class="border rounded-lg px-3 py-2 text-sm">
+            <option value="">All Types</option>
+            <option value="outreach">Outreach</option>
+            <option value="discovery">Discovery</option>
+            <option value="analytics">Analytics</option>
+            <option value="social">Social Media</option>
+            <option value="report">Report</option>
+        </select>
+        <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+            <input type="checkbox" x-model="showDisabled" @change="loadTasks()"> Show disabled
+        </label>
+    </div>
+
+    <!-- Task List -->
+    <div class="bg-white rounded-lg card-shadow overflow-hidden">
+        <div x-show="loading" class="p-10 text-center">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+            <p class="text-gray-500">Loading tasks...</p>
+        </div>
+        <div x-show="!loading && filteredTasks.length === 0" class="p-10 text-center text-gray-500">
+            <i class="fas fa-clock text-4xl mb-3 block text-gray-300"></i>
+            <p class="font-medium">No scheduled tasks yet</p>
+            <p class="text-sm mt-1">Create a task to automate your marketing workflows</p>
+            <button @click="openCreateModal()" class="mt-4 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm">
+                <i class="fas fa-plus mr-2"></i>Create First Task
+            </button>
+        </div>
+        <table x-show="!loading && filteredTasks.length > 0" class="w-full text-sm">
+            <thead class="bg-gray-50 border-b">
+                <tr>
+                    <th class="text-left px-4 py-3 font-semibold text-gray-700">Task</th>
+                    <th class="text-left px-4 py-3 font-semibold text-gray-700 hidden md:table-cell">Brand</th>
+                    <th class="text-left px-4 py-3 font-semibold text-gray-700 hidden lg:table-cell">Schedule</th>
+                    <th class="text-left px-4 py-3 font-semibold text-gray-700 hidden lg:table-cell">Last Run</th>
+                    <th class="text-left px-4 py-3 font-semibold text-gray-700">Status</th>
+                    <th class="text-right px-4 py-3 font-semibold text-gray-700">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <template x-for="task in filteredTasks" :key="task.id">
+                    <tr class="border-b hover:bg-gray-50">
+                        <td class="px-4 py-3">
+                            <div class="font-medium text-gray-900" x-text="task.name"></div>
+                            <div class="text-xs text-gray-500 mt-0.5" x-text="task.description"></div>
+                            <span class="inline-block mt-1 px-2 py-0.5 rounded-full text-xs font-medium"
+                                  :class="typeClass(task.task_type)"
+                                  x-text="task.task_type"></span>
+                        </td>
+                        <td class="px-4 py-3 hidden md:table-cell text-gray-700" x-text="task.brand_display_name"></td>
+                        <td class="px-4 py-3 hidden lg:table-cell">
+                            <div class="font-medium text-gray-800" x-text="task.schedule_label || task.cron_expression"></div>
+                            <div class="text-xs text-gray-400 font-mono" x-text="task.cron_expression"></div>
+                        </td>
+                        <td class="px-4 py-3 hidden lg:table-cell text-gray-600 text-xs">
+                            <span x-text="task.last_run_at ? new Date(task.last_run_at).toLocaleString() : 'Never'"></span>
+                            <div class="text-gray-400 mt-0.5" x-show="task.run_count > 0" x-text="`${task.run_count} runs`"></div>
+                        </td>
+                        <td class="px-4 py-3">
+                            <button @click="toggleTask(task)"
+                                    class="relative inline-flex h-5 w-9 rounded-full transition-colors"
+                                    :class="task.is_enabled ? 'bg-green-500' : 'bg-gray-300'">
+                                <span class="inline-block h-4 w-4 mt-0.5 rounded-full bg-white shadow transition-transform"
+                                      :class="task.is_enabled ? 'translate-x-4' : 'translate-x-0.5'"></span>
+                            </button>
+                        </td>
+                        <td class="px-4 py-3 text-right">
+                            <div class="flex justify-end gap-1">
+                                <button @click="runNow(task)" title="Run now"
+                                        class="p-1.5 text-green-600 hover:bg-green-50 rounded">
+                                    <i class="fas fa-play text-xs"></i>
+                                </button>
+                                <button @click="openEditModal(task)" title="Edit"
+                                        class="p-1.5 text-blue-600 hover:bg-blue-50 rounded">
+                                    <i class="fas fa-edit text-xs"></i>
+                                </button>
+                                <button @click="deleteTask(task)" title="Delete"
+                                        class="p-1.5 text-red-500 hover:bg-red-50 rounded">
+                                    <i class="fas fa-trash text-xs"></i>
+                                </button>
+                            </div>
+                        </td>
+                    </tr>
+                </template>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pre-built Quick Schedule Templates -->
+    <div class="bg-white rounded-lg p-6 card-shadow">
+        <h3 class="text-lg font-semibold mb-4">Quick Templates</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <template x-for="tpl in templates" :key="tpl.id">
+                <div class="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                    <div class="flex items-start justify-between">
+                        <div>
+                            <h4 class="font-medium text-gray-900" x-text="tpl.name"></h4>
+                            <p class="text-sm text-gray-600 mt-1" x-text="tpl.description"></p>
+                            <p class="text-xs text-gray-400 mt-1" x-text="tpl.schedule_label"></p>
+                        </div>
+                        <span class="ml-2 px-2 py-0.5 rounded-full text-xs font-medium flex-shrink-0"
+                              :class="typeClass(tpl.task_type)" x-text="tpl.task_type"></span>
+                    </div>
+                    <button @click="createFromTemplate(tpl)"
+                            class="mt-3 w-full bg-blue-50 text-blue-700 px-3 py-1.5 rounded text-sm hover:bg-blue-100">
+                        <i class="fas fa-plus mr-1"></i>Add to Schedule
+                    </button>
+                </div>
+            </template>
+        </div>
+    </div>
+
+    <!-- Create/Edit Modal -->
+    <div x-show="showModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+         @keydown.escape.window="showModal = false">
+        <div class="bg-white rounded-xl w-full max-w-lg p-6 shadow-2xl" @click.stop>
+            <div class="flex items-center justify-between mb-5">
+                <h3 class="text-lg font-bold" x-text="editingTask ? 'Edit Task' : 'New Scheduled Task'"></h3>
+                <button @click="showModal = false" class="text-gray-400 hover:text-gray-600"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Task Name *</label>
+                    <input x-model="form.name" type="text" placeholder="e.g. Daily Outreach — Foundry"
+                           class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Description</label>
+                    <input x-model="form.description" type="text"
+                           class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Task Type *</label>
+                        <select x-model="form.task_type"
+                                class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
+                            <option value="outreach">Outreach Campaign</option>
+                            <option value="discovery">Influencer Discovery</option>
+                            <option value="analytics">Analytics Report</option>
+                            <option value="social">Social Media Post</option>
+                            <option value="report">Weekly Report</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Brand</label>
+                        <select x-model="form.brand"
+                                class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
+                            <option value="all">All Brands</option>
+                            {% for brand in user_brands %}
+                            <option value="{{ brand.name }}">{{ brand.display_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Schedule Preset</label>
+                    <select @change="applyPreset($event.target.value)"
+                            class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
+                        <option value="">— pick a preset or enter cron below —</option>
+                        <option value="0 8 * * *|Daily at 8 AM">Daily at 8 AM</option>
+                        <option value="0 9 * * 1|Every Monday at 9 AM">Every Monday at 9 AM</option>
+                        <option value="0 9 * * 1,4|Mon & Thu at 9 AM">Mon & Thu at 9 AM</option>
+                        <option value="0 8 * * 3|Every Wednesday at 8 AM">Every Wednesday at 8 AM</option>
+                        <option value="0 6 1 * *|1st of every month at 6 AM">1st of month at 6 AM</option>
+                        <option value="0 */4 * * *|Every 4 hours">Every 4 hours</option>
+                    </select>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Cron Expression *</label>
+                        <input x-model="form.cron_expression" type="text" placeholder="0 9 * * 1"
+                               class="w-full border rounded-lg px-3 py-2 text-sm font-mono focus:ring-2 focus:ring-blue-500">
+                        <p class="text-xs text-gray-400 mt-1">min hour day month weekday</p>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Human Label</label>
+                        <input x-model="form.schedule_label" type="text" placeholder="Every Monday at 9am"
+                               class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
+                    </div>
+                </div>
+                <div class="flex items-center gap-2">
+                    <input type="checkbox" id="task-enabled" x-model="form.is_enabled" class="rounded">
+                    <label for="task-enabled" class="text-sm text-gray-700">Enable immediately</label>
+                </div>
+            </div>
+            <div class="flex justify-end gap-3 mt-6">
+                <button @click="showModal = false"
+                        class="px-4 py-2 border rounded-lg text-sm hover:bg-gray-50">Cancel</button>
+                <button @click="saveTask()" :disabled="saving"
+                        class="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50">
+                    <span x-show="!saving" x-text="editingTask ? 'Save Changes' : 'Create Task'"></span>
+                    <span x-show="saving"><i class="fas fa-spinner fa-spin mr-1"></i>Saving...</span>
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function scheduleManager() {
+    return {
+        tasks: [],
+        loading: false,
+        saving: false,
+        showModal: false,
+        editingTask: null,
+        filterBrand: '',
+        filterType: '',
+        showDisabled: true,
+        form: { name: '', description: '', task_type: 'outreach', brand: 'all',
+                cron_expression: '', schedule_label: '', is_enabled: true },
+
+        templates: [
+            { id: 'daily_outreach', name: 'Daily Outreach', description: 'Run the multi-brand outreach campaign each morning', task_type: 'outreach', cron_expression: '0 9 * * *', schedule_label: 'Daily at 9 AM' },
+            { id: 'weekly_influencer', name: 'Influencer Discovery', description: 'Discover new influencers every Wednesday', task_type: 'discovery', cron_expression: '0 6 * * 3', schedule_label: 'Every Wednesday at 6 AM' },
+            { id: 'weekly_analytics', name: 'Weekly Analytics Report', description: 'Generate a full analytics report every Monday', task_type: 'analytics', cron_expression: '0 9 * * 1', schedule_label: 'Every Monday at 9 AM' },
+            { id: 'social_morning', name: 'Morning Social Posts', description: 'Post scheduled social media content each morning', task_type: 'social', cron_expression: '0 8 * * *', schedule_label: 'Daily at 8 AM' },
+            { id: 'monthly_report', name: 'Monthly Brand Report', description: 'Full brand performance report on the 1st', task_type: 'report', cron_expression: '0 6 1 * *', schedule_label: '1st of every month' },
+            { id: 'bi_weekly_enrichment', name: 'Influencer Enrichment', description: 'Enrich influencer profiles with fresh data', task_type: 'discovery', cron_expression: '0 7 * * 1,4', schedule_label: 'Mon & Thu at 7 AM' },
+        ],
+
+        get filteredTasks() {
+            return this.tasks.filter(t => {
+                if (!this.showDisabled && !t.is_enabled) return false;
+                if (this.filterBrand && t.brand_name !== this.filterBrand && this.filterBrand !== 'all') return false;
+                if (this.filterType && t.task_type !== this.filterType) return false;
+                return true;
+            });
+        },
+
+        async init() {
+            await this.loadTasks();
+        },
+
+        async loadTasks() {
+            this.loading = true;
+            try {
+                const params = new URLSearchParams();
+                if (this.filterBrand) params.append('brand', this.filterBrand);
+                const res = await fetch(`/api/schedule/tasks?${params}`);
+                const data = await res.json();
+                this.tasks = data.tasks || [];
+            } catch(e) {
+                console.error('Failed to load tasks:', e);
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        openCreateModal() {
+            this.editingTask = null;
+            this.form = { name: '', description: '', task_type: 'outreach', brand: 'all',
+                          cron_expression: '0 9 * * *', schedule_label: 'Daily at 9 AM', is_enabled: true };
+            this.showModal = true;
+        },
+
+        openEditModal(task) {
+            this.editingTask = task;
+            this.form = {
+                name: task.name,
+                description: task.description,
+                task_type: task.task_type,
+                brand: task.brand_name || 'all',
+                cron_expression: task.cron_expression,
+                schedule_label: task.schedule_label,
+                is_enabled: task.is_enabled,
+            };
+            this.showModal = true;
+        },
+
+        applyPreset(val) {
+            if (!val) return;
+            const [cron, label] = val.split('|');
+            this.form.cron_expression = cron;
+            this.form.schedule_label = label;
+        },
+
+        async saveTask() {
+            if (!this.form.name || !this.form.cron_expression) {
+                showNotification('Name and cron expression are required', 'warning');
+                return;
+            }
+            this.saving = true;
+            try {
+                const method = this.editingTask ? 'PUT' : 'POST';
+                const url = this.editingTask ? `/api/schedule/tasks/${this.editingTask.id}` : '/api/schedule/tasks';
+                const res = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(this.form),
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showNotification(this.editingTask ? 'Task updated' : 'Task created', 'success');
+                    this.showModal = false;
+                    await this.loadTasks();
+                } else {
+                    showNotification(data.error || 'Save failed', 'error');
+                }
+            } catch(e) {
+                showNotification('Error saving task', 'error');
+            } finally {
+                this.saving = false;
+            }
+        },
+
+        async toggleTask(task) {
+            try {
+                const res = await fetch(`/api/schedule/tasks/${task.id}/toggle`, { method: 'POST' });
+                const data = await res.json();
+                if (data.success) task.is_enabled = data.is_enabled;
+            } catch(e) {
+                showNotification('Toggle failed', 'error');
+            }
+        },
+
+        async runNow(task) {
+            showNotification(`Running "${task.name}"...`, 'info');
+            try {
+                const res = await fetch(`/api/schedule/tasks/${task.id}/run`, { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    showNotification(data.message || 'Task triggered', 'success');
+                    await this.loadTasks();
+                } else {
+                    showNotification(data.error || 'Run failed', 'error');
+                }
+            } catch(e) {
+                showNotification('Error triggering task', 'error');
+            }
+        },
+
+        async deleteTask(task) {
+            if (!confirm(`Delete "${task.name}"?`)) return;
+            try {
+                const res = await fetch(`/api/schedule/tasks/${task.id}`, { method: 'DELETE' });
+                const data = await res.json();
+                if (data.success) {
+                    showNotification('Task deleted', 'success');
+                    await this.loadTasks();
+                } else {
+                    showNotification(data.error || 'Delete failed', 'error');
+                }
+            } catch(e) {
+                showNotification('Error deleting task', 'error');
+            }
+        },
+
+        createFromTemplate(tpl) {
+            this.editingTask = null;
+            this.form = {
+                name: tpl.name,
+                description: tpl.description,
+                task_type: tpl.task_type,
+                brand: 'all',
+                cron_expression: tpl.cron_expression,
+                schedule_label: tpl.schedule_label,
+                is_enabled: true,
+            };
+            this.showModal = true;
+        },
+
+        typeClass(type) {
+            return {
+                'outreach': 'bg-blue-100 text-blue-700',
+                'discovery': 'bg-purple-100 text-purple-700',
+                'analytics': 'bg-green-100 text-green-700',
+                'social': 'bg-pink-100 text-pink-700',
+                'report': 'bg-yellow-100 text-yellow-700',
+            }[type] || 'bg-gray-100 text-gray-700';
+        },
+    };
+}
+</script>
+{% endblock %}

@@ -481,3 +481,185 @@ class APICredentialLog(db.Model):
             'error_message': self.error_message,
             'created_at': self.created_at.isoformat(),
         }
+
+
+# ============================================================================
+# SCHEDULED TASKS MODEL
+# ============================================================================
+
+class ScheduledTask(db.Model):
+    """User-managed scheduled automation tasks stored in the database"""
+    __tablename__ = 'scheduled_tasks'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text, default='')
+    task_type = db.Column(db.String(100), nullable=False, index=True)  # outreach, discovery, analytics, social, report
+    brand_id = db.Column(db.Integer, db.ForeignKey('brands.id'), nullable=True, index=True)
+
+    # Cron schedule (e.g. "0 9 * * 1" = Monday 9am)
+    cron_expression = db.Column(db.String(100), nullable=False)
+    schedule_label = db.Column(db.String(100), default='')  # Human label e.g. "Every Monday at 9am"
+
+    # Task parameters (JSON)
+    parameters = db.Column(db.Text, default='{}')
+
+    # Status
+    is_enabled = db.Column(db.Boolean, default=True, index=True)
+    last_run_at = db.Column(db.DateTime, nullable=True)
+    next_run_at = db.Column(db.DateTime, nullable=True)
+    run_count = db.Column(db.Integer, default=0)
+    fail_count = db.Column(db.Integer, default=0)
+    last_result = db.Column(db.Text, default='')
+
+    created_by = db.Column(db.String(255), default='system')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    brand = db.relationship('Brand', backref=db.backref('scheduled_tasks', lazy='dynamic'))
+
+    def get_parameters(self) -> Dict[str, Any]:
+        try:
+            return json.loads(self.parameters) if self.parameters else {}
+        except (json.JSONDecodeError, TypeError):
+            return {}
+
+    def set_parameters(self, params: Dict[str, Any]) -> None:
+        self.parameters = json.dumps(params)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'task_type': self.task_type,
+            'brand_id': self.brand_id,
+            'brand_name': self.brand.name if self.brand else 'all',
+            'brand_display_name': self.brand.display_name if self.brand else 'All Brands',
+            'cron_expression': self.cron_expression,
+            'schedule_label': self.schedule_label,
+            'parameters': self.get_parameters(),
+            'is_enabled': self.is_enabled,
+            'last_run_at': self.last_run_at.isoformat() if self.last_run_at else None,
+            'next_run_at': self.next_run_at.isoformat() if self.next_run_at else None,
+            'run_count': self.run_count,
+            'fail_count': self.fail_count,
+            'last_result': self.last_result,
+            'created_by': self.created_by,
+            'created_at': self.created_at.isoformat(),
+        }
+
+
+# ============================================================================
+# PRESS RELEASE MODEL
+# ============================================================================
+
+class PressRelease(db.Model):
+    """Press releases created and managed in the system"""
+    __tablename__ = 'press_releases'
+
+    id = db.Column(db.Integer, primary_key=True)
+    brand_id = db.Column(db.Integer, db.ForeignKey('brands.id'), nullable=False, index=True)
+
+    title = db.Column(db.String(500), nullable=False)
+    headline = db.Column(db.String(500), default='')
+    subheadline = db.Column(db.String(500), default='')
+    body = db.Column(db.Text, default='')
+    boilerplate = db.Column(db.Text, default='')  # Standard "About" section
+    contact_info = db.Column(db.Text, default='')  # JSON
+
+    # News event context
+    news_event = db.Column(db.Text, default='')  # User's description of the news
+    target_scope = db.Column(db.String(50), default='all')  # local, national, international, all
+
+    # Status
+    status = db.Column(db.String(50), default='draft', index=True)  # draft, review, approved, distributed
+    distributed_at = db.Column(db.DateTime, nullable=True)
+    distribution_targets = db.Column(db.Text, default='[]')  # JSON list of press contact IDs
+
+    created_by = db.Column(db.String(255), default='system')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    brand = db.relationship('Brand', backref=db.backref('press_releases', lazy='dynamic'))
+
+    def get_contact_info(self) -> Dict[str, Any]:
+        try:
+            return json.loads(self.contact_info) if self.contact_info else {}
+        except (json.JSONDecodeError, TypeError):
+            return {}
+
+    def get_distribution_targets(self) -> List:
+        try:
+            return json.loads(self.distribution_targets) if self.distribution_targets else []
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'id': self.id,
+            'brand_id': self.brand_id,
+            'brand_name': self.brand.name if self.brand else '',
+            'brand_display_name': self.brand.display_name if self.brand else '',
+            'title': self.title,
+            'headline': self.headline,
+            'subheadline': self.subheadline,
+            'body': self.body,
+            'boilerplate': self.boilerplate,
+            'contact_info': self.get_contact_info(),
+            'news_event': self.news_event,
+            'target_scope': self.target_scope,
+            'status': self.status,
+            'distributed_at': self.distributed_at.isoformat() if self.distributed_at else None,
+            'distribution_targets': self.get_distribution_targets(),
+            'created_by': self.created_by,
+            'created_at': self.created_at.isoformat(),
+            'updated_at': self.updated_at.isoformat(),
+        }
+
+
+# ============================================================================
+# PRESS CONTACT MODEL
+# ============================================================================
+
+class PressContact(db.Model):
+    """Press/media contacts for distribution"""
+    __tablename__ = 'press_contacts'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(255), nullable=False)
+    outlet = db.Column(db.String(255), default='')  # Publication/outlet name
+    email = db.Column(db.String(255), nullable=False, index=True)
+    phone = db.Column(db.String(50), default='')
+    title = db.Column(db.String(255), default='')  # Job title at outlet
+    beat = db.Column(db.String(255), default='')  # Coverage area (tech, business, etc.)
+    scope = db.Column(db.String(50), default='national', index=True)  # local, national, international
+    region = db.Column(db.String(255), default='')  # Geographic region for local contacts
+
+    website = db.Column(db.String(500), default='')
+    twitter_handle = db.Column(db.String(100), default='')
+    notes = db.Column(db.Text, default='')
+
+    is_active = db.Column(db.Boolean, default=True, index=True)
+    last_contacted_at = db.Column(db.DateTime, nullable=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'id': self.id,
+            'name': self.name,
+            'outlet': self.outlet,
+            'email': self.email,
+            'phone': self.phone,
+            'title': self.title,
+            'beat': self.beat,
+            'scope': self.scope,
+            'region': self.region,
+            'website': self.website,
+            'twitter_handle': self.twitter_handle,
+            'notes': self.notes,
+            'is_active': self.is_active,
+            'last_contacted_at': self.last_contacted_at.isoformat() if self.last_contacted_at else None,
+        }

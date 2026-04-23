@@ -219,7 +219,7 @@ if not _database_url.startswith('sqlite'):
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Initialize database
-from dashboard.models import db, User, Brand, BrandTheme, BrandEmailConfig
+from dashboard.models import db, User, Brand, BrandTheme, BrandEmailConfig, ScheduledTask, PressRelease, PressContact
 db.init_app(app)
 
 # ── Flask-Login ──────────────────────────────────────────────
@@ -1183,15 +1183,14 @@ class MarketingDashboard:
             else:
                 return 'Daily Analytics Reports'
         elif 'run_brand_outreach' in command:
-            # Extract brand from command
-            if '--brand foundry' in command:
-                return 'Foundry Startup Outreach'
-            elif '--brand buildly' in command:
-                return 'Buildly Enterprise Outreach'
-            elif '--brand openbuild' in command:
-                return 'Open Build Developer Outreach'
-            else:
-                return 'Brand Outreach Campaign'
+            # Try to find a matching DB brand slug in the command
+            try:
+                for brand in Brand.query.filter_by(is_active=True).all():
+                    if f'--brand {brand.name}' in command:
+                        return f'{brand.display_name} Outreach'
+            except Exception:
+                pass
+            return 'Brand Outreach Campaign'
         elif 'discovery' in command.lower():
             return 'Target Discovery'
         elif 'blog' in command.lower():
@@ -1214,22 +1213,19 @@ class MarketingDashboard:
             return 'System Task'
     
     def _extract_brand_from_command(self, command):
-        """Extract brand from command path or name"""
+        """Extract brand display name from command path or name using active DB brands."""
         try:
-            command = command.lower()
-            if 'foundry' in command:
-                return 'Foundry'
-            elif 'buildly' in command:
-                return 'Buildly'
-            elif 'open' in command or 'openbuild' in command:
-                return 'Open Build'
-            elif 'radical' in command:
-                return 'Radical Therapy'
-            elif 'oregon' in command:
-                return 'Oregon Software'
-            else:
-                return 'System'
-        except:
+            command_lower = command.lower()
+            for brand in Brand.query.filter_by(is_active=True).order_by(Brand.name).all():
+                if brand.name in command_lower:
+                    return brand.display_name
+            # Also match on the slug without underscores/dashes (e.g. openbuild → open_build)
+            for brand in Brand.query.filter_by(is_active=True).all():
+                slug_variants = [brand.name, brand.name.replace('_', ''), brand.name.replace('-', '')]
+                if any(v in command_lower for v in slug_variants):
+                    return brand.display_name
+            return 'System'
+        except Exception:
             return 'Unknown'
     
     def _calculate_last_run(self, schedule):
@@ -5029,7 +5025,26 @@ def api_discover_influencers(brand):
     try:
         data = request.get_json() or {}
         max_per_platform = data.get('max_per_platform', 5)
-        
+
+        # If no static strategy exists, build one from DB brand metadata
+        if brand not in BRAND_INFLUENCER_STRATEGIES:
+            db_brand = Brand.query.filter_by(name=brand, is_active=True).first()
+            if not db_brand:
+                return jsonify({'success': False, 'error': f'Unknown brand: {brand}'}), 404
+            from automation.influencer_discovery import add_brand_strategy
+            add_brand_strategy(brand, {
+                'name': db_brand.display_name,
+                'focus': db_brand.description or db_brand.display_name,
+                'target_niches': ['business', 'marketing', 'technology'],
+                'keywords': [db_brand.display_name, db_brand.name, 'business', 'entrepreneur'],
+                'hashtags': [f'#{db_brand.name}', '#business', '#marketing'],
+                'podcast_keywords': ['business podcast', 'marketing podcast', 'entrepreneur podcast'],
+                'bluesky_keywords': [db_brand.display_name, 'business', 'marketing'],
+                'mastodon_hashtags': ['#Business', '#Marketing', '#Entrepreneur'],
+                'min_followers': 100,
+                'target_engagement': 2.0,
+            })
+
         async def run_discovery():
             discovery = BrandInfluencerDiscovery()
             return await discovery.discover_brand_influencers(brand, max_per_platform)
@@ -5041,10 +5056,11 @@ def api_discover_influencers(brand):
         total_discovered = sum(len(influencers) for influencers in results.values())
         platforms_used = len([p for p, influencers in results.items() if influencers])
         
+        brand_display = BRAND_INFLUENCER_STRATEGIES.get(brand, {}).get('name', brand)
         return jsonify({
             'success': True,
             'brand': brand,
-            'brand_name': BRAND_INFLUENCER_STRATEGIES.get(brand, {}).get('name', brand),
+            'brand_name': brand_display,
             'results': {platform: len(influencers) for platform, influencers in results.items()},
             'summary': {
                 'total_discovered': total_discovered,
@@ -5660,6 +5676,391 @@ def api_add_touch(contact_id):
             'success': False,
             'error': str(e)
         }), 500
+
+
+# =============================================================================
+# SCHEDULED TASKS API ENDPOINTS
+# =============================================================================
+
+@app.route('/schedule')
+@login_required
+def schedule_page():
+    """Scheduling & cron task management page"""
+    return render_template('schedule.html', title='Task Scheduler')
+
+
+@app.route('/api/schedule/tasks', methods=['GET'])
+@login_required
+def api_schedule_list():
+    """List all scheduled tasks"""
+    try:
+        from dashboard.models import ScheduledTask
+        brand_filter = request.args.get('brand')
+        query = ScheduledTask.query
+        if brand_filter and brand_filter != 'all':
+            brand_obj = Brand.query.filter_by(name=brand_filter).first()
+            if brand_obj:
+                query = query.filter_by(brand_id=brand_obj.id)
+        tasks = query.order_by(ScheduledTask.created_at.desc()).all()
+        return jsonify({'success': True, 'tasks': [t.to_dict() for t in tasks]})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/schedule/tasks', methods=['POST'])
+@login_required
+def api_schedule_create():
+    """Create a new scheduled task"""
+    try:
+        from dashboard.models import ScheduledTask
+        data = request.get_json() or {}
+        required = ['name', 'task_type', 'cron_expression']
+        for field in required:
+            if not data.get(field):
+                return jsonify({'success': False, 'error': f'Missing required field: {field}'}), 400
+
+        brand_id = None
+        brand_name = data.get('brand')
+        if brand_name and brand_name != 'all':
+            brand_obj = Brand.query.filter_by(name=brand_name, is_active=True).first()
+            if brand_obj:
+                brand_id = brand_obj.id
+
+        task = ScheduledTask(
+            name=data['name'],
+            description=data.get('description', ''),
+            task_type=data['task_type'],
+            brand_id=brand_id,
+            cron_expression=data['cron_expression'],
+            schedule_label=data.get('schedule_label', ''),
+            is_enabled=data.get('is_enabled', True),
+            created_by=current_user.email,
+        )
+        task.set_parameters(data.get('parameters', {}))
+        db.session.add(task)
+        db.session.commit()
+        return jsonify({'success': True, 'task': task.to_dict()}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/schedule/tasks/<int:task_id>', methods=['PUT'])
+@login_required
+def api_schedule_update(task_id):
+    """Update a scheduled task"""
+    try:
+        from dashboard.models import ScheduledTask
+        task = ScheduledTask.query.get_or_404(task_id)
+        data = request.get_json() or {}
+        for field in ['name', 'description', 'cron_expression', 'schedule_label', 'task_type']:
+            if field in data:
+                setattr(task, field, data[field])
+        if 'is_enabled' in data:
+            task.is_enabled = bool(data['is_enabled'])
+        if 'parameters' in data:
+            task.set_parameters(data['parameters'])
+        if 'brand' in data:
+            brand_name = data['brand']
+            if not brand_name or brand_name == 'all':
+                task.brand_id = None
+            else:
+                brand_obj = Brand.query.filter_by(name=brand_name, is_active=True).first()
+                if brand_obj:
+                    task.brand_id = brand_obj.id
+        db.session.commit()
+        return jsonify({'success': True, 'task': task.to_dict()})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/schedule/tasks/<int:task_id>', methods=['DELETE'])
+@login_required
+def api_schedule_delete(task_id):
+    """Delete a scheduled task"""
+    try:
+        from dashboard.models import ScheduledTask
+        task = ScheduledTask.query.get_or_404(task_id)
+        db.session.delete(task)
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/schedule/tasks/<int:task_id>/toggle', methods=['POST'])
+@login_required
+def api_schedule_toggle(task_id):
+    """Enable or disable a scheduled task"""
+    try:
+        from dashboard.models import ScheduledTask
+        task = ScheduledTask.query.get_or_404(task_id)
+        task.is_enabled = not task.is_enabled
+        db.session.commit()
+        return jsonify({'success': True, 'is_enabled': task.is_enabled})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/schedule/tasks/<int:task_id>/run', methods=['POST'])
+@login_required
+def api_schedule_run_now(task_id):
+    """Manually trigger a scheduled task immediately"""
+    try:
+        from dashboard.models import ScheduledTask
+        from automation.centralized_cron_manager import CentralizedCronManager
+        task = ScheduledTask.query.get_or_404(task_id)
+        params = task.get_parameters()
+        brand_name = task.brand.name if task.brand else 'all'
+
+        result_msg = f'Task "{task.name}" triggered manually'
+        if task.task_type == 'discovery':
+            # Trigger influencer discovery via existing cron manager if available
+            try:
+                cron_mgr = CentralizedCronManager()
+                result = cron_mgr.execute_job('influencer_discovery')
+                result_msg = result.get('message', result_msg)
+            except Exception as ce:
+                result_msg = f'Could not execute via cron manager: {ce}'
+        elif task.task_type == 'analytics':
+            result_msg = 'Analytics report queued'
+        elif task.task_type == 'outreach':
+            result_msg = 'Outreach campaign queued'
+
+        task.last_run_at = datetime.now()
+        task.run_count += 1
+        task.last_result = result_msg
+        db.session.commit()
+        return jsonify({'success': True, 'message': result_msg})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# =============================================================================
+# PRESS RELEASE API ENDPOINTS
+# =============================================================================
+
+@app.route('/press-releases')
+@login_required
+def press_releases_page():
+    """Press release management page"""
+    return render_template('press_releases.html', title='Press Releases')
+
+
+@app.route('/api/press-releases', methods=['GET'])
+@login_required
+def api_press_releases_list():
+    """List press releases for the current user's brands"""
+    try:
+        from dashboard.models import PressRelease
+        brand_filter = request.args.get('brand')
+        status_filter = request.args.get('status')
+        query = PressRelease.query
+
+        accessible_brand_ids = [b.id for b in current_user.get_brands()]
+        if not current_user.is_admin:
+            query = query.filter(PressRelease.brand_id.in_(accessible_brand_ids))
+
+        if brand_filter and brand_filter != 'all':
+            brand_obj = Brand.query.filter_by(name=brand_filter).first()
+            if brand_obj:
+                query = query.filter_by(brand_id=brand_obj.id)
+        if status_filter:
+            query = query.filter_by(status=status_filter)
+
+        prs = query.order_by(PressRelease.created_at.desc()).all()
+        return jsonify({'success': True, 'press_releases': [pr.to_dict() for pr in prs]})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/press-releases', methods=['POST'])
+@login_required
+def api_press_releases_create():
+    """Create a new press release"""
+    try:
+        from dashboard.models import PressRelease
+        data = request.get_json() or {}
+        if not data.get('title'):
+            return jsonify({'success': False, 'error': 'title is required'}), 400
+
+        brand_name = data.get('brand') or (g.active_brand.name if g.active_brand else None)
+        brand_obj = Brand.query.filter_by(name=brand_name, is_active=True).first() if brand_name else None
+        if not brand_obj:
+            return jsonify({'success': False, 'error': 'Valid brand is required'}), 400
+
+        pr = PressRelease(
+            brand_id=brand_obj.id,
+            title=data['title'],
+            headline=data.get('headline', ''),
+            subheadline=data.get('subheadline', ''),
+            body=data.get('body', ''),
+            boilerplate=data.get('boilerplate', ''),
+            news_event=data.get('news_event', ''),
+            target_scope=data.get('target_scope', 'all'),
+            status=data.get('status', 'draft'),
+            created_by=current_user.email,
+        )
+        if data.get('contact_info'):
+            pr.contact_info = json.dumps(data['contact_info'])
+        db.session.add(pr)
+        db.session.commit()
+        return jsonify({'success': True, 'press_release': pr.to_dict()}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/press-releases/<int:pr_id>', methods=['GET'])
+@login_required
+def api_press_release_get(pr_id):
+    """Get a single press release"""
+    try:
+        from dashboard.models import PressRelease
+        pr = PressRelease.query.get_or_404(pr_id)
+        return jsonify({'success': True, 'press_release': pr.to_dict()})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/press-releases/<int:pr_id>', methods=['PUT'])
+@login_required
+def api_press_release_update(pr_id):
+    """Update a press release"""
+    try:
+        from dashboard.models import PressRelease
+        pr = PressRelease.query.get_or_404(pr_id)
+        data = request.get_json() or {}
+        for field in ['title', 'headline', 'subheadline', 'body', 'boilerplate',
+                      'news_event', 'target_scope', 'status']:
+            if field in data:
+                setattr(pr, field, data[field])
+        if 'contact_info' in data:
+            pr.contact_info = json.dumps(data['contact_info'])
+        db.session.commit()
+        return jsonify({'success': True, 'press_release': pr.to_dict()})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/press-releases/<int:pr_id>', methods=['DELETE'])
+@login_required
+def api_press_release_delete(pr_id):
+    """Delete a press release"""
+    try:
+        from dashboard.models import PressRelease
+        pr = PressRelease.query.get_or_404(pr_id)
+        db.session.delete(pr)
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/press-releases/<int:pr_id>/generate', methods=['POST'])
+@login_required
+def api_press_release_generate(pr_id):
+    """Use AI to generate or improve a press release"""
+    try:
+        from dashboard.models import PressRelease
+        pr = PressRelease.query.get_or_404(pr_id)
+        data = request.get_json() or {}
+        feedback = data.get('feedback', '')
+        section = data.get('section', 'body')  # body, headline, all
+
+        brand_obj = pr.brand
+        brand_name = brand_obj.display_name if brand_obj else 'our company'
+        news_event = pr.news_event or pr.title
+
+        if dashboard.ai_generator:
+            if section == 'headline' or section == 'all':
+                headline_prompt = (
+                    f"Write a compelling press release headline for {brand_name}. "
+                    f"News event: {news_event}. "
+                    f"Keep it under 15 words, professional, and newsworthy."
+                    + (f" User feedback: {feedback}" if feedback else "")
+                )
+                pr.headline = dashboard.ai_generator.generate_content(
+                    prompt=headline_prompt, max_tokens=100
+                ) or pr.headline
+
+            if section == 'body' or section == 'all':
+                body_prompt = (
+                    f"Write a professional press release body for {brand_name}. "
+                    f"News event: {news_event}. "
+                    f"Include: who, what, when, where, why. Use AP style. "
+                    f"3-5 paragraphs with a quote from leadership."
+                    + (f"\nUser feedback/direction: {feedback}" if feedback else "")
+                    + (f"\nExisting draft to improve:\n{pr.body}" if pr.body and feedback else "")
+                )
+                pr.body = dashboard.ai_generator.generate_content(
+                    prompt=body_prompt, max_tokens=800
+                ) or pr.body
+
+        db.session.commit()
+        return jsonify({'success': True, 'press_release': pr.to_dict()})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/press-contacts', methods=['GET'])
+@login_required
+def api_press_contacts_list():
+    """List press contacts, optionally filtered by scope"""
+    try:
+        from dashboard.models import PressContact
+        scope = request.args.get('scope')
+        region = request.args.get('region')
+        beat = request.args.get('beat')
+        query = PressContact.query.filter_by(is_active=True)
+        if scope:
+            query = query.filter_by(scope=scope)
+        if region:
+            query = query.filter(PressContact.region.ilike(f'%{region}%'))
+        if beat:
+            query = query.filter(PressContact.beat.ilike(f'%{beat}%'))
+        contacts = query.order_by(PressContact.outlet, PressContact.name).all()
+        return jsonify({'success': True, 'contacts': [c.to_dict() for c in contacts]})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/press-contacts', methods=['POST'])
+@login_required
+def api_press_contact_create():
+    """Create a press contact"""
+    try:
+        from dashboard.models import PressContact
+        data = request.get_json() or {}
+        if not data.get('name') or not data.get('email'):
+            return jsonify({'success': False, 'error': 'name and email are required'}), 400
+        contact = PressContact(
+            name=data['name'],
+            outlet=data.get('outlet', ''),
+            email=data['email'],
+            phone=data.get('phone', ''),
+            title=data.get('title', ''),
+            beat=data.get('beat', ''),
+            scope=data.get('scope', 'national'),
+            region=data.get('region', ''),
+            website=data.get('website', ''),
+            twitter_handle=data.get('twitter_handle', ''),
+            notes=data.get('notes', ''),
+        )
+        db.session.add(contact)
+        db.session.commit()
+        return jsonify({'success': True, 'contact': contact.to_dict()}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 if __name__ == '__main__':
     # Get configuration

@@ -33,6 +33,16 @@ class ActivityTracker:
         """
         self.database_url = database_url or os.getenv('DATABASE_URL')
         
+        # If no DATABASE_URL, try to build one from individual env vars (DigitalOcean style)
+        if not self.database_url:
+            db_host = os.getenv('DATABASE_HOST') or os.getenv('DB_HOST')
+            if db_host:
+                db_user = os.getenv('DATABASE_USER') or os.getenv('DB_USER', 'root')
+                db_pass = os.getenv('DATABASE_PASSWORD') or os.getenv('DB_PASSWORD', '')
+                db_port = os.getenv('DATABASE_PORT') or os.getenv('DB_PORT', '25060')
+                db_name = os.getenv('DATABASE_NAME') or os.getenv('DB_NAME', 'defaultdb')
+                self.database_url = f'mysql+mysqldb://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}'
+        
         if self.database_url:
             # Fix Heroku-style postgres:// -> postgresql://
             if self.database_url.startswith('postgres://'):
