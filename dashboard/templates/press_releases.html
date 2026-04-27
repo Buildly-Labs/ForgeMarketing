@@ -93,6 +93,11 @@
     <!-- ── Press Contacts Tab ── -->
     <div x-show="activeTab === 'contacts'">
         <div class="bg-white rounded-lg p-4 card-shadow flex flex-wrap gap-3 mb-4 items-center">
+            <select x-model="contactBrand" class="border rounded-lg px-3 py-2 text-sm">
+                {% for brand in user_brands %}
+                <option value="{{ brand.name }}">{{ brand.display_name }}</option>
+                {% endfor %}
+            </select>
             <select x-model="contactScope" @change="loadContacts()"
                     class="border rounded-lg px-3 py-2 text-sm">
                 <option value="">All Scopes</option>
@@ -103,6 +108,11 @@
             <input x-model="contactBeat" @input.debounce.400ms="loadContacts()"
                    placeholder="Filter by beat (e.g. tech, business)"
                    class="border rounded-lg px-3 py-2 text-sm w-64">
+            <button @click="discoverContacts()" :disabled="discoveringContacts"
+                    class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-blue-700 disabled:opacity-50">
+                <i class="fas fa-search mr-2" :class="{'fa-spin': discoveringContacts}"></i>
+                <span x-text="discoveringContacts ? 'Discovering...' : 'Discover Contacts'"></span>
+            </button>
             <button @click="openAddContact()"
                     class="ml-auto bg-green-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-green-700">
                 <i class="fas fa-plus mr-2"></i>Add Contact
@@ -360,6 +370,7 @@ function pressReleaseManager() {
         contacts: [],
         loadingReleases: false,
         loadingContacts: false,
+        discoveringContacts: false,
         savingRelease: false,
         generating: false,
         showEditor: false,
@@ -368,6 +379,7 @@ function pressReleaseManager() {
         filterBrand: '',
         filterStatus: '',
         contactScope: '',
+        contactBrand: ACTIVE_BRAND || '{{ user_brands[0].name if user_brands else "" }}',
         contactBeat: '',
         aiFeedback: '',
         prForm: {
@@ -406,6 +418,36 @@ function pressReleaseManager() {
                 this.contacts = data.contacts || [];
             } catch(e) { console.error(e); }
             finally { this.loadingContacts = false; }
+        },
+
+        async discoverContacts() {
+            if (!this.contactBrand) {
+                showNotification('Pick a brand first', 'warning');
+                return;
+            }
+            this.discoveringContacts = true;
+            try {
+                const res = await fetch('/api/press-contacts/discover', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        brand: this.contactBrand,
+                        scope: this.contactScope || 'all',
+                        max: 12,
+                    }),
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showNotification(`Saved ${data.saved_count} press contacts for ${this.contactBrand}`, 'success');
+                    await this.loadContacts();
+                } else {
+                    showNotification(data.error || 'Discovery failed', 'error');
+                }
+            } catch(e) {
+                showNotification('Error discovering contacts', 'error');
+            } finally {
+                this.discoveringContacts = false;
+            }
         },
 
         openNewRelease() {

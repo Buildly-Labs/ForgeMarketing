@@ -307,6 +307,100 @@ def list_brand_strategies() -> Dict[str, str]:
     """List all configured brand strategies"""
     return {key: config['name'] for key, config in BRAND_INFLUENCER_STRATEGIES.items()}
 
+
+_BRAND_KEYWORD_STOPWORDS = {
+    'and', 'for', 'the', 'with', 'from', 'that', 'this', 'into', 'your',
+    'our', 'their', 'about', 'brand', 'company', 'business', 'services',
+    'service', 'platform', 'startup', 'solution', 'solutions'
+}
+
+
+def _load_dashboard_brand(brand_key: str) -> Optional[Dict[str, str]]:
+    """Load a dashboard brand directly from the SQLite brand catalog."""
+    db_path = project_root / 'data' / 'marketing_dashboard.db'
+    if not db_path.exists():
+        return None
+
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        row = conn.execute(
+            """
+            SELECT name, display_name, description, website_url
+            FROM brands
+            WHERE name = ? AND is_active = 1
+            """,
+            (brand_key,),
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def _build_dashboard_brand_keywords(brand_row: Dict[str, str]) -> List[str]:
+    """Create a small keyword set for brands added through the dashboard."""
+    parts = [
+        brand_row.get('display_name', ''),
+        brand_row.get('name', '').replace('_', ' '),
+        brand_row.get('description', ''),
+    ]
+
+    website_url = brand_row.get('website_url', '')
+    if website_url:
+        hostname = urlparse(website_url).netloc.lower().replace('www.', '')
+        parts.extend(re.split(r'[^a-z0-9]+', hostname))
+
+    keywords: List[str] = []
+    seen: Set[str] = set()
+    for token in re.findall(r'[a-zA-Z][a-zA-Z0-9\-]{2,}', ' '.join(parts).lower()):
+        if token in _BRAND_KEYWORD_STOPWORDS or token in seen:
+            continue
+        seen.add(token)
+        keywords.append(token)
+
+    display_name = brand_row.get('display_name', '').strip()
+    if display_name and display_name.lower() not in seen:
+        keywords.insert(0, display_name.lower())
+
+    brand_name = brand_row.get('name', '').replace('_', ' ').strip()
+    if brand_name and brand_name.lower() not in seen:
+        keywords.insert(1, brand_name.lower())
+
+    return keywords[:12] or [brand_row.get('name', 'brand')]
+
+
+def ensure_brand_strategy(brand_key: str) -> Optional[Dict[str, Any]]:
+    """Return an existing strategy or synthesize one from dashboard brand data."""
+    strategy = BRAND_INFLUENCER_STRATEGIES.get(brand_key)
+    if strategy:
+        return strategy
+
+    brand_row = _load_dashboard_brand(brand_key)
+    if not brand_row:
+        return None
+
+    keywords = _build_dashboard_brand_keywords(brand_row)
+    hashtags = [
+        f"#{re.sub(r'[^a-zA-Z0-9]', '', keyword.title())}"
+        for keyword in keywords[:8]
+        if keyword
+    ]
+    brand_config = {
+        'name': brand_row.get('display_name') or brand_key.replace('_', ' ').title(),
+        'focus': brand_row.get('description') or f"Growth and discovery for {brand_key}",
+        'description': brand_row.get('description') or '',
+        'target_niches': keywords[:6],
+        'keywords': keywords,
+        'hashtags': hashtags,
+        'bluesky_keywords': keywords[:6],
+        'mastodon_hashtags': hashtags[:5],
+        'podcast_keywords': [f"{keyword} podcast" for keyword in keywords[:6]],
+        'min_followers': 50,
+        'target_engagement': 2.0,
+    }
+    add_brand_strategy(brand_key, brand_config)
+    return brand_config
+
 class InfluencerDatabase:
     """Database manager for influencer profiles"""
     
@@ -2335,7 +2429,7 @@ class BrandInfluencerDiscovery:
     async def discover_brand_influencers(self, brand: str, max_per_platform: int = 25) -> Dict[str, List[InfluencerProfile]]:
         """Discover influencers across all platforms for a brand"""
         results = {}
-        strategy = BRAND_INFLUENCER_STRATEGIES.get(brand, {})
+        strategy = ensure_brand_strategy(brand) or {}
         
         if not strategy:
             logger.error(f"❌ No strategy defined for brand: {brand}")
@@ -2654,7 +2748,8 @@ async def main():
     brand = "foundry"
     results = await discovery.discover_brand_influencers(brand, max_per_platform=3)
     
-    print(f"\n🎯 Influencer Discovery Results for {BRAND_INFLUENCER_STRATEGIES[brand]['name']}")
+    strategy = ensure_brand_strategy(brand) or {'name': brand}
+    print(f"\n🎯 Influencer Discovery Results for {strategy['name']}")
     print("=" * 60)
     
     total_influencers = 0

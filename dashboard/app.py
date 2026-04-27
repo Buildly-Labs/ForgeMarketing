@@ -199,6 +199,8 @@ def _build_database_url():
     if url and '://' in url and not url.startswith('$'):
         return url
     db_host = os.getenv('DATABASE_HOST') or os.getenv('DB_HOST')
+    if db_host and db_host in {'db', 'database', 'mysql', 'postgres'} and not Path('/.dockerenv').exists():
+        db_host = None
     if db_host:
         db_user = os.getenv('DATABASE_USER') or os.getenv('DB_USER', 'root')
         db_pass = os.getenv('DATABASE_PASSWORD') or os.getenv('DB_PASSWORD', '')
@@ -219,8 +221,16 @@ if not _database_url.startswith('sqlite'):
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Initialize database
-from dashboard.models import db, User, Brand, BrandTheme, BrandEmailConfig, ScheduledTask, PressRelease, PressContact
+from dashboard.models import db, User, Brand, BrandTheme, BrandEmailConfig
 db.init_app(app)
+
+with app.app_context():
+    try:
+        from dashboard.database import DatabaseManager
+        DatabaseManager(app).init_db()
+        app.db_initialized = True
+    except Exception as e:
+        print(f"⚠️  Warning: Startup database initialization error: {e}")
 
 # ── Flask-Login ──────────────────────────────────────────────
 login_manager = LoginManager()
@@ -1183,14 +1193,15 @@ class MarketingDashboard:
             else:
                 return 'Daily Analytics Reports'
         elif 'run_brand_outreach' in command:
-            # Try to find a matching DB brand slug in the command
-            try:
-                for brand in Brand.query.filter_by(is_active=True).all():
-                    if f'--brand {brand.name}' in command:
-                        return f'{brand.display_name} Outreach'
-            except Exception:
-                pass
-            return 'Brand Outreach Campaign'
+            # Extract brand from command
+            if '--brand foundry' in command:
+                return 'Foundry Startup Outreach'
+            elif '--brand buildly' in command:
+                return 'Buildly Enterprise Outreach'
+            elif '--brand openbuild' in command:
+                return 'Open Build Developer Outreach'
+            else:
+                return 'Brand Outreach Campaign'
         elif 'discovery' in command.lower():
             return 'Target Discovery'
         elif 'blog' in command.lower():
@@ -1213,19 +1224,22 @@ class MarketingDashboard:
             return 'System Task'
     
     def _extract_brand_from_command(self, command):
-        """Extract brand display name from command path or name using active DB brands."""
+        """Extract brand from command path or name"""
         try:
-            command_lower = command.lower()
-            for brand in Brand.query.filter_by(is_active=True).order_by(Brand.name).all():
-                if brand.name in command_lower:
-                    return brand.display_name
-            # Also match on the slug without underscores/dashes (e.g. openbuild → open_build)
-            for brand in Brand.query.filter_by(is_active=True).all():
-                slug_variants = [brand.name, brand.name.replace('_', ''), brand.name.replace('-', '')]
-                if any(v in command_lower for v in slug_variants):
-                    return brand.display_name
-            return 'System'
-        except Exception:
+            command = command.lower()
+            if 'foundry' in command:
+                return 'Foundry'
+            elif 'buildly' in command:
+                return 'Buildly'
+            elif 'open' in command or 'openbuild' in command:
+                return 'Open Build'
+            elif 'radical' in command:
+                return 'Radical Therapy'
+            elif 'oregon' in command:
+                return 'Oregon Software'
+            else:
+                return 'System'
+        except:
             return 'Unknown'
     
     def _calculate_last_run(self, schedule):
@@ -4854,50 +4868,68 @@ def api_daily_emails_status():
 
 @app.route('/api/brand-dashboards')
 def api_brand_dashboards_list():
-    """List all available brand dashboards, driven by database brands"""
+    """List all available brand dashboards"""
     try:
         dashboards = []
-
-        # Known path/generator overrides for specific brand slugs.
-        # New brands not listed here fall back to the conventional path.
-        path_overrides = {
+        
+        # Define brand dashboard mapping
+        brand_dashboards = {
             'foundry': {
+                'name': 'Buildly Labs Foundry',
                 'path': 'websites/foundry-website/reports/automation/dashboard.html',
                 'generator': 'websites/foundry-website/scripts/generate_dashboard.py',
                 'has_generator': True,
+                'url_path': '/brand-dashboard/foundry'
             },
             'openbuild': {
-                'path': 'websites/open-build-new-website/reports/automation_dashboard.html',
+                'name': 'Open Build',
+                'path': 'websites/open-build-new-website/reports/automation_dashboard.html', 
                 'generator': 'websites/open-build-new-website/reports/generate_report.py',
                 'has_generator': True,
+                'url_path': '/brand-dashboard/openbuild'
             },
+            'buildly': {
+                'name': 'Buildly',
+                'path': 'websites/buildly-website/reports/dashboard.html',
+                'generator': None,
+                'has_generator': False,
+                'url_path': '/brand-dashboard/buildly'
+            },
+            'oregonsoftware': {
+                'name': 'Oregon Software',
+                'path': 'websites/oregonsoftware-website/reports/dashboard.html',
+                'generator': None,
+                'has_generator': False,
+                'url_path': '/brand-dashboard/oregonsoftware'
+            },
+            'radical': {
+                'name': 'Radical Therapy',
+                'path': 'websites/radical-website/reports/dashboard.html',
+                'generator': None,
+                'has_generator': False,
+                'url_path': '/brand-dashboard/radical'
+            }
         }
-
-        active_brands = Brand.query.filter_by(is_active=True).order_by(Brand.display_name).all()
-
-        for brand in active_brands:
-            override = path_overrides.get(brand.name, {})
-            dashboard_path_str = override.get(
-                'path',
-                f'websites/{brand.name}-website/reports/dashboard.html'
-            )
-            dashboard_path = project_root / dashboard_path_str
-
+        
+        # Check which dashboards exist
+        for brand_key, info in brand_dashboards.items():
+            dashboard_path = project_root / info['path']
+            
             dashboards.append({
-                'brand': brand.name,
-                'name': brand.display_name,
+                'brand': brand_key,
+                'name': info['name'],
                 'exists': dashboard_path.exists(),
-                'has_generator': override.get('has_generator', False),
+                'has_generator': info['has_generator'],
                 'path': str(dashboard_path),
-                'url_path': f'/brand-dashboard/{brand.name}',
+                'url_path': info['url_path'],
                 'last_updated': dashboard_path.stat().st_mtime if dashboard_path.exists() else None
             })
-
+        
         return jsonify({
             'success': True,
             'dashboards': dashboards
         })
-
+        
     except Exception as e:
         return jsonify({
             'success': False,
@@ -4906,61 +4938,61 @@ def api_brand_dashboards_list():
 
 @app.route('/api/brand-dashboards/generate', methods=['POST'])
 def api_generate_all_brand_dashboards():
-    """Generate brand dashboards — only brands with a registered generator are supported"""
+    """Generate all brand dashboards"""
     try:
-        import subprocess
-
         data = request.get_json() or {}
-        requested = data.get('brand', 'all')
-
-        # Generator definitions keyed by brand slug
-        generators = {
-            'foundry': {
-                'cmd': ['python3', 'scripts/generate_dashboard.py'],
-                'cwd': project_root / 'websites' / 'foundry-website',
-            },
-            'openbuild': {
-                'cmd': ['python3', 'reports/generate_report.py'],
-                'cwd': project_root / 'websites' / 'open-build-new-website',
-            },
-        }
-
-        # Determine which brands to process
-        if requested == 'all':
-            active_brand_names = [
-                b.name for b in Brand.query.filter_by(is_active=True).all()
-            ]
-        else:
-            active_brand_names = [requested]
-
+        brand = data.get('brand', 'all')
+        
         results = {}
-        for brand_slug in active_brand_names:
-            if brand_slug in generators:
-                gen = generators[brand_slug]
-                try:
-                    proc = subprocess.run(
-                        gen['cmd'],
-                        cwd=gen['cwd'],
-                        capture_output=True, text=True, timeout=60
-                    )
-                    results[brand_slug] = {
-                        'success': proc.returncode == 0,
-                        'output': proc.stdout,
-                        'error': proc.stderr if proc.returncode != 0 else None
-                    }
-                except Exception as e:
-                    results[brand_slug] = {'success': False, 'error': str(e)}
-            else:
-                results[brand_slug] = {
-                    'success': False,
-                    'error': f'Dashboard generator not yet implemented for {brand_slug}'
+        
+        if brand == 'all' or brand == 'foundry':
+            # Generate Foundry dashboard
+            try:
+                import subprocess
+                result = subprocess.run([
+                    'python3', 'scripts/generate_dashboard.py'
+                ], cwd=project_root / 'websites' / 'foundry-website', 
+                   capture_output=True, text=True, timeout=60)
+                
+                results['foundry'] = {
+                    'success': result.returncode == 0,
+                    'output': result.stdout,
+                    'error': result.stderr if result.returncode != 0 else None
                 }
-
+            except Exception as e:
+                results['foundry'] = {'success': False, 'error': str(e)}
+        
+        if brand == 'all' or brand == 'openbuild':
+            # Generate Open Build dashboard
+            try:
+                import subprocess
+                result = subprocess.run([
+                    'python3', 'reports/generate_report.py'
+                ], cwd=project_root / 'websites' / 'open-build-new-website',
+                   capture_output=True, text=True, timeout=60)
+                
+                results['openbuild'] = {
+                    'success': result.returncode == 0,
+                    'output': result.stdout,
+                    'error': result.stderr if result.returncode != 0 else None
+                }
+            except Exception as e:
+                results['openbuild'] = {'success': False, 'error': str(e)}
+        
+        # TODO: Create generators for other brands when needed
+        if brand == 'all' or brand in ['buildly', 'oregonsoftware', 'radical']:
+            for missing_brand in ['buildly', 'oregonsoftware', 'radical']:
+                if brand == 'all' or brand == missing_brand:
+                    results[missing_brand] = {
+                        'success': False,
+                        'error': f'Dashboard generator not yet implemented for {missing_brand}'
+                    }
+        
         return jsonify({
             'success': True,
             'results': results
         })
-
+        
     except Exception as e:
         return jsonify({
             'success': False,
@@ -4971,34 +5003,39 @@ def api_generate_all_brand_dashboards():
 def serve_brand_dashboard(brand):
     """Serve brand-specific dashboard HTML"""
     try:
-        # Verify brand exists in the database
-        brand_obj = Brand.query.filter_by(name=brand, is_active=True).first()
-        if not brand_obj:
-            return f"Unknown brand: {brand}", 404
-
-        # Known path overrides; fall back to convention for other brands
-        path_overrides = {
+        # Define dashboard paths
+        dashboard_paths = {
             'foundry': 'websites/foundry-website/reports/automation/dashboard.html',
             'openbuild': 'websites/open-build-new-website/reports/automation_dashboard.html',
+            'buildly': 'websites/buildly-website/reports/dashboard.html',
+            'oregonsoftware': 'websites/oregonsoftware-website/reports/dashboard.html',
+            'radical': 'websites/radical-website/reports/dashboard.html'
         }
-        relative_path = path_overrides.get(brand, f'websites/{brand}-website/reports/dashboard.html')
-        dashboard_path = project_root / relative_path
-
+        
+        if brand not in dashboard_paths:
+            if not _is_known_brand(brand):
+                return f"Unknown brand: {brand}", 404
+            return f"Dashboard not found for {brand}. Try generating it first.", 404
+        
+        dashboard_path = project_root / dashboard_paths[brand]
+        
         if not dashboard_path.exists():
             return f"Dashboard not found for {brand}. Try generating it first.", 404
-
+        
+        # Read and serve the HTML file
         with open(dashboard_path, 'r', encoding='utf-8') as f:
             html_content = f.read()
-
+        
+        # Add some meta information to identify the dashboard source
         html_content = html_content.replace(
             '</head>',
             f'<meta name="dashboard-brand" content="{brand}">\n'
             f'<meta name="served-from" content="main-dashboard">\n'
             f'<meta name="generated-on" content="{datetime.now().isoformat()}">\n</head>'
         )
-
+        
         return html_content, 200, {'Content-Type': 'text/html; charset=utf-8'}
-
+        
     except Exception as e:
         return f"Error serving dashboard: {str(e)}", 500
 
@@ -5025,26 +5062,7 @@ def api_discover_influencers(brand):
     try:
         data = request.get_json() or {}
         max_per_platform = data.get('max_per_platform', 5)
-
-        # If no static strategy exists, build one from DB brand metadata
-        if brand not in BRAND_INFLUENCER_STRATEGIES:
-            db_brand = Brand.query.filter_by(name=brand, is_active=True).first()
-            if not db_brand:
-                return jsonify({'success': False, 'error': f'Unknown brand: {brand}'}), 404
-            from automation.influencer_discovery import add_brand_strategy
-            add_brand_strategy(brand, {
-                'name': db_brand.display_name,
-                'focus': db_brand.description or db_brand.display_name,
-                'target_niches': ['business', 'marketing', 'technology'],
-                'keywords': [db_brand.display_name, db_brand.name, 'business', 'entrepreneur'],
-                'hashtags': [f'#{db_brand.name}', '#business', '#marketing'],
-                'podcast_keywords': ['business podcast', 'marketing podcast', 'entrepreneur podcast'],
-                'bluesky_keywords': [db_brand.display_name, 'business', 'marketing'],
-                'mastodon_hashtags': ['#Business', '#Marketing', '#Entrepreneur'],
-                'min_followers': 100,
-                'target_engagement': 2.0,
-            })
-
+        
         async def run_discovery():
             discovery = BrandInfluencerDiscovery()
             return await discovery.discover_brand_influencers(brand, max_per_platform)
@@ -5056,11 +5074,10 @@ def api_discover_influencers(brand):
         total_discovered = sum(len(influencers) for influencers in results.values())
         platforms_used = len([p for p, influencers in results.items() if influencers])
         
-        brand_display = BRAND_INFLUENCER_STRATEGIES.get(brand, {}).get('name', brand)
         return jsonify({
             'success': True,
             'brand': brand,
-            'brand_name': brand_display,
+            'brand_name': BRAND_INFLUENCER_STRATEGIES.get(brand, {}).get('name', brand),
             'results': {platform: len(influencers) for platform, influencers in results.items()},
             'summary': {
                 'total_discovered': total_discovered,
@@ -5173,14 +5190,19 @@ def api_influencer_stats():
         return jsonify({'error': 'Influencer system not available'}), 503
     
     try:
+        from automation.influencer_discovery import ensure_brand_strategy
+
         discovery = BrandInfluencerDiscovery()
         
         # Get stats for each brand
         stats_by_brand = {}
         total_influencers = 0
         total_reach = 0
+        active_brands = Brand.query.filter_by(is_active=True).all()
         
-        for brand_key in BRAND_INFLUENCER_STRATEGIES.keys():
+        for brand_obj in active_brands:
+            brand_key = brand_obj.name
+            strategy = ensure_brand_strategy(brand_key) or {'name': brand_obj.display_name}
             brand_influencers = discovery.get_brand_influencers(brand=brand_key)
             
             if brand_influencers:
@@ -5189,7 +5211,7 @@ def api_influencer_stats():
                 avg_alignment = sum(inf.get('brand_alignment_score', 0) for inf in brand_influencers) / len(brand_influencers)
                 
                 stats_by_brand[brand_key] = {
-                    'name': BRAND_INFLUENCER_STRATEGIES[brand_key]['name'],
+                    'name': strategy['name'],
                     'count': len(brand_influencers),
                     'total_reach': brand_reach,
                     'avg_engagement': round(avg_engagement, 2),
@@ -5206,7 +5228,7 @@ def api_influencer_stats():
                 'total_influencers': total_influencers,
                 'total_reach': total_reach,
                 'brands_with_influencers': len([b for b in stats_by_brand.values() if b['count'] > 0]),
-                'avg_influencers_per_brand': round(total_influencers / len(BRAND_INFLUENCER_STRATEGIES), 1) if BRAND_INFLUENCER_STRATEGIES else 0
+                'avg_influencers_per_brand': round(total_influencers / len(active_brands), 1) if active_brands else 0
             },
             'by_brand': stats_by_brand,
             'generated_at': datetime.now().isoformat()
@@ -5677,32 +5699,69 @@ def api_add_touch(contact_id):
             'error': str(e)
         }), 500
 
-
 # =============================================================================
 # SCHEDULED TASKS API ENDPOINTS
 # =============================================================================
 
+def _scheduled_task_command(task_id):
+    """Build the cron command for a dashboard-managed scheduled task."""
+    python_bin = project_root / '.venv' / 'bin' / 'python'
+    if not python_bin.exists():
+        python_bin = Path(sys.executable or 'python3')
+
+    runner = project_root / 'automation' / 'run_scheduled_task.py'
+    log_path = project_root / 'logs' / 'scheduled_tasks.log'
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    return f'"{python_bin}" "{runner}" --task-id {task_id} >> "{log_path}" 2>&1'
+
+
+def _sync_task_crontab(task):
+    """Upsert a scheduled task into the user's crontab."""
+    from crontab import CronTab
+
+    cron = CronTab(user=True)
+    comment = f'forgemarketing-scheduled-task:{task.id}'
+    cron.remove_all(comment=comment)
+    if task.is_enabled:
+        job = cron.new(command=_scheduled_task_command(task.id), comment=comment)
+        job.setall(task.cron_expression)
+    cron.write()
+
+
+def _remove_task_crontab(task_id):
+    """Remove a scheduled task from the user's crontab."""
+    from crontab import CronTab
+
+    cron = CronTab(user=True)
+    cron.remove_all(comment=f'forgemarketing-scheduled-task:{task_id}')
+    cron.write()
+
+
 @app.route('/schedule')
 @login_required
 def schedule_page():
-    """Scheduling & cron task management page"""
+    """Scheduling & cron task management page."""
     return render_template('schedule.html', title='Task Scheduler')
 
 
 @app.route('/api/schedule/tasks', methods=['GET'])
 @login_required
 def api_schedule_list():
-    """List all scheduled tasks"""
+    """List all scheduled tasks visible to the user."""
     try:
         from dashboard.models import ScheduledTask
+
         brand_filter = request.args.get('brand')
         query = ScheduledTask.query
+        if not current_user.is_admin:
+            accessible_brand_ids = [brand.id for brand in current_user.get_brands()]
+            query = query.filter((ScheduledTask.brand_id.is_(None)) | (ScheduledTask.brand_id.in_(accessible_brand_ids)))
         if brand_filter and brand_filter != 'all':
-            brand_obj = Brand.query.filter_by(name=brand_filter).first()
+            brand_obj = Brand.query.filter_by(name=brand_filter, is_active=True).first()
             if brand_obj:
                 query = query.filter_by(brand_id=brand_obj.id)
         tasks = query.order_by(ScheduledTask.created_at.desc()).all()
-        return jsonify({'success': True, 'tasks': [t.to_dict() for t in tasks]})
+        return jsonify({'success': True, 'tasks': [task.to_dict() for task in tasks]})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -5710,12 +5769,12 @@ def api_schedule_list():
 @app.route('/api/schedule/tasks', methods=['POST'])
 @login_required
 def api_schedule_create():
-    """Create a new scheduled task"""
+    """Create a new scheduled task and sync it to crontab."""
     try:
         from dashboard.models import ScheduledTask
+
         data = request.get_json() or {}
-        required = ['name', 'task_type', 'cron_expression']
-        for field in required:
+        for field in ['name', 'task_type', 'cron_expression']:
             if not data.get(field):
                 return jsonify({'success': False, 'error': f'Missing required field: {field}'}), 400
 
@@ -5723,8 +5782,9 @@ def api_schedule_create():
         brand_name = data.get('brand')
         if brand_name and brand_name != 'all':
             brand_obj = Brand.query.filter_by(name=brand_name, is_active=True).first()
-            if brand_obj:
-                brand_id = brand_obj.id
+            if not brand_obj:
+                return jsonify({'success': False, 'error': f'Unknown brand: {brand_name}'}), 400
+            brand_id = brand_obj.id
 
         task = ScheduledTask(
             name=data['name'],
@@ -5733,11 +5793,13 @@ def api_schedule_create():
             brand_id=brand_id,
             cron_expression=data['cron_expression'],
             schedule_label=data.get('schedule_label', ''),
-            is_enabled=data.get('is_enabled', True),
+            is_enabled=bool(data.get('is_enabled', True)),
             created_by=current_user.email,
         )
         task.set_parameters(data.get('parameters', {}))
         db.session.add(task)
+        db.session.flush()
+        _sync_task_crontab(task)
         db.session.commit()
         return jsonify({'success': True, 'task': task.to_dict()}), 201
     except Exception as e:
@@ -5748,9 +5810,10 @@ def api_schedule_create():
 @app.route('/api/schedule/tasks/<int:task_id>', methods=['PUT'])
 @login_required
 def api_schedule_update(task_id):
-    """Update a scheduled task"""
+    """Update a scheduled task and resync it to crontab."""
     try:
         from dashboard.models import ScheduledTask
+
         task = ScheduledTask.query.get_or_404(task_id)
         data = request.get_json() or {}
         for field in ['name', 'description', 'cron_expression', 'schedule_label', 'task_type']:
@@ -5766,8 +5829,10 @@ def api_schedule_update(task_id):
                 task.brand_id = None
             else:
                 brand_obj = Brand.query.filter_by(name=brand_name, is_active=True).first()
-                if brand_obj:
-                    task.brand_id = brand_obj.id
+                if not brand_obj:
+                    return jsonify({'success': False, 'error': f'Unknown brand: {brand_name}'}), 400
+                task.brand_id = brand_obj.id
+        _sync_task_crontab(task)
         db.session.commit()
         return jsonify({'success': True, 'task': task.to_dict()})
     except Exception as e:
@@ -5778,10 +5843,12 @@ def api_schedule_update(task_id):
 @app.route('/api/schedule/tasks/<int:task_id>', methods=['DELETE'])
 @login_required
 def api_schedule_delete(task_id):
-    """Delete a scheduled task"""
+    """Delete a scheduled task and remove its crontab entry."""
     try:
         from dashboard.models import ScheduledTask
+
         task = ScheduledTask.query.get_or_404(task_id)
+        _remove_task_crontab(task.id)
         db.session.delete(task)
         db.session.commit()
         return jsonify({'success': True})
@@ -5793,11 +5860,13 @@ def api_schedule_delete(task_id):
 @app.route('/api/schedule/tasks/<int:task_id>/toggle', methods=['POST'])
 @login_required
 def api_schedule_toggle(task_id):
-    """Enable or disable a scheduled task"""
+    """Enable or disable a scheduled task."""
     try:
         from dashboard.models import ScheduledTask
+
         task = ScheduledTask.query.get_or_404(task_id)
         task.is_enabled = not task.is_enabled
+        _sync_task_crontab(task)
         db.session.commit()
         return jsonify({'success': True, 'is_enabled': task.is_enabled})
     except Exception as e:
@@ -5808,33 +5877,26 @@ def api_schedule_toggle(task_id):
 @app.route('/api/schedule/tasks/<int:task_id>/run', methods=['POST'])
 @login_required
 def api_schedule_run_now(task_id):
-    """Manually trigger a scheduled task immediately"""
+    """Manually trigger a scheduled task immediately."""
     try:
         from dashboard.models import ScheduledTask
-        from automation.centralized_cron_manager import CentralizedCronManager
+
         task = ScheduledTask.query.get_or_404(task_id)
-        params = task.get_parameters()
-        brand_name = task.brand.name if task.brand else 'all'
-
-        result_msg = f'Task "{task.name}" triggered manually'
-        if task.task_type == 'discovery':
-            # Trigger influencer discovery via existing cron manager if available
-            try:
-                cron_mgr = CentralizedCronManager()
-                result = cron_mgr.execute_job('influencer_discovery')
-                result_msg = result.get('message', result_msg)
-            except Exception as ce:
-                result_msg = f'Could not execute via cron manager: {ce}'
-        elif task.task_type == 'analytics':
-            result_msg = 'Analytics report queued'
-        elif task.task_type == 'outreach':
-            result_msg = 'Outreach campaign queued'
-
+        python_bin = project_root / '.venv' / 'bin' / 'python'
+        if not python_bin.exists():
+            python_bin = Path(sys.executable or 'python3')
+        command = [
+            str(python_bin),
+            str(project_root / 'automation' / 'run_scheduled_task.py'),
+            '--task-id',
+            str(task.id),
+        ]
+        result = subprocess.run(command, capture_output=True, text=True, cwd=str(project_root), timeout=3600)
+        message = ((result.stdout or '') + (result.stderr or '')).strip() or f'Task "{task.name}" triggered manually'
         task.last_run_at = datetime.now()
-        task.run_count += 1
-        task.last_result = result_msg
+        task.last_result = message
         db.session.commit()
-        return jsonify({'success': True, 'message': result_msg})
+        return jsonify({'success': result.returncode == 0, 'message': message})
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -5847,33 +5909,31 @@ def api_schedule_run_now(task_id):
 @app.route('/press-releases')
 @login_required
 def press_releases_page():
-    """Press release management page"""
+    """Press release management page."""
     return render_template('press_releases.html', title='Press Releases')
 
 
 @app.route('/api/press-releases', methods=['GET'])
 @login_required
 def api_press_releases_list():
-    """List press releases for the current user's brands"""
+    """List press releases for the current user's brands."""
     try:
         from dashboard.models import PressRelease
+
         brand_filter = request.args.get('brand')
         status_filter = request.args.get('status')
         query = PressRelease.query
-
-        accessible_brand_ids = [b.id for b in current_user.get_brands()]
         if not current_user.is_admin:
+            accessible_brand_ids = [brand.id for brand in current_user.get_brands()]
             query = query.filter(PressRelease.brand_id.in_(accessible_brand_ids))
-
         if brand_filter and brand_filter != 'all':
-            brand_obj = Brand.query.filter_by(name=brand_filter).first()
+            brand_obj = Brand.query.filter_by(name=brand_filter, is_active=True).first()
             if brand_obj:
                 query = query.filter_by(brand_id=brand_obj.id)
         if status_filter:
             query = query.filter_by(status=status_filter)
-
-        prs = query.order_by(PressRelease.created_at.desc()).all()
-        return jsonify({'success': True, 'press_releases': [pr.to_dict() for pr in prs]})
+        press_releases = query.order_by(PressRelease.created_at.desc()).all()
+        return jsonify({'success': True, 'press_releases': [press_release.to_dict() for press_release in press_releases]})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -5881,9 +5941,10 @@ def api_press_releases_list():
 @app.route('/api/press-releases', methods=['POST'])
 @login_required
 def api_press_releases_create():
-    """Create a new press release"""
+    """Create a new press release."""
     try:
         from dashboard.models import PressRelease
+
         data = request.get_json() or {}
         if not data.get('title'):
             return jsonify({'success': False, 'error': 'title is required'}), 400
@@ -5893,7 +5954,7 @@ def api_press_releases_create():
         if not brand_obj:
             return jsonify({'success': False, 'error': 'Valid brand is required'}), 400
 
-        pr = PressRelease(
+        press_release = PressRelease(
             brand_id=brand_obj.id,
             title=data['title'],
             headline=data.get('headline', ''),
@@ -5906,10 +5967,10 @@ def api_press_releases_create():
             created_by=current_user.email,
         )
         if data.get('contact_info'):
-            pr.contact_info = json.dumps(data['contact_info'])
-        db.session.add(pr)
+            press_release.contact_info = json.dumps(data['contact_info'])
+        db.session.add(press_release)
         db.session.commit()
-        return jsonify({'success': True, 'press_release': pr.to_dict()}), 201
+        return jsonify({'success': True, 'press_release': press_release.to_dict()}), 201
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -5918,11 +5979,12 @@ def api_press_releases_create():
 @app.route('/api/press-releases/<int:pr_id>', methods=['GET'])
 @login_required
 def api_press_release_get(pr_id):
-    """Get a single press release"""
+    """Get a single press release."""
     try:
         from dashboard.models import PressRelease
-        pr = PressRelease.query.get_or_404(pr_id)
-        return jsonify({'success': True, 'press_release': pr.to_dict()})
+
+        press_release = PressRelease.query.get_or_404(pr_id)
+        return jsonify({'success': True, 'press_release': press_release.to_dict()})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -5930,19 +5992,19 @@ def api_press_release_get(pr_id):
 @app.route('/api/press-releases/<int:pr_id>', methods=['PUT'])
 @login_required
 def api_press_release_update(pr_id):
-    """Update a press release"""
+    """Update a press release."""
     try:
         from dashboard.models import PressRelease
-        pr = PressRelease.query.get_or_404(pr_id)
+
+        press_release = PressRelease.query.get_or_404(pr_id)
         data = request.get_json() or {}
-        for field in ['title', 'headline', 'subheadline', 'body', 'boilerplate',
-                      'news_event', 'target_scope', 'status']:
+        for field in ['title', 'headline', 'subheadline', 'body', 'boilerplate', 'news_event', 'target_scope', 'status']:
             if field in data:
-                setattr(pr, field, data[field])
+                setattr(press_release, field, data[field])
         if 'contact_info' in data:
-            pr.contact_info = json.dumps(data['contact_info'])
+            press_release.contact_info = json.dumps(data['contact_info'])
         db.session.commit()
-        return jsonify({'success': True, 'press_release': pr.to_dict()})
+        return jsonify({'success': True, 'press_release': press_release.to_dict()})
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -5951,11 +6013,12 @@ def api_press_release_update(pr_id):
 @app.route('/api/press-releases/<int:pr_id>', methods=['DELETE'])
 @login_required
 def api_press_release_delete(pr_id):
-    """Delete a press release"""
+    """Delete a press release."""
     try:
         from dashboard.models import PressRelease
-        pr = PressRelease.query.get_or_404(pr_id)
-        db.session.delete(pr)
+
+        press_release = PressRelease.query.get_or_404(pr_id)
+        db.session.delete(press_release)
         db.session.commit()
         return jsonify({'success': True})
     except Exception as e:
@@ -5966,45 +6029,39 @@ def api_press_release_delete(pr_id):
 @app.route('/api/press-releases/<int:pr_id>/generate', methods=['POST'])
 @login_required
 def api_press_release_generate(pr_id):
-    """Use AI to generate or improve a press release"""
+    """Use AI to generate or improve a press release."""
     try:
         from dashboard.models import PressRelease
-        pr = PressRelease.query.get_or_404(pr_id)
+
+        press_release = PressRelease.query.get_or_404(pr_id)
         data = request.get_json() or {}
         feedback = data.get('feedback', '')
-        section = data.get('section', 'body')  # body, headline, all
-
-        brand_obj = pr.brand
+        section = data.get('section', 'body')
+        brand_obj = press_release.brand
         brand_name = brand_obj.display_name if brand_obj else 'our company'
-        news_event = pr.news_event or pr.title
+        news_event = press_release.news_event or press_release.title
 
         if dashboard.ai_generator:
-            if section == 'headline' or section == 'all':
+            if section in ['headline', 'all']:
                 headline_prompt = (
                     f"Write a compelling press release headline for {brand_name}. "
-                    f"News event: {news_event}. "
-                    f"Keep it under 15 words, professional, and newsworthy."
-                    + (f" User feedback: {feedback}" if feedback else "")
+                    f"News event: {news_event}. Keep it under 15 words, professional, and newsworthy."
+                    + (f" User feedback: {feedback}" if feedback else '')
                 )
-                pr.headline = dashboard.ai_generator.generate_content(
-                    prompt=headline_prompt, max_tokens=100
-                ) or pr.headline
+                press_release.headline = dashboard.ai_generator.generate_content(prompt=headline_prompt, max_tokens=100) or press_release.headline
 
-            if section == 'body' or section == 'all':
+            if section in ['body', 'all']:
                 body_prompt = (
                     f"Write a professional press release body for {brand_name}. "
-                    f"News event: {news_event}. "
-                    f"Include: who, what, when, where, why. Use AP style. "
-                    f"3-5 paragraphs with a quote from leadership."
-                    + (f"\nUser feedback/direction: {feedback}" if feedback else "")
-                    + (f"\nExisting draft to improve:\n{pr.body}" if pr.body and feedback else "")
+                    f"News event: {news_event}. Include who, what, when, where, why. Use AP style. "
+                    f"Write 3-5 paragraphs and include a leadership quote."
+                    + (f"\nUser feedback/direction: {feedback}" if feedback else '')
+                    + (f"\nExisting draft to improve:\n{press_release.body}" if press_release.body and feedback else '')
                 )
-                pr.body = dashboard.ai_generator.generate_content(
-                    prompt=body_prompt, max_tokens=800
-                ) or pr.body
+                press_release.body = dashboard.ai_generator.generate_content(prompt=body_prompt, max_tokens=800) or press_release.body
 
         db.session.commit()
-        return jsonify({'success': True, 'press_release': pr.to_dict()})
+        return jsonify({'success': True, 'press_release': press_release.to_dict()})
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -6013,9 +6070,10 @@ def api_press_release_generate(pr_id):
 @app.route('/api/press-contacts', methods=['GET'])
 @login_required
 def api_press_contacts_list():
-    """List press contacts, optionally filtered by scope"""
+    """List press contacts, optionally filtered by scope or beat."""
     try:
         from dashboard.models import PressContact
+
         scope = request.args.get('scope')
         region = request.args.get('region')
         beat = request.args.get('beat')
@@ -6027,7 +6085,32 @@ def api_press_contacts_list():
         if beat:
             query = query.filter(PressContact.beat.ilike(f'%{beat}%'))
         contacts = query.order_by(PressContact.outlet, PressContact.name).all()
-        return jsonify({'success': True, 'contacts': [c.to_dict() for c in contacts]})
+        return jsonify({'success': True, 'contacts': [contact.to_dict() for contact in contacts]})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/press-contacts/discover', methods=['POST'])
+@login_required
+def api_press_contacts_discover():
+    """Discover press contacts for a specific brand and scope."""
+    try:
+        from automation.press_contact_discovery import PressContactDiscovery
+
+        data = request.get_json() or {}
+        brand_name = data.get('brand') or (g.active_brand.name if g.active_brand else None)
+        scope = data.get('scope', 'all')
+        max_results = int(data.get('max', 12))
+        if not brand_name:
+            return jsonify({'success': False, 'error': 'A brand is required'}), 400
+
+        accessible_brands = {brand.name for brand in current_user.get_brands()}
+        if not current_user.is_admin and brand_name not in accessible_brands:
+            return jsonify({'success': False, 'error': 'You do not have access to that brand'}), 403
+
+        discovery = PressContactDiscovery()
+        result = discovery.discover_contacts(brand_name, scope=scope, max_results=max_results)
+        return jsonify({'success': True, **result})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -6035,12 +6118,14 @@ def api_press_contacts_list():
 @app.route('/api/press-contacts', methods=['POST'])
 @login_required
 def api_press_contact_create():
-    """Create a press contact"""
+    """Create a press contact."""
     try:
         from dashboard.models import PressContact
+
         data = request.get_json() or {}
         if not data.get('name') or not data.get('email'):
             return jsonify({'success': False, 'error': 'name and email are required'}), 400
+
         contact = PressContact(
             name=data['name'],
             outlet=data.get('outlet', ''),

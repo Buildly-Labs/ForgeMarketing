@@ -52,9 +52,11 @@
             <option value="">All Types</option>
             <option value="outreach">Outreach</option>
             <option value="discovery">Discovery</option>
+            <option value="enrichment">Enrichment</option>
             <option value="analytics">Analytics</option>
             <option value="social">Social Media</option>
             <option value="report">Report</option>
+            <option value="press">Press Discovery</option>
         </select>
         <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
             <input type="checkbox" x-model="showDisabled" @change="loadTasks()"> Show disabled
@@ -185,9 +187,11 @@
                                 class="w-full border rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500">
                             <option value="outreach">Outreach Campaign</option>
                             <option value="discovery">Influencer Discovery</option>
+                            <option value="enrichment">Influencer Enrichment</option>
                             <option value="analytics">Analytics Report</option>
                             <option value="social">Social Media Post</option>
                             <option value="report">Weekly Report</option>
+                            <option value="press">Press Contact Discovery</option>
                         </select>
                     </div>
                     <div>
@@ -265,7 +269,8 @@ function scheduleManager() {
             { id: 'weekly_analytics', name: 'Weekly Analytics Report', description: 'Generate a full analytics report every Monday', task_type: 'analytics', cron_expression: '0 9 * * 1', schedule_label: 'Every Monday at 9 AM' },
             { id: 'social_morning', name: 'Morning Social Posts', description: 'Post scheduled social media content each morning', task_type: 'social', cron_expression: '0 8 * * *', schedule_label: 'Daily at 8 AM' },
             { id: 'monthly_report', name: 'Monthly Brand Report', description: 'Full brand performance report on the 1st', task_type: 'report', cron_expression: '0 6 1 * *', schedule_label: '1st of every month' },
-            { id: 'bi_weekly_enrichment', name: 'Influencer Enrichment', description: 'Enrich influencer profiles with fresh data', task_type: 'discovery', cron_expression: '0 7 * * 1,4', schedule_label: 'Mon & Thu at 7 AM' },
+            { id: 'bi_weekly_enrichment', name: 'Influencer Enrichment', description: 'Enrich influencer profiles with fresh data', task_type: 'enrichment', cron_expression: '0 7 * * 1,4', schedule_label: 'Mon & Thu at 7 AM' },
+            { id: 'weekly_press', name: 'Press Contact Discovery', description: 'Discover fresh press contacts for the selected brand', task_type: 'press', cron_expression: '0 8 * * 2', schedule_label: 'Every Tuesday at 8 AM' },
         ],
 
         get filteredTasks() {
@@ -413,9 +418,11 @@ function scheduleManager() {
             return {
                 'outreach': 'bg-blue-100 text-blue-700',
                 'discovery': 'bg-purple-100 text-purple-700',
+                'enrichment': 'bg-indigo-100 text-indigo-700',
                 'analytics': 'bg-green-100 text-green-700',
                 'social': 'bg-pink-100 text-pink-700',
                 'report': 'bg-yellow-100 text-yellow-700',
+                'press': 'bg-orange-100 text-orange-700',
             }[type] || 'bg-gray-100 text-gray-700';
         },
     };

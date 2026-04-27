@@ -36,6 +36,8 @@ class ActivityTracker:
         # If no DATABASE_URL, try to build one from individual env vars (DigitalOcean style)
         if not self.database_url:
             db_host = os.getenv('DATABASE_HOST') or os.getenv('DB_HOST')
+            if db_host and db_host in {'db', 'database', 'mysql', 'postgres'} and not Path('/.dockerenv').exists():
+                db_host = None
             if db_host:
                 db_user = os.getenv('DATABASE_USER') or os.getenv('DB_USER', 'root')
                 db_pass = os.getenv('DATABASE_PASSWORD') or os.getenv('DB_PASSWORD', '')
