@@ -1642,14 +1642,11 @@ def _discover_brand_dashboard_artifacts(brand_obj: Brand) -> Dict[str, Any]:
 
 
 def _get_outreach_data_dir() -> Path:
-    """Resolve outreach data directory with backward-compatible fallback."""
+    """Resolve the neutral outreach data directory."""
     configured = os.getenv('OUTREACH_DATA_DIR', '').strip()
     if configured:
         return Path(configured)
 
-    legacy_dir = project_root / 'marketing' / 'buildly_outreach_data'
-    if legacy_dir.exists():
-        return legacy_dir
     return project_root / 'marketing' / 'outreach_data'
 
 
