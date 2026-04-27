@@ -12,6 +12,7 @@ import yaml
 import os
 import requests
 import subprocess
+import re
 from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
@@ -90,14 +91,15 @@ except ImportError as e:
 
 # Import outreach system
 try:
-    from marketing.buildly_user_outreach import BuildlyUserOutreach
+    from automation.outreach_runtime_service import BrandOutreachService, OutreachUser
     import csv
     import io
     print("✅ Outreach system loaded successfully")
     OUTREACH_AVAILABLE = True
 except ImportError as e:
     print(f"⚠️  Warning: Could not import outreach system: {e}")
-    BuildlyUserOutreach = None
+    BrandOutreachService = None
+    OutreachUser = None
     OUTREACH_AVAILABLE = False
 
 # Import daily email system
@@ -1193,15 +1195,11 @@ class MarketingDashboard:
             else:
                 return 'Daily Analytics Reports'
         elif 'run_brand_outreach' in command:
-            # Extract brand from command
-            if '--brand foundry' in command:
-                return 'Foundry Startup Outreach'
-            elif '--brand buildly' in command:
-                return 'Buildly Enterprise Outreach'
-            elif '--brand openbuild' in command:
-                return 'Open Build Developer Outreach'
-            else:
-                return 'Brand Outreach Campaign'
+            brand_match = re.search(r'--brand\s+([\w\-]+)', command)
+            if brand_match:
+                brand_display = _get_brand_display_name(brand_match.group(1))
+                return f'{brand_display} Outreach Campaign'
+            return 'Brand Outreach Campaign'
         elif 'discovery' in command.lower():
             return 'Target Discovery'
         elif 'blog' in command.lower():
@@ -1227,18 +1225,17 @@ class MarketingDashboard:
         """Extract brand from command path or name"""
         try:
             command = command.lower()
-            if 'foundry' in command:
-                return 'Foundry'
-            elif 'buildly' in command:
-                return 'Buildly'
-            elif 'open' in command or 'openbuild' in command:
-                return 'Open Build'
-            elif 'radical' in command:
-                return 'Radical Therapy'
-            elif 'oregon' in command:
-                return 'Oregon Software'
-            else:
-                return 'System'
+            brand_match = re.search(r'--brand\s+([\w\-]+)', command)
+            if brand_match:
+                return _get_brand_display_name(brand_match.group(1))
+
+            for active_brand in _get_active_brands():
+                tokens = _get_brand_identifier_tokens(active_brand.name)
+                tokens += _get_brand_identifier_tokens(active_brand.display_name)
+                if any(token in command for token in tokens):
+                    return active_brand.display_name
+
+            return 'System'
         except:
             return 'Unknown'
     
@@ -1523,6 +1520,144 @@ class MarketingDashboard:
 dashboard = MarketingDashboard()
 
 
+def _normalize_brand_key(name: str) -> str:
+    """Normalize brand identifiers so name/display variants resolve consistently."""
+    if not name:
+        return ''
+    normalized = re.sub(r'[^a-z0-9]+', '_', name.lower().strip())
+    return normalized.strip('_')
+
+
+def _resolve_active_brand_name(name: str) -> Optional[str]:
+    """Resolve a user-supplied brand identifier to the canonical active brand name."""
+    if not name:
+        return None
+
+    raw = name.strip()
+    raw_lower = raw.lower()
+    raw_normalized = _normalize_brand_key(raw)
+
+    # Fast path for cached exact names.
+    if raw in dashboard.brands:
+        return raw
+
+    active_brands = Brand.query.filter_by(is_active=True).all()
+    for brand in active_brands:
+        candidates = {
+            brand.name,
+            brand.name.lower(),
+            brand.display_name,
+            brand.display_name.lower(),
+            _normalize_brand_key(brand.name),
+            _normalize_brand_key(brand.display_name),
+        }
+        if raw in candidates or raw_lower in candidates or raw_normalized in candidates:
+            if brand.name not in dashboard.brands:
+                dashboard.brands.append(brand.name)
+            return brand.name
+
+    return None
+
+
+def _resolve_active_brand(name: str) -> Optional[Brand]:
+    """Resolve any brand identifier variant to an active Brand row."""
+    canonical_name = _resolve_active_brand_name(name)
+    if not canonical_name:
+        return None
+    return Brand.query.filter_by(name=canonical_name, is_active=True).first()
+
+
+def _get_active_brands() -> List[Brand]:
+    """Return all active brands, newest first."""
+    return Brand.query.filter_by(is_active=True).order_by(Brand.updated_at.desc()).all()
+
+
+def _get_active_brand_names() -> List[str]:
+    """Return canonical names for active brands."""
+    return [brand.name for brand in _get_active_brands()]
+
+
+def _get_brand_display_name(name: str) -> str:
+    """Get display name for a brand identifier, falling back to the provided value."""
+    brand_obj = _resolve_active_brand(name)
+    if brand_obj:
+        return brand_obj.display_name
+    return (name or 'Brand').replace('_', ' ').title()
+
+
+def _get_brand_identifier_tokens(name: str) -> List[str]:
+    """Build normalized tokens used to match brand assets in filesystem paths."""
+    normalized = _normalize_brand_key(name)
+    hyphen = normalized.replace('_', '-')
+    compact = normalized.replace('_', '')
+    return [token for token in {normalized, hyphen, compact} if token]
+
+
+def _discover_brand_dashboard_artifacts(brand_obj: Brand) -> Dict[str, Any]:
+    """Discover dashboard html + generator script locations for an active brand."""
+    websites_root = project_root / 'websites'
+    if not websites_root.exists():
+        return {}
+
+    tokens = set(_get_brand_identifier_tokens(brand_obj.name))
+    tokens.update(_get_brand_identifier_tokens(brand_obj.display_name))
+
+    dashboard_candidates = list(websites_root.glob('**/reports/**/dashboard*.html'))
+    dashboard_candidates += list(websites_root.glob('**/reports/**/automation*.html'))
+
+    selected_dashboard = None
+    for candidate in dashboard_candidates:
+        candidate_lower = str(candidate).lower()
+        if any(token in candidate_lower for token in tokens):
+            selected_dashboard = candidate
+            break
+
+    generator_candidates = list(websites_root.glob('**/scripts/generate_dashboard.py'))
+    generator_candidates += list(websites_root.glob('**/reports/generate_dashboard.py'))
+    generator_candidates += list(websites_root.glob('**/reports/generate_report.py'))
+
+    selected_generator = None
+    for candidate in generator_candidates:
+        candidate_lower = str(candidate).lower()
+        if any(token in candidate_lower for token in tokens):
+            selected_generator = candidate
+            break
+
+    # Prefer a generator that shares the same site root as the dashboard.
+    if selected_dashboard and not selected_generator:
+        site_root = selected_dashboard
+        while site_root.parent != websites_root and site_root.parent != site_root:
+            site_root = site_root.parent
+        for candidate in generator_candidates:
+            if str(candidate).startswith(str(site_root)):
+                selected_generator = candidate
+                break
+
+    result: Dict[str, Any] = {}
+    if selected_dashboard:
+        result['dashboard_path'] = selected_dashboard
+    if selected_generator:
+        result['generator_path'] = selected_generator
+    return result
+
+
+def _get_outreach_data_dir() -> Path:
+    """Resolve outreach data directory with backward-compatible fallback."""
+    configured = os.getenv('OUTREACH_DATA_DIR', '').strip()
+    if configured:
+        return Path(configured)
+
+    legacy_dir = project_root / 'marketing' / 'buildly_outreach_data'
+    if legacy_dir.exists():
+        return legacy_dir
+    return project_root / 'marketing' / 'outreach_data'
+
+
+def _get_outreach_log_file() -> Path:
+    """Canonical outreach log path for reporting APIs."""
+    return _get_outreach_data_dir() / 'outreach_log.json'
+
+
 def _is_known_brand(name: str) -> bool:
     """Check whether *name* is a known active brand.
 
@@ -1530,14 +1665,7 @@ def _is_known_brand(name: str) -> bool:
     Falls back to a live DB query so that brands added after startup are
     still recognised — and back-fills the cache when it finds one.
     """
-    if name in dashboard.brands:
-        return True
-    # Live DB fallback
-    brand = Brand.query.filter_by(name=name, is_active=True).first()
-    if brand:
-        dashboard.brands.append(brand.name)
-        return True
-    return False
+    return _resolve_active_brand_name(name) is not None
 
 @app.route('/')
 @login_required
@@ -1611,13 +1739,14 @@ def api_generate():
         return jsonify({'error': 'No data provided'}), 400
     
     content_type = data.get('type')
-    brand = data.get('brand')
+    raw_brand = data.get('brand')
     
-    if not content_type or not brand:
+    if not content_type or not raw_brand:
         return jsonify({'error': 'Content type and brand are required'}), 400
-    
-    if not _is_known_brand(brand):
-        return jsonify({'error': f'Unknown brand: {brand}'}), 400
+
+    brand = _resolve_active_brand_name(raw_brand)
+    if not brand:
+        return jsonify({'error': f'Unknown brand: {raw_brand}'}), 400
     
     # Remove brand from data to avoid duplicate parameter error
     data_without_brand = {k: v for k, v in data.items() if k != 'brand'}
@@ -1778,13 +1907,14 @@ def api_status():
 @app.route('/api/brands/<brand_name>')
 def api_brand_info(brand_name):
     """API endpoint for brand information"""
-    if not _is_known_brand(brand_name):
+    resolved_brand = _resolve_active_brand_name(brand_name)
+    if not resolved_brand:
         return jsonify({'error': 'Brand not found'}), 404
     
-    if dashboard.ai_generator and brand_name in dashboard.ai_generator.brand_configs:
-        brand_config = dashboard.ai_generator.brand_configs[brand_name]
+    if dashboard.ai_generator and resolved_brand in dashboard.ai_generator.brand_configs:
+        brand_config = dashboard.ai_generator.brand_configs[resolved_brand]
         return jsonify({
-            'name': brand_name,
+            'name': resolved_brand,
             'config': brand_config,
             'status': 'active'
         })
@@ -1795,13 +1925,21 @@ def api_brand_info(brand_name):
 def api_social_activity():
     """API endpoint for recent social media activity"""
     if not SOCIAL_AVAILABLE or not social_manager:
-        # Return mock data if social manager not available
+        # Return lightweight data-driven mock rows when social integration is unavailable.
+        active_brands = _get_active_brands()
+        mock_rows = []
+        for idx, brand in enumerate(active_brands[:2], start=1):
+            mock_rows.append({
+                'id': idx,
+                'type': 'social',
+                'title': f'{brand.display_name} activity pending social integration',
+                'brand': brand.display_name,
+                'time': f'{idx * 2}h ago',
+                'metric': 'N/A'
+            })
         return jsonify({
             'success': True,
-            'data': [
-                {'id': 1, 'type': 'blog', 'title': 'Blog post published', 'brand': 'Buildly', 'time': '2h ago', 'metric': '142 views'},
-                {'id': 2, 'type': 'social', 'title': 'Tweet posted', 'brand': 'Foundry', 'time': '4h ago', 'metric': '23 engagements'},
-            ],
+            'data': mock_rows,
             'source': 'mock'
         })
     
@@ -1830,15 +1968,20 @@ def api_social_activity():
 def api_social_metrics():
     """API endpoint for brand performance metrics"""
     if not SOCIAL_AVAILABLE or not social_manager:
-        # Return mock metrics
+        # Return data-driven placeholder metrics for active brands.
+        active_brand_names = _get_active_brand_names()
+        mock_metrics = {
+            brand_name: {
+                'name': brand_name,
+                'posts': 0,
+                'engagement': '0.0%',
+                'score': 0
+            }
+            for brand_name in active_brand_names
+        }
         return jsonify({
             'success': True,
-            'data': {
-                'buildly': {'name': 'buildly', 'posts': 45, 'engagement': '9.2%', 'score': 92},
-                'foundry': {'name': 'foundry', 'posts': 38, 'engagement': '8.7%', 'score': 87},
-                'open_build': {'name': 'open_build', 'posts': 32, 'engagement': '7.5%', 'score': 82},
-                'radical_therapy': {'name': 'radical_therapy', 'posts': 27, 'engagement': '8.1%', 'score': 79}
-            },
+            'data': mock_metrics,
             'source': 'mock'
         })
     
@@ -2681,8 +2824,9 @@ def api_get_brand_configs():
         brands = Brand.query.filter_by(is_active=True).all()
         result = {}
         for b in brands:
-            email_cfg = BrandEmailConfig.query.filter_by(
-                brand_id=b.id, is_active=True
+            email_cfg = BrandEmailConfig.query.filter_by(brand_id=b.id).order_by(
+                BrandEmailConfig.is_primary.desc(),
+                BrandEmailConfig.updated_at.desc()
             ).first()
             result[b.name] = {
                 'name': b.display_name,
@@ -2700,12 +2844,13 @@ def api_get_brand_configs():
 def api_get_brand_config(brand):
     """Get configuration for a specific brand from the database."""
     try:
-        b = Brand.query.filter_by(name=brand, is_active=True).first()
+        b = _resolve_active_brand(brand)
         if not b:
             return jsonify({'error': f'Unknown brand: {brand}'}), 404
 
-        email_cfg = BrandEmailConfig.query.filter_by(
-            brand_id=b.id, is_active=True
+        email_cfg = BrandEmailConfig.query.filter_by(brand_id=b.id).order_by(
+            BrandEmailConfig.is_primary.desc(),
+            BrandEmailConfig.updated_at.desc()
         ).first()
 
         return jsonify({
@@ -2734,11 +2879,10 @@ def api_preview_outreach():
             return jsonify({'error': 'Outreach system not available'}), 500
         
         # Create a temporary outreach instance with brand configuration
-        outreach = BuildlyUserOutreach(brand_name=brand)
+        outreach = BrandOutreachService(brand_name=brand)
         
         # Create a user object from the sample data
-        from marketing.buildly_user_outreach import BuildlyUser
-        user = BuildlyUser(
+        user = OutreachUser(
             email=sample_user.get('email', 'example@test.com'),
             name=sample_user.get('name', 'Sample User'),
             company=sample_user.get('company', 'Sample Company'),
@@ -3030,7 +3174,7 @@ def api_run_outreach_campaign():
                     })
                     
                     # Create outreach instance with brand configuration
-                    outreach = BuildlyUserOutreach(brand_name=brand)
+                    outreach = BrandOutreachService(brand_name=brand)
                     add_campaign_log(f'✅ Loaded brand configuration for {brand}', 'success')
                     
                     # Analyze CSV first with column mapping
@@ -3239,7 +3383,7 @@ def api_get_brand_campaigns(brand):
     """Get campaign history for a brand"""
     try:
         # Look for campaign history in the outreach data directory
-        data_dir = project_root / 'marketing' / 'buildly_outreach_data'
+        data_dir = _get_outreach_data_dir()
         log_file = data_dir / 'outreach_log.json'
         
         campaigns = []
@@ -3648,7 +3792,7 @@ def api_get_outreach_functions():
             'database_consolidation': {
                 'available': True,
                 'description': 'Database consolidation from existing sources',
-                'consolidated_sources': ['foundry_json', 'openbuild_sqlite', 'buildly_logs'],
+                'consolidated_sources': ['json_logs', 'sqlite_sources', 'email_logs'],
                 'database_path': os.getenv('UNIFIED_DB_PATH', str(Path(__file__).parent.parent / 'data' / 'unified_outreach.db'))
             }
         }
@@ -3689,7 +3833,7 @@ def api_get_email_logs():
         offset = request.args.get('offset', 0, type=int)
         
         # Load outreach log
-        log_file = Path(project_root) / 'marketing' / 'buildly_outreach_data' / 'outreach_log.json'
+        log_file = _get_outreach_log_file()
         if not log_file.exists():
             return jsonify({'error': 'Email log file not found'}), 404
             
@@ -3798,7 +3942,7 @@ def api_get_email_stats():
         days = request.args.get('days', 30, type=int)
         
         # Load outreach log
-        log_file = Path(project_root) / 'marketing' / 'buildly_outreach_data' / 'outreach_log.json'
+        log_file = _get_outreach_log_file()
         if not log_file.exists():
             return jsonify({'error': 'Email log file not found'}), 404
             
@@ -3894,7 +4038,7 @@ def api_get_message_details(message_id):
     """Get detailed information about a specific email message"""
     try:
         # Load outreach log
-        log_file = Path(project_root) / 'marketing' / 'buildly_outreach_data' / 'outreach_log.json'
+        log_file = _get_outreach_log_file()
         if not log_file.exists():
             return jsonify({'error': 'Email log file not found'}), 404
             
@@ -3931,7 +4075,7 @@ def api_get_failed_emails():
         days = request.args.get('days', 30, type=int)
         
         # Load outreach log
-        log_file = Path(project_root) / 'marketing' / 'buildly_outreach_data' / 'outreach_log.json'
+        log_file = _get_outreach_log_file()
         if not log_file.exists():
             return jsonify({'error': 'Email log file not found'}), 404
             
@@ -3985,7 +4129,7 @@ def api_get_failed_emails():
 def api_resend_emails():
     """Resend failed emails or send to specific recipients"""
     try:
-        if not OUTREACH_AVAILABLE or not BuildlyUserOutreach:
+        if not OUTREACH_AVAILABLE or not BrandOutreachService:
             return jsonify({'error': 'Buildly outreach system not available'}), 503
         
         data = request.get_json() or {}
@@ -3996,14 +4140,14 @@ def api_resend_emails():
         template = data.get('template', 'reengagement')
         custom_subject = data.get('custom_subject', '')
         custom_message = data.get('custom_message', '')
-        bcc_email = data.get('bcc_email', 'greg@buildly.io')
+        bcc_email = data.get('bcc_email') or (current_user.email if current_user and current_user.is_authenticated else '')
         
         if not recipients and not message_ids:
             return jsonify({'error': 'Must provide either recipients or message_ids'}), 400
         
         # If message IDs provided, get recipients from log
         if message_ids:
-            log_file = Path(project_root) / 'marketing' / 'buildly_outreach_data' / 'outreach_log.json'
+            log_file = _get_outreach_log_file()
             if log_file.exists():
                 with open(log_file, 'r') as f:
                     all_logs = json.load(f)
@@ -4036,7 +4180,7 @@ def api_resend_emails():
             temp_csv_path = temp_file.name
         
         # Initialize outreach system
-        outreach = BuildlyUserOutreach()
+        outreach = BrandOutreachService()
         
         # Run campaign
         result = outreach.run_outreach_campaign(
@@ -4450,9 +4594,18 @@ def api_get_outreach_reports():
 def api_send_test_email():
     """Send a test email using the unified email service with smart routing"""
     try:
-        data = request.get_json()
-        to_email = data.get('to', 'greg@buildly.io')
-        brand = data.get('brand', 'foundry')
+        data = request.get_json() or {}
+        to_email = data.get('to') or (current_user.email if current_user and current_user.is_authenticated else '')
+        requested_brand = data.get('brand') or (g.active_brand.name if g.active_brand else None)
+        if not requested_brand:
+            active_brand_names = _get_active_brand_names()
+            requested_brand = active_brand_names[0] if active_brand_names else None
+        if not requested_brand:
+            return jsonify({'success': False, 'error': 'No active brands configured'}), 400
+
+        brand = _resolve_active_brand_name(requested_brand)
+        if not brand:
+            return jsonify({'success': False, 'error': f'Unknown brand: {requested_brand}'}), 400
         campaign_type = data.get('campaign_type', 'general_outreach')
         
         # Check email configuration first
@@ -4467,7 +4620,14 @@ def api_send_test_email():
             }), 400
         
         # Import the unified email service
-        from unified_email_service import UnifiedEmailService
+        try:
+            from unified_email_service import UnifiedEmailService
+        except ImportError:
+            return jsonify({
+                'success': False,
+                'error': 'Unified email service not available',
+                'message': 'Email test endpoints require unified_email_service to be installed'
+            }), 503
         
         # Create email service instance
         email_service = UnifiedEmailService()
@@ -4506,7 +4666,7 @@ Details:
 • Brand: {brand.title()}
 • Campaign: {campaign_type}
 • Service: {email_service.service_routing.get(brand.lower(), 'brevo')}
-• Smart Routing: {'Enabled' if brand.lower() == 'buildly' else 'Standard'}
+• Smart Routing: Dynamic
 • Timestamp: {timestamp}
 
 If you receive this email, the {brand} email system is working correctly!
@@ -4537,7 +4697,7 @@ Best regards,
                     'routing_note': routing_note,
                     'brand': brand,
                     'campaign_type': campaign_type,
-                    'smart_routing': brand.lower() == 'buildly' and to_email.endswith('@buildly.io')
+                    'smart_routing': 'smart' in routing_note.lower()
                 }
             })
         else:
@@ -4548,27 +4708,37 @@ Best regards,
             }), 500
         
     except Exception as e:
+        status_code = 503 if 'not configured' in str(e).lower() else 500
         return jsonify({
             'success': False,
             'message': f'Test email failed: {str(e)}'
-        }), 500
+        }), status_code
 
 @app.route('/api/outreach/test-all-emails', methods=['POST'])
 def api_test_all_email_configurations():
     """Test email configuration for all brands and campaign types using unified service"""
     try:
-        data = request.get_json()
-        to_email = data.get('to', 'greg@buildly.io')
+        data = request.get_json() or {}
+        to_email = data.get('to') or (current_user.email if current_user and current_user.is_authenticated else '')
         
         # Import the unified email service
-        from unified_email_service import UnifiedEmailService
+        try:
+            from unified_email_service import UnifiedEmailService
+        except ImportError:
+            return jsonify({
+                'success': False,
+                'error': 'Unified email service not available',
+                'message': 'Comprehensive email tests require unified_email_service to be installed'
+            }), 503
         
         # Create email service instance
         email_service = UnifiedEmailService()
         
         # Test comprehensive routing
         test_results = []
-        brands_to_test = ['buildly', 'foundry', 'open_build']  # Core brands
+        brands_to_test = _get_active_brand_names()
+        if not brands_to_test:
+            return jsonify({'success': False, 'error': 'No active brands configured'}), 400
         campaigns_to_test = ['general_outreach', 'daily_analytics']  # Key campaigns
         
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -4584,7 +4754,7 @@ def api_test_all_email_configurations():
 Brand: {brand_key.title()}
 Campaign: {campaign_type}
 Service: {email_service.service_routing.get(brand_key.lower(), 'brevo')}
-Smart Routing: {'Active' if brand_key.lower() == 'buildly' else 'Standard'}
+Smart Routing: Dynamic
 Timestamp: {timestamp}
 
 This is part of a comprehensive test of all email routing configurations.
@@ -4847,9 +5017,7 @@ def api_daily_emails_status():
         except:
             pass
         
-        # Get brand configurations
-        from automation.daily_analytics_emailer import DAILY_EMAIL_CONFIG
-        brands = list(DAILY_EMAIL_CONFIG.keys())
+        brands = _get_active_brand_names()
         
         return jsonify({
             'success': True,
@@ -4871,58 +5039,20 @@ def api_brand_dashboards_list():
     """List all available brand dashboards"""
     try:
         dashboards = []
-        
-        # Define brand dashboard mapping
-        brand_dashboards = {
-            'foundry': {
-                'name': 'Buildly Labs Foundry',
-                'path': 'websites/foundry-website/reports/automation/dashboard.html',
-                'generator': 'websites/foundry-website/scripts/generate_dashboard.py',
-                'has_generator': True,
-                'url_path': '/brand-dashboard/foundry'
-            },
-            'openbuild': {
-                'name': 'Open Build',
-                'path': 'websites/open-build-new-website/reports/automation_dashboard.html', 
-                'generator': 'websites/open-build-new-website/reports/generate_report.py',
-                'has_generator': True,
-                'url_path': '/brand-dashboard/openbuild'
-            },
-            'buildly': {
-                'name': 'Buildly',
-                'path': 'websites/buildly-website/reports/dashboard.html',
-                'generator': None,
-                'has_generator': False,
-                'url_path': '/brand-dashboard/buildly'
-            },
-            'oregonsoftware': {
-                'name': 'Oregon Software',
-                'path': 'websites/oregonsoftware-website/reports/dashboard.html',
-                'generator': None,
-                'has_generator': False,
-                'url_path': '/brand-dashboard/oregonsoftware'
-            },
-            'radical': {
-                'name': 'Radical Therapy',
-                'path': 'websites/radical-website/reports/dashboard.html',
-                'generator': None,
-                'has_generator': False,
-                'url_path': '/brand-dashboard/radical'
-            }
-        }
-        
-        # Check which dashboards exist
-        for brand_key, info in brand_dashboards.items():
-            dashboard_path = project_root / info['path']
-            
+        for brand_obj in _get_active_brands():
+            artifacts = _discover_brand_dashboard_artifacts(brand_obj)
+            dashboard_path = artifacts.get('dashboard_path')
+            generator_path = artifacts.get('generator_path')
+
             dashboards.append({
-                'brand': brand_key,
-                'name': info['name'],
-                'exists': dashboard_path.exists(),
-                'has_generator': info['has_generator'],
-                'path': str(dashboard_path),
-                'url_path': info['url_path'],
-                'last_updated': dashboard_path.stat().st_mtime if dashboard_path.exists() else None
+                'brand': brand_obj.name,
+                'name': brand_obj.display_name,
+                'exists': bool(dashboard_path and dashboard_path.exists()),
+                'has_generator': bool(generator_path and generator_path.exists()),
+                'path': str(dashboard_path) if dashboard_path else '',
+                'generator': str(generator_path) if generator_path else '',
+                'url_path': f'/brand-dashboard/{brand_obj.name}',
+                'last_updated': dashboard_path.stat().st_mtime if dashboard_path and dashboard_path.exists() else None
             })
         
         return jsonify({
@@ -4941,52 +5071,48 @@ def api_generate_all_brand_dashboards():
     """Generate all brand dashboards"""
     try:
         data = request.get_json() or {}
-        brand = data.get('brand', 'all')
+        requested_brand = data.get('brand', 'all')
         
         results = {}
-        
-        if brand == 'all' or brand == 'foundry':
-            # Generate Foundry dashboard
+
+        if requested_brand == 'all':
+            brands_to_generate = _get_active_brands()
+        else:
+            brand_obj = _resolve_active_brand(requested_brand)
+            if not brand_obj:
+                return jsonify({'success': False, 'error': f'Unknown brand: {requested_brand}'}), 404
+            brands_to_generate = [brand_obj]
+
+        websites_root = project_root / 'websites'
+        for brand_obj in brands_to_generate:
+            artifacts = _discover_brand_dashboard_artifacts(brand_obj)
+            generator_path = artifacts.get('generator_path')
+            if not generator_path or not generator_path.exists():
+                results[brand_obj.name] = {
+                    'success': False,
+                    'error': f'Dashboard generator not found for {brand_obj.name}'
+                }
+                continue
+
             try:
-                import subprocess
-                result = subprocess.run([
-                    'python3', 'scripts/generate_dashboard.py'
-                ], cwd=project_root / 'websites' / 'foundry-website', 
-                   capture_output=True, text=True, timeout=60)
-                
-                results['foundry'] = {
+                relative = generator_path.relative_to(websites_root)
+                site_root = websites_root / relative.parts[0]
+                script_rel = Path(*relative.parts[1:])
+                result = subprocess.run(
+                    ['python3', str(script_rel)],
+                    cwd=site_root,
+                    capture_output=True,
+                    text=True,
+                    timeout=120
+                )
+
+                results[brand_obj.name] = {
                     'success': result.returncode == 0,
                     'output': result.stdout,
                     'error': result.stderr if result.returncode != 0 else None
                 }
             except Exception as e:
-                results['foundry'] = {'success': False, 'error': str(e)}
-        
-        if brand == 'all' or brand == 'openbuild':
-            # Generate Open Build dashboard
-            try:
-                import subprocess
-                result = subprocess.run([
-                    'python3', 'reports/generate_report.py'
-                ], cwd=project_root / 'websites' / 'open-build-new-website',
-                   capture_output=True, text=True, timeout=60)
-                
-                results['openbuild'] = {
-                    'success': result.returncode == 0,
-                    'output': result.stdout,
-                    'error': result.stderr if result.returncode != 0 else None
-                }
-            except Exception as e:
-                results['openbuild'] = {'success': False, 'error': str(e)}
-        
-        # TODO: Create generators for other brands when needed
-        if brand == 'all' or brand in ['buildly', 'oregonsoftware', 'radical']:
-            for missing_brand in ['buildly', 'oregonsoftware', 'radical']:
-                if brand == 'all' or brand == missing_brand:
-                    results[missing_brand] = {
-                        'success': False,
-                        'error': f'Dashboard generator not yet implemented for {missing_brand}'
-                    }
+                results[brand_obj.name] = {'success': False, 'error': str(e)}
         
         return jsonify({
             'success': True,
@@ -5003,24 +5129,17 @@ def api_generate_all_brand_dashboards():
 def serve_brand_dashboard(brand):
     """Serve brand-specific dashboard HTML"""
     try:
-        # Define dashboard paths
-        dashboard_paths = {
-            'foundry': 'websites/foundry-website/reports/automation/dashboard.html',
-            'openbuild': 'websites/open-build-new-website/reports/automation_dashboard.html',
-            'buildly': 'websites/buildly-website/reports/dashboard.html',
-            'oregonsoftware': 'websites/oregonsoftware-website/reports/dashboard.html',
-            'radical': 'websites/radical-website/reports/dashboard.html'
-        }
-        
-        if brand not in dashboard_paths:
-            if not _is_known_brand(brand):
-                return f"Unknown brand: {brand}", 404
-            return f"Dashboard not found for {brand}. Try generating it first.", 404
-        
-        dashboard_path = project_root / dashboard_paths[brand]
+        brand_obj = _resolve_active_brand(brand)
+        if not brand_obj:
+            return f"Unknown brand: {brand}", 404
+
+        artifacts = _discover_brand_dashboard_artifacts(brand_obj)
+        dashboard_path = artifacts.get('dashboard_path')
+        if not dashboard_path:
+            return f"Dashboard not found for {brand_obj.name}. Try generating it first.", 404
         
         if not dashboard_path.exists():
-            return f"Dashboard not found for {brand}. Try generating it first.", 404
+            return f"Dashboard not found for {brand_obj.name}. Try generating it first.", 404
         
         # Read and serve the HTML file
         with open(dashboard_path, 'r', encoding='utf-8') as f:
@@ -5029,7 +5148,7 @@ def serve_brand_dashboard(brand):
         # Add some meta information to identify the dashboard source
         html_content = html_content.replace(
             '</head>',
-            f'<meta name="dashboard-brand" content="{brand}">\n'
+            f'<meta name="dashboard-brand" content="{brand_obj.name}">\n'
             f'<meta name="served-from" content="main-dashboard">\n'
             f'<meta name="generated-on" content="{datetime.now().isoformat()}">\n</head>'
         )
@@ -5045,7 +5164,11 @@ def serve_brand_dashboard(brand):
 
 # Try to import influencer modules
 try:
-    from automation.influencer_discovery import BrandInfluencerDiscovery, BRAND_INFLUENCER_STRATEGIES
+    from automation.influencer_discovery import (
+        BrandInfluencerDiscovery,
+        BRAND_INFLUENCER_STRATEGIES,
+        ensure_brand_strategy,
+    )
     from automation.influencer_report_generator import InfluencerReportGenerator
     from automation.influencer_enrichment import InfluencerEnrichmentEngine
     INFLUENCER_SYSTEM_AVAILABLE = True
@@ -5060,12 +5183,20 @@ def api_discover_influencers(brand):
         return jsonify({'error': 'Influencer system not available'}), 503
     
     try:
+        resolved_brand = _resolve_active_brand_name(brand)
+        if not resolved_brand:
+            return jsonify({'success': False, 'error': f'Unknown brand: {brand}'}), 404
+
+        strategy = ensure_brand_strategy(resolved_brand)
+        if not strategy:
+            return jsonify({'success': False, 'error': f'Unknown brand: {brand}'}), 404
+
         data = request.get_json() or {}
         max_per_platform = data.get('max_per_platform', 5)
         
         async def run_discovery():
             discovery = BrandInfluencerDiscovery()
-            return await discovery.discover_brand_influencers(brand, max_per_platform)
+            return await discovery.discover_brand_influencers(resolved_brand, max_per_platform)
         
         # Run the async discovery
         results = asyncio.run(run_discovery())
@@ -5076,8 +5207,8 @@ def api_discover_influencers(brand):
         
         return jsonify({
             'success': True,
-            'brand': brand,
-            'brand_name': BRAND_INFLUENCER_STRATEGIES.get(brand, {}).get('name', brand),
+            'brand': resolved_brand,
+            'brand_name': BRAND_INFLUENCER_STRATEGIES.get(resolved_brand, {}).get('name', strategy.get('name', resolved_brand)),
             'results': {platform: len(influencers) for platform, influencers in results.items()},
             'summary': {
                 'total_discovered': total_discovered,
@@ -5103,6 +5234,8 @@ def api_list_influencers():
     try:
         # Get query parameters
         brand = request.args.get('brand') or session.get('active_brand_name')
+        if brand:
+            brand = _resolve_active_brand_name(brand) or brand
         platform = request.args.get('platform')
         min_followers = int(request.args.get('min_followers', 0))
         min_alignment = float(request.args.get('min_alignment', 0.0))
@@ -5145,9 +5278,12 @@ def api_influencer_report(brand):
     
     try:
         format_type = request.args.get('format', 'html')
+        resolved_brand = _resolve_active_brand_name(brand)
+        if not resolved_brand:
+            return jsonify({'success': False, 'error': f'Unknown brand: {brand}'}), 404
         
         generator = InfluencerReportGenerator()
-        report = generator.generate_brand_report(brand=brand, format=format_type)
+        report = generator.generate_brand_report(brand=resolved_brand, format=format_type)
         
         return jsonify({
             'success': True,
@@ -5280,7 +5416,8 @@ def api_soft_delete_influencer(influencer_id):
         })
         
     except Exception as e:
-        logger.error(f"Error soft deleting influencer {influencer_id}: {e}")
+        import logging
+        logging.getLogger('dashboard').error(f"Error soft deleting influencer {influencer_id}: {e}")
         return jsonify({
             'success': False,
             'error': str(e)
@@ -5457,6 +5594,11 @@ def api_all_influencer_content():
 
     try:
         brand = request.args.get('brand')
+        if brand:
+            resolved_brand = _resolve_active_brand_name(brand)
+            if not resolved_brand:
+                return jsonify({'success': False, 'error': f'Unknown brand: {brand}'}), 400
+            brand = resolved_brand
         min_relevance = float(request.args.get('min_relevance', 0.0))
         content_type = request.args.get('content_type')
         limit = int(request.args.get('limit', 100))
@@ -5511,6 +5653,11 @@ def api_list_contacts():
         
         # Get query parameters
         brand = request.args.get('brand') or session.get('active_brand_name')
+        if brand:
+            resolved_brand = _resolve_active_brand_name(brand)
+            if not resolved_brand:
+                return jsonify({'success': False, 'error': f'Unknown brand: {brand}'}), 400
+            brand = resolved_brand
         contact_type = request.args.get('contact_type') 
         status = request.args.get('status')
         search = request.args.get('search')
@@ -5543,6 +5690,11 @@ def api_contacts_stats():
     try:
         manager = UnifiedContactsManager()
         brand = request.args.get('brand') or session.get('active_brand_name')
+        if brand:
+            resolved_brand = _resolve_active_brand_name(brand)
+            if not resolved_brand:
+                return jsonify({'success': False, 'error': f'Unknown brand: {brand}'}), 400
+            brand = resolved_brand
         stats = manager.get_contact_stats(brand=brand)
         return jsonify(stats)
         
@@ -5757,9 +5909,10 @@ def api_schedule_list():
             accessible_brand_ids = [brand.id for brand in current_user.get_brands()]
             query = query.filter((ScheduledTask.brand_id.is_(None)) | (ScheduledTask.brand_id.in_(accessible_brand_ids)))
         if brand_filter and brand_filter != 'all':
-            brand_obj = Brand.query.filter_by(name=brand_filter, is_active=True).first()
-            if brand_obj:
-                query = query.filter_by(brand_id=brand_obj.id)
+            brand_obj = _resolve_active_brand(brand_filter)
+            if not brand_obj:
+                return jsonify({'success': False, 'error': f'Unknown brand: {brand_filter}'}), 400
+            query = query.filter_by(brand_id=brand_obj.id)
         tasks = query.order_by(ScheduledTask.created_at.desc()).all()
         return jsonify({'success': True, 'tasks': [task.to_dict() for task in tasks]})
     except Exception as e:
@@ -5781,7 +5934,7 @@ def api_schedule_create():
         brand_id = None
         brand_name = data.get('brand')
         if brand_name and brand_name != 'all':
-            brand_obj = Brand.query.filter_by(name=brand_name, is_active=True).first()
+            brand_obj = _resolve_active_brand(brand_name)
             if not brand_obj:
                 return jsonify({'success': False, 'error': f'Unknown brand: {brand_name}'}), 400
             brand_id = brand_obj.id
@@ -5828,7 +5981,7 @@ def api_schedule_update(task_id):
             if not brand_name or brand_name == 'all':
                 task.brand_id = None
             else:
-                brand_obj = Brand.query.filter_by(name=brand_name, is_active=True).first()
+                brand_obj = _resolve_active_brand(brand_name)
                 if not brand_obj:
                     return jsonify({'success': False, 'error': f'Unknown brand: {brand_name}'}), 400
                 task.brand_id = brand_obj.id
@@ -5927,9 +6080,10 @@ def api_press_releases_list():
             accessible_brand_ids = [brand.id for brand in current_user.get_brands()]
             query = query.filter(PressRelease.brand_id.in_(accessible_brand_ids))
         if brand_filter and brand_filter != 'all':
-            brand_obj = Brand.query.filter_by(name=brand_filter, is_active=True).first()
-            if brand_obj:
-                query = query.filter_by(brand_id=brand_obj.id)
+            brand_obj = _resolve_active_brand(brand_filter)
+            if not brand_obj:
+                return jsonify({'success': False, 'error': f'Unknown brand: {brand_filter}'}), 400
+            query = query.filter_by(brand_id=brand_obj.id)
         if status_filter:
             query = query.filter_by(status=status_filter)
         press_releases = query.order_by(PressRelease.created_at.desc()).all()
@@ -5950,7 +6104,7 @@ def api_press_releases_create():
             return jsonify({'success': False, 'error': 'title is required'}), 400
 
         brand_name = data.get('brand') or (g.active_brand.name if g.active_brand else None)
-        brand_obj = Brand.query.filter_by(name=brand_name, is_active=True).first() if brand_name else None
+        brand_obj = _resolve_active_brand(brand_name) if brand_name else None
         if not brand_obj:
             return jsonify({'success': False, 'error': 'Valid brand is required'}), 400
 
@@ -6098,11 +6252,15 @@ def api_press_contacts_discover():
         from automation.press_contact_discovery import PressContactDiscovery
 
         data = request.get_json() or {}
-        brand_name = data.get('brand') or (g.active_brand.name if g.active_brand else None)
+        raw_brand_name = data.get('brand') or (g.active_brand.name if g.active_brand else None)
         scope = data.get('scope', 'all')
         max_results = int(data.get('max', 12))
-        if not brand_name:
+        if not raw_brand_name:
             return jsonify({'success': False, 'error': 'A brand is required'}), 400
+
+        brand_name = _resolve_active_brand_name(raw_brand_name)
+        if not brand_name:
+            return jsonify({'success': False, 'error': f'Unknown brand: {raw_brand_name}'}), 400
 
         accessible_brands = {brand.name for brand in current_user.get_brands()}
         if not current_user.is_admin and brand_name not in accessible_brands:

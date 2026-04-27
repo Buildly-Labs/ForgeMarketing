@@ -24,6 +24,14 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def _normalize_brand_key(value: str) -> str:
+    """Normalize brand identifiers for resilient matching."""
+    if not value:
+        return ''
+    normalized = re.sub(r'[^a-z0-9]+', '_', value.lower().strip())
+    return normalized.strip('_')
+
+
 class PressContactDiscovery:
     """Discover real publication contact emails from newsroom and press pages."""
 
@@ -82,7 +90,8 @@ class PressContactDiscovery:
 
         saved_count = self._save_contacts(contacts)
         return {
-            'brand': brand_name,
+            'brand': brand.get('name', brand_name),
+            'brand_display_name': brand.get('display_name', brand_name),
             'scope': scope,
             'discovered_count': len(contacts),
             'saved_count': saved_count,
@@ -96,11 +105,27 @@ class PressContactDiscovery:
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
         try:
-            row = conn.execute(
-                "SELECT id, name, display_name, description, website_url FROM brands WHERE name = ? AND is_active = 1",
-                (brand_name,),
-            ).fetchone()
-            return dict(row) if row else None
+            rows = conn.execute(
+                "SELECT id, name, display_name, description, website_url FROM brands WHERE is_active = 1"
+            ).fetchall()
+
+            requested_raw = (brand_name or '').strip().lower()
+            requested_normalized = _normalize_brand_key(brand_name)
+
+            for row in rows:
+                row_dict = dict(row)
+                row_name = (row_dict.get('name') or '').strip()
+                row_display = (row_dict.get('display_name') or '').strip()
+                candidates = {
+                    row_name.lower(),
+                    row_display.lower(),
+                    _normalize_brand_key(row_name),
+                    _normalize_brand_key(row_display),
+                }
+                if requested_raw in candidates or requested_normalized in candidates:
+                    return row_dict
+
+            return None
         finally:
             conn.close()
 

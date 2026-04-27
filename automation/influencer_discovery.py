@@ -315,6 +315,14 @@ _BRAND_KEYWORD_STOPWORDS = {
 }
 
 
+def _normalize_brand_key(value: str) -> str:
+    """Normalize brand identifiers for resilient matching."""
+    if not value:
+        return ''
+    normalized = re.sub(r'[^a-z0-9]+', '_', value.lower().strip())
+    return normalized.strip('_')
+
+
 def _load_dashboard_brand(brand_key: str) -> Optional[Dict[str, str]]:
     """Load a dashboard brand directly from the SQLite brand catalog."""
     db_path = project_root / 'data' / 'marketing_dashboard.db'
@@ -324,15 +332,33 @@ def _load_dashboard_brand(brand_key: str) -> Optional[Dict[str, str]]:
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
     try:
-        row = conn.execute(
+        rows = conn.execute(
             """
             SELECT name, display_name, description, website_url
             FROM brands
-            WHERE name = ? AND is_active = 1
-            """,
-            (brand_key,),
-        ).fetchone()
-        return dict(row) if row else None
+            WHERE is_active = 1
+            """
+        ).fetchall()
+
+        requested_raw = (brand_key or '').strip().lower()
+        requested_normalized = _normalize_brand_key(brand_key)
+
+        for row in rows:
+            row_dict = dict(row)
+            row_name = (row_dict.get('name') or '').strip()
+            row_display = (row_dict.get('display_name') or '').strip()
+
+            candidates = {
+                row_name.lower(),
+                row_display.lower(),
+                _normalize_brand_key(row_name),
+                _normalize_brand_key(row_display),
+            }
+
+            if requested_raw in candidates or requested_normalized in candidates:
+                return row_dict
+
+        return None
     finally:
         conn.close()
 
@@ -371,7 +397,10 @@ def _build_dashboard_brand_keywords(brand_row: Dict[str, str]) -> List[str]:
 
 def ensure_brand_strategy(brand_key: str) -> Optional[Dict[str, Any]]:
     """Return an existing strategy or synthesize one from dashboard brand data."""
+    brand_key_normalized = _normalize_brand_key(brand_key)
     strategy = BRAND_INFLUENCER_STRATEGIES.get(brand_key)
+    if not strategy and brand_key_normalized:
+        strategy = BRAND_INFLUENCER_STRATEGIES.get(brand_key_normalized)
     if strategy:
         return strategy
 
@@ -398,7 +427,12 @@ def ensure_brand_strategy(brand_key: str) -> Optional[Dict[str, Any]]:
         'min_followers': 50,
         'target_engagement': 2.0,
     }
-    add_brand_strategy(brand_key, brand_config)
+    canonical_brand_key = _normalize_brand_key(brand_row.get('name') or brand_key)
+    add_brand_strategy(canonical_brand_key, brand_config)
+    if brand_key and brand_key != canonical_brand_key:
+        add_brand_strategy(brand_key, brand_config)
+    if brand_key_normalized and brand_key_normalized != canonical_brand_key:
+        add_brand_strategy(brand_key_normalized, brand_config)
     return brand_config
 
 class InfluencerDatabase:
