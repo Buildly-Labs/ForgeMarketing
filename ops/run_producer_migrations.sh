@@ -30,29 +30,42 @@ from django.db import connection
 from django.utils import timezone
 
 APP = "production_ledger"
-MIG_0005 = "0005_drop_episode_type_old"
-MIG_0006 = "0006_auto_20260416_2221"
+MIGRATION_CHAIN = [
+    "0003_add_guest_contact_fields",
+    "0004_add_media_platform_and_label",
+    "0005_drop_episode_type_old",
+    "0006_auto_20260416_2221",
+]
 
 try:
     with connection.cursor() as cursor:
         cursor.execute(
-            "SELECT 1 FROM django_migrations WHERE app = %s AND name = %s LIMIT 1",
-            [APP, MIG_0006],
+            "SELECT name FROM django_migrations WHERE app = %s",
+            [APP],
         )
-        has_0006 = cursor.fetchone() is not None
+        applied = {row[0] for row in cursor.fetchall()}
 
-        cursor.execute(
-            "SELECT 1 FROM django_migrations WHERE app = %s AND name = %s LIMIT 1",
-            [APP, MIG_0005],
-        )
-        has_0005 = cursor.fetchone() is not None
+        repaired = []
+        for idx, migration_name in enumerate(MIGRATION_CHAIN):
+            if migration_name in applied:
+                continue
 
-        if has_0006 and not has_0005:
-            cursor.execute(
-                "INSERT INTO django_migrations (app, name, applied) VALUES (%s, %s, %s)",
-                [APP, MIG_0005, timezone.now()],
+            # If any later migration in the chain is already marked applied,
+            # backfill this missing dependency to repair history consistency.
+            later_applied = any(name in applied for name in MIGRATION_CHAIN[idx + 1 :])
+            if later_applied:
+                cursor.execute(
+                    "INSERT INTO django_migrations (app, name, applied) VALUES (%s, %s, %s)",
+                    [APP, migration_name, timezone.now()],
+                )
+                applied.add(migration_name)
+                repaired.append(migration_name)
+
+        if repaired:
+            print(
+                "Repaired migration history for production_ledger: "
+                + ", ".join(repaired)
             )
-            print("Repaired migration history: marked production_ledger.0005_drop_episode_type_old as applied.")
 except Exception as exc:
     # Do not hard-fail preflight; migrate step below still handles recovery.
     print(f"Migration preflight check skipped: {exc}")
@@ -72,6 +85,12 @@ set -e
 
 if [[ $migrate_status -ne 0 ]]; then
     if echo "$migrate_output" | grep -q "InconsistentMigrationHistory" \
+        && echo "$migrate_output" | grep -q "production_ledger\.0005_drop_episode_type_old" \
+        && echo "$migrate_output" | grep -q "production_ledger\.0004_add_media_platform_and_label"; then
+        echo "Detected 0005-before-0004 inconsistency during migrate; applying compatibility fix and retrying."
+        python manage.py migrate production_ledger 0004_add_media_platform_and_label --fake --no-input
+        python manage.py migrate --no-input
+    elif echo "$migrate_output" | grep -q "InconsistentMigrationHistory" \
         && echo "$migrate_output" | grep -q "production_ledger\.0006_auto_20260416_2221" \
         && echo "$migrate_output" | grep -q "production_ledger\.0005_drop_episode_type_old"; then
         echo "Detected 0006-before-0005 inconsistency during migrate; applying compatibility fix and retrying."
