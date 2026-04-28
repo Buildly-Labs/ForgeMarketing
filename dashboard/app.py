@@ -6,6 +6,7 @@ Main web interface for managing all brand marketing activities
 
 from flask import Flask, render_template, request, jsonify, redirect, url_for, send_from_directory, abort, session, g
 from flask_login import LoginManager, login_required, current_user
+from flask_migrate import Migrate
 import asyncio
 import json
 import yaml
@@ -115,7 +116,10 @@ except ImportError as e:
 # Import outreach automation system
 try:
     from automation.multi_brand_outreach import MultiBrandOutreachCampaign, BRAND_DISCOVERY_STRATEGIES
-    from automation.unified_analytics import UnifiedOutreachAnalytics
+    try:
+        from automation.unified_analytics import UnifiedOutreachAnalytics
+    except ImportError:
+        from automation.unified_analytics import UnifiedAnalytics as UnifiedOutreachAnalytics
     from automation.real_analytics_dashboard import RealAnalyticsDashboard
     from automation.campaign_report_generator import CampaignReportGenerator
     print("✅ Multi-brand outreach system loaded successfully")
@@ -222,17 +226,21 @@ if not _database_url.startswith('sqlite'):
     }
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
+_skip_startup_db_init = os.getenv('SKIP_STARTUP_DB_INIT', '').strip().lower() in {'1', 'true', 'yes'}
+
 # Initialize database
 from dashboard.models import db, User, Brand, BrandTheme, BrandEmailConfig
 db.init_app(app)
+migrate = Migrate(app, db, compare_type=True)
 
 with app.app_context():
-    try:
-        from dashboard.database import DatabaseManager
-        DatabaseManager(app).init_db()
-        app.db_initialized = True
-    except Exception as e:
-        print(f"⚠️  Warning: Startup database initialization error: {e}")
+    if not _skip_startup_db_init:
+        try:
+            from dashboard.database import DatabaseManager
+            DatabaseManager(app).init_db()
+            app.db_initialized = True
+        except Exception as e:
+            print(f"⚠️  Warning: Startup database initialization error: {e}")
 
 # ── Flask-Login ──────────────────────────────────────────────
 login_manager = LoginManager()
@@ -291,6 +299,9 @@ def inject_brand_context():
 @app.before_request
 def initialize_database():
     """Initialize database on first request"""
+    if _skip_startup_db_init:
+        app.db_initialized = True
+        return
     if not hasattr(app, 'db_initialized'):
         with app.app_context():
             try:
@@ -452,9 +463,9 @@ def onboarding_save_email():
         if not brand_name or not provider:
             return jsonify({'error': 'brand_name and provider are required'}), 400
 
-        from dashboard.models import Brand, BrandEmailConfig
+        from dashboard.models import BrandEmailConfig
 
-        brand = Brand.query.filter_by(name=brand_name).first()
+        brand = _resolve_active_brand(brand_name)
         if not brand:
             return jsonify({'error': 'Brand not found'}), 404
 
@@ -533,9 +544,9 @@ def onboarding_save_social():
         if not brand_name:
             return jsonify({'error': 'brand_name is required'}), 400
 
-        from dashboard.models import Brand, BrandAPICredential
+        from dashboard.models import BrandAPICredential
 
-        brand = Brand.query.filter_by(name=brand_name).first()
+        brand = _resolve_active_brand(brand_name)
         if not brand:
             return jsonify({'error': 'Brand not found'}), 404
 
@@ -3424,11 +3435,16 @@ def api_get_outreach_analytics(brand):
     try:
         if not OUTREACH_AUTOMATION_AVAILABLE or not UnifiedOutreachAnalytics:
             return jsonify({'error': 'Unified outreach analytics not available'}), 503
+
+        resolved_brand = _resolve_active_brand_name(brand)
+        if not resolved_brand:
+            return jsonify({'error': f'Unknown brand: {brand}'}), 404
         
         analytics = UnifiedOutreachAnalytics()
         
         days = request.args.get('days', 30, type=int)
-        performance = analytics.get_brand_performance(brand, days)
+        days = max(1, min(days, 90))
+        performance = analytics.get_brand_performance(resolved_brand, days)
         
         return jsonify(performance)
         
@@ -3441,14 +3457,58 @@ def api_get_outreach_overview():
     try:
         if not OUTREACH_AUTOMATION_AVAILABLE or not UnifiedOutreachAnalytics:
             return jsonify({'error': 'Unified outreach analytics not available'}), 503
-        
+
+        from concurrent.futures import ThreadPoolExecutor, TimeoutError
+
         analytics = UnifiedOutreachAnalytics()
-        print(f"✅ Analytics instance created")
-        
-        days = request.args.get('days', 30, type=int)
-        overview = analytics.get_all_brands_overview()
-        print(f"✅ Got overview with {overview.get('total_brands', 0)} brands")
-        
+        days = request.args.get('days', 7, type=int)
+        timeout_seconds = request.args.get('timeout', 8, type=int)
+        days = max(1, min(days, 90))
+        timeout_seconds = max(2, min(timeout_seconds, 30))
+
+        def _load_overview() -> Dict[str, Any]:
+            try:
+                return analytics.get_all_brands_overview(days)
+            except TypeError:
+                return analytics.get_all_brands_overview()
+
+        with ThreadPoolExecutor(max_workers=1) as executor:
+            future = executor.submit(_load_overview)
+            try:
+                overview = future.result(timeout=timeout_seconds)
+            except TimeoutError:
+                return jsonify({
+                    'success': False,
+                    'timed_out': True,
+                    'error': f'Outreach overview timed out after {timeout_seconds}s',
+                    'overview': {
+                        'total_targets': 0,
+                        'total_emails_sent': 0,
+                        'total_responses': 0,
+                        'overall_response_rate': 0,
+                    },
+                    'brands': {},
+                    'recent_activity': [],
+                    'period_days': days,
+                    'last_updated': datetime.now().isoformat(),
+                }), 200
+
+        if isinstance(overview, dict) and overview.get('error'):
+            return jsonify({
+                'success': False,
+                'error': overview.get('error'),
+                'overview': {
+                    'total_targets': 0,
+                    'total_emails_sent': 0,
+                    'total_responses': 0,
+                    'overall_response_rate': 0,
+                },
+                'brands': {},
+                'recent_activity': [],
+                'period_days': days,
+                'last_updated': datetime.now().isoformat(),
+            }), 200
+
         return jsonify(overview)
         
     except Exception as e:

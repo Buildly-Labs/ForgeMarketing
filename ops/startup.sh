@@ -45,6 +45,16 @@ print_info() {
     echo -e "${BLUE}ℹ${NC} $1"
 }
 
+run_marketing_migrations() {
+    print_info "Running marketing database migrations..."
+    if bash "$PROJECT_ROOT/ops/run_marketing_migrations.sh"; then
+        print_success "Marketing database migrations applied"
+    else
+        print_error "Marketing database migration failed"
+        return 1
+    fi
+}
+
 show_help() {
     cat << EOF
 ForgeMark Setup and Deployment Script
@@ -286,6 +296,10 @@ print('Database initialization complete!')
             print_error "Database initialization failed"
             exit 1
         fi
+
+        if ! run_marketing_migrations; then
+            exit 1
+        fi
         
         # Step 9: Run smoke tests
         print_header "Running Smoke Tests"
@@ -341,6 +355,10 @@ print('Database initialization complete!')
         print_info "FLASK_ENV: $FLASK_ENV"
         print_info "OLLAMA_HOST: $OLLAMA_HOST"
         print_info "Server port: $PORT"
+
+        if ! run_marketing_migrations; then
+            exit 1
+        fi
         
         print_success "Configuration complete!"
         echo ""

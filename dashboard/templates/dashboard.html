@@ -197,9 +197,18 @@ function dashboard() {
                 }
                 
                 // Try to load real activity data from unified analytics
-                const outreachRes = await fetch('/api/outreach/overview');
+                const overviewController = new AbortController();
+                const overviewTimer = setTimeout(() => overviewController.abort(), 8000);
+                let outreachRes = null;
+                try {
+                    outreachRes = await fetch('/api/outreach/overview?days=7&timeout=6', {
+                        signal: overviewController.signal
+                    });
+                } finally {
+                    clearTimeout(overviewTimer);
+                }
                 
-                if (outreachRes.ok) {
+                if (outreachRes && outreachRes.ok) {
                     const outreachData = await outreachRes.json();
                     
                     if (outreachData.overview) {

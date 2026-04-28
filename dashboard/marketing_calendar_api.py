@@ -4,6 +4,7 @@ Marketing Calendar API endpoints for campaign and task management.
 
 from flask import Blueprint, request, jsonify
 from datetime import datetime, timedelta
+import re
 from dashboard.marketing_calendar_models import (
     MarketingCalendar, MarketingTask, ContentTemplate, MarketingWeekly,
     TaskStatus, TaskPriority, TaskType, PlatformType
@@ -12,6 +13,32 @@ from dashboard.models import Brand, SystemConfig, db
 import json
 
 marketing_calendar_bp = Blueprint('marketing_calendar', __name__, url_prefix='/api/marketing')
+
+
+def _normalize_brand_key(value: str) -> str:
+    return re.sub(r'[^a-z0-9]+', '_', (value or '').strip().lower()).strip('_')
+
+
+def _resolve_brand(brand_input: str):
+    if not brand_input:
+        return None
+    normalized = _normalize_brand_key(brand_input)
+    raw = (brand_input or '').strip().lower()
+    for brand in Brand.query.all():
+        candidates = {
+            (brand.name or '').lower(),
+            (brand.display_name or '').lower(),
+            _normalize_brand_key(brand.name or ''),
+            _normalize_brand_key(brand.display_name or ''),
+        }
+        if raw in candidates or normalized in candidates:
+            return brand
+    return None
+
+
+def _resolve_brand_name(brand_input: str) -> str:
+    brand = _resolve_brand(brand_input)
+    return brand.name if brand else ''
 
 
 # ============ CAMPAIGNS ============
@@ -23,7 +50,8 @@ def get_campaigns():
     
     query = MarketingCalendar.query
     if brand:
-        query = query.filter_by(brand_name=brand)
+        resolved_brand_name = _resolve_brand_name(brand) or brand
+        query = query.filter_by(brand_name=resolved_brand_name)
     
     campaigns = query.all()
     
@@ -60,13 +88,13 @@ def create_campaign():
         return jsonify({'success': False, 'error': 'Missing required fields'}), 400
     
     # Verify brand exists
-    brand = Brand.query.filter_by(name=data['brand_name']).first()
+    brand = _resolve_brand(data['brand_name'])
     if not brand:
         return jsonify({'success': False, 'error': 'Brand not found'}), 404
     
     try:
         campaign = MarketingCalendar(
-            brand_name=data['brand_name'],
+            brand_name=brand.name,
             campaign_name=data['campaign_name'],
             campaign_slug=data.get('campaign_slug', data['campaign_name'].lower().replace(' ', '-')),
             description=data.get('description'),
@@ -189,7 +217,8 @@ def get_tasks():
     query = MarketingTask.query
     
     if brand:
-        query = query.filter_by(brand_name=brand)
+        resolved_brand_name = _resolve_brand_name(brand) or brand
+        query = query.filter_by(brand_name=resolved_brand_name)
     if status:
         query = query.filter_by(status=TaskStatus[status.upper()])
     if platform:
@@ -226,11 +255,15 @@ def create_task():
     required = ['brand_name', 'calendar_id', 'task_name', 'platform', 'scheduled_date']
     if not all(field in data for field in required):
         return jsonify({'success': False, 'error': 'Missing required fields'}), 400
+
+    brand = _resolve_brand(data.get('brand_name'))
+    if not brand:
+        return jsonify({'success': False, 'error': 'Brand not found'}), 404
     
     try:
         task = MarketingTask(
             calendar_id=data['calendar_id'],
-            brand_name=data['brand_name'],
+            brand_name=brand.name,
             task_name=data['task_name'],
             task_slug=data.get('task_slug', data['task_name'].lower().replace(' ', '-')),
             description=data.get('description'),
@@ -366,7 +399,8 @@ def get_templates():
     query = ContentTemplate.query
     
     if brand:
-        query = query.filter_by(brand_name=brand)
+        resolved_brand_name = _resolve_brand_name(brand) or brand
+        query = query.filter_by(brand_name=resolved_brand_name)
     if platform:
         query = query.filter_by(platform=PlatformType[platform.upper()])
     if category:
@@ -397,10 +431,14 @@ def create_template():
     required = ['brand_name', 'template_name', 'platform', 'task_type']
     if not all(field in data for field in required):
         return jsonify({'success': False, 'error': 'Missing required fields'}), 400
+
+    brand = _resolve_brand(data.get('brand_name'))
+    if not brand:
+        return jsonify({'success': False, 'error': 'Brand not found'}), 404
     
     try:
         template = ContentTemplate(
-            brand_name=data['brand_name'],
+            brand_name=brand.name,
             template_name=data['template_name'],
             template_slug=data.get('template_slug', data['template_name'].lower().replace(' ', '-')),
             category=data.get('category'),
@@ -439,7 +477,8 @@ def get_weekly_reports():
     query = MarketingWeekly.query
     
     if brand:
-        query = query.filter_by(brand_name=brand)
+        resolved_brand_name = _resolve_brand_name(brand) or brand
+        query = query.filter_by(brand_name=resolved_brand_name)
     if calendar_id:
         query = query.filter_by(calendar_id=int(calendar_id))
     
@@ -470,10 +509,14 @@ def create_weekly_report():
     required = ['brand_name', 'week_start', 'week_end']
     if not all(field in data for field in required):
         return jsonify({'success': False, 'error': 'Missing required fields'}), 400
+
+    brand = _resolve_brand(data.get('brand_name'))
+    if not brand:
+        return jsonify({'success': False, 'error': 'Brand not found'}), 404
     
     try:
         report = MarketingWeekly(
-            brand_name=data['brand_name'],
+            brand_name=brand.name,
             calendar_id=data.get('calendar_id'),
             week_start=datetime.fromisoformat(data['week_start']),
             week_end=datetime.fromisoformat(data['week_end']),
@@ -514,7 +557,8 @@ def get_calendar_view():
     query = MarketingTask.query
     
     if brand:
-        query = query.filter_by(brand_name=brand)
+        resolved_brand_name = _resolve_brand_name(brand) or brand
+        query = query.filter_by(brand_name=resolved_brand_name)
     
     if start_date:
         start = datetime.fromisoformat(start_date)
@@ -581,7 +625,7 @@ def generate_content():
     if not brand_name:
         return jsonify({'success': False, 'error': 'brand_name is required'}), 400
 
-    brand = Brand.query.filter_by(name=brand_name).first()
+    brand = _resolve_brand(brand_name)
     if not brand:
         return jsonify({'success': False, 'error': 'Brand not found'}), 404
 

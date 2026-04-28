@@ -178,6 +178,28 @@ docker-compose -f ops/docker-compose.yml up -d
 cat ops/README.md
 ```
 
+## 🗄️ Database Migrations (Marketing Dashboard)
+
+The Flask marketing dashboard now uses Alembic via Flask-Migrate.
+
+Migrations run automatically in:
+- `./ops/startup.sh setup`
+- `./ops/startup.sh start`
+- Docker/supervisor startup for the `marketing` service
+
+```bash
+# Create a migration from model changes
+SKIP_STARTUP_DB_INIT=1 flask --app dashboard.app:app db migrate -m "describe change"
+
+# Apply migrations
+SKIP_STARTUP_DB_INIT=1 flask --app dashboard.app:app db upgrade
+
+# Mark an existing pre-migration database as current baseline
+SKIP_STARTUP_DB_INIT=1 flask --app dashboard.app:app db stamp head
+```
+
+Use `db stamp head` once for already-populated legacy databases before switching to `db upgrade`.
+
 ## 🐛 Troubleshooting
 
 **Port already in use:**

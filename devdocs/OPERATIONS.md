@@ -177,7 +177,7 @@ kubectl scale deployment forgemark -n forgemark --replicas=3
 ## Update Procedure
 
 1. Pull latest version: `git pull origin main`
-2. Run database migrations: `python -m automation.migrate_database`
+2. Run database migrations: `SKIP_STARTUP_DB_INIT=1 flask --app dashboard.app:app db upgrade`
 3. Restart services: `docker restart forgemark` or `helm upgrade ...`
 4. Verify health: `curl http://localhost:5000/health`
 

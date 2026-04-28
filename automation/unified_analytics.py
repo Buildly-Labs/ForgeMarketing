@@ -5,6 +5,7 @@ Works with the consolidated unified database for all brand analytics
 """
 
 import sqlite3
+import os
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Any
