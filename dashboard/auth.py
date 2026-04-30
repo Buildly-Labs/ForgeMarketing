@@ -5,12 +5,14 @@ Authentication blueprint — login, logout, brand switching.
 from flask import Blueprint, request, jsonify, render_template, redirect, url_for, session, flash, make_response
 from flask_login import login_user, logout_user, login_required, current_user
 from datetime import datetime
+import base64
 import hashlib
 import hmac
 import json
 import logging
 import os
 import time
+from sqlalchemy import text
 
 from dashboard.models import db, User, UserBrand, Brand
 
@@ -22,6 +24,76 @@ auth_bp = Blueprint('auth', __name__)
 _AUTH_COOKIE_SECRET = os.getenv('SHARED_AUTH_SECRET', 'forge-shared-auth-2025')
 AUTH_COOKIE_NAME = 'forge_auth'
 AUTH_COOKIE_MAX_AGE = 60 * 60 * 24 * 14  # 14 days
+
+
+def _check_django_password(password: str, encoded: str) -> bool:
+    """Verify Django's default PBKDF2 password formats without importing Django."""
+    if not encoded or encoded.startswith('!'):
+        return False
+    try:
+        algorithm, iterations, salt, expected_hash = encoded.split('$', 3)
+        iterations = int(iterations)
+        if algorithm == 'pbkdf2_sha256':
+            digest = hashlib.pbkdf2_hmac('sha256', password.encode(), salt.encode(), iterations)
+        elif algorithm == 'pbkdf2_sha1':
+            digest = hashlib.pbkdf2_hmac('sha1', password.encode(), salt.encode(), iterations)
+        else:
+            return False
+        actual_hash = base64.b64encode(digest).decode('ascii').strip()
+        return hmac.compare_digest(actual_hash, expected_hash)
+    except Exception:
+        return False
+
+
+def _authenticate_from_producer(email: str, password: str) -> User | None:
+    """Authenticate against Django auth_user and provision/update a dashboard user."""
+    rows = db.session.execute(
+        text(
+            """
+            SELECT email, first_name, last_name, username, is_active, is_staff, is_superuser, password
+            FROM auth_user
+            WHERE LOWER(email) = :email
+            """
+        ),
+        {'email': email.lower()},
+    ).mappings().all()
+    if not rows:
+        return None
+
+    matched = None
+    for row in rows:
+        if row.get('is_active') and _check_django_password(password, row.get('password') or ''):
+            matched = row
+            break
+    if not matched:
+        return None
+
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        first_name = (matched.get('first_name') or '').strip()
+        last_name = (matched.get('last_name') or '').strip()
+        full_name = f"{first_name} {last_name}".strip()
+        display_name = full_name or (matched.get('username') or email)
+        user = User(
+            email=email,
+            display_name=display_name,
+            is_admin=bool(matched.get('is_superuser') or matched.get('is_staff')),
+            is_active_user=True,
+        )
+        user.set_password(password)
+        db.session.add(user)
+        db.session.commit()
+        return user
+
+    if not user.is_active:
+        return None
+
+    # Keep dashboard auth in sync for future root logins.
+    user.set_password(password)
+    if matched.get('is_superuser') or matched.get('is_staff'):
+        user.is_admin = True
+    db.session.commit()
+    return user
 
 
 def _sign_auth_cookie(email: str, display_name: str) -> str:
@@ -82,7 +154,12 @@ def login():
         return render_template('login.html'), 400
 
     user = User.query.filter_by(email=email).first()
-    if not user or not user.check_password(password):
+    if user and user.check_password(password):
+        pass
+    else:
+        user = _authenticate_from_producer(email, password)
+
+    if not user:
         msg = 'Invalid email or password.'
         if request.is_json:
             return jsonify({'success': False, 'error': msg}), 401

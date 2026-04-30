@@ -89,7 +89,7 @@ def ensure_db():
 
 # ── Landing page ─────────────────────────────────────────────
 MARKETING_URL = os.getenv('MARKETING_URL', '/marketing/')
-PRODUCER_URL = os.getenv('PRODUCER_URL', '/producer/')
+PRODUCER_URL = os.getenv('PRODUCER_URL', '/producer/ledger/')
 
 @app.route('/')
 @login_required
