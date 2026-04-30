@@ -9,7 +9,7 @@ services:
       - .env
     environment:
       - MARKETING_URL=http://localhost/marketing
-      - PRODUCER_URL=http://localhost/producer
+      - PRODUCER_URL=http://localhost/producer/ledger/
       - DJANGO_SETTINGS_MODULE=logic_service.settings.docker
       - RUNNING_IN_DOCKER=1
     volumes:

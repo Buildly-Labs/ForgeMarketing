@@ -129,7 +129,6 @@ def login():
 
 
 @auth_bp.route('/logout')
-@login_required
 def logout():
     session.pop('active_brand_id', None)
     logout_user()
