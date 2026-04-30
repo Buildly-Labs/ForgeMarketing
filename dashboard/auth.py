@@ -26,14 +26,33 @@ AUTH_COOKIE_MAX_AGE = 60 * 60 * 24 * 14  # 14 days
 
 def _sign_auth_cookie(email: str, display_name: str) -> str:
     """Create a signed auth token: base64(json) + '.' + hmac signature."""
+    import base64
     payload = json.dumps({
         'email': email,
         'name': display_name,
         'ts': int(time.time()),
     }, separators=(',', ':'))
     sig = hmac.new(_AUTH_COOKIE_SECRET.encode(), payload.encode(), hashlib.sha256).hexdigest()
-    import base64
     return base64.urlsafe_b64encode(payload.encode()).decode() + '.' + sig
+
+
+def _verify_auth_cookie(token: str) -> dict | None:
+    """Verify a gateway auth cookie.  Returns the payload dict or None."""
+    import base64
+    try:
+        encoded_payload, sig = token.rsplit('.', 1)
+        payload_bytes = base64.urlsafe_b64decode(encoded_payload)
+        expected_sig = hmac.new(
+            _AUTH_COOKIE_SECRET.encode(), payload_bytes, hashlib.sha256
+        ).hexdigest()
+        if not hmac.compare_digest(sig, expected_sig):
+            return None
+        data = json.loads(payload_bytes)
+        if time.time() - data.get('ts', 0) > AUTH_COOKIE_MAX_AGE:
+            return None
+        return data
+    except Exception:
+        return None
 
 
 # ── HTML routes ──────────────────────────────────────────────

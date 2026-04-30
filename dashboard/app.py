@@ -252,6 +252,28 @@ login_manager.login_message_category = 'info'
 def load_user(user_id):
     return User.query.get(int(user_id))
 
+# ── Gateway SSO ───────────────────────────────────────────────
+@app.before_request
+def _gateway_sso():
+    """Auto-login users who carry a valid forge_auth cookie from the gateway."""
+    from flask_login import login_user as _login_user
+    from dashboard.auth import _verify_auth_cookie, AUTH_COOKIE_NAME
+    if current_user.is_authenticated:
+        return
+    token = request.cookies.get(AUTH_COOKIE_NAME)
+    if not token:
+        return
+    payload = _verify_auth_cookie(token)
+    if not payload or not payload.get('email'):
+        return
+    user = User.query.filter_by(email=payload['email'].lower().strip()).first()
+    if user and user.is_active:
+        _login_user(user, remember=True)
+        if not session.get('active_brand_id'):
+            brands = user.get_brands()
+            if brands:
+                session['active_brand_id'] = brands[0].id
+
 # ── Auth blueprint ───────────────────────────────────────────
 from dashboard.auth import auth_bp
 app.register_blueprint(auth_bp)
