@@ -22,6 +22,9 @@
                         <a href="/admin/brands" class="text-sm text-blue-600 hover:text-blue-700">
                             <i class="fas fa-building mr-1"></i>Brands
                         </a>
+                        <a href="/producer/ledger/users/?tab=invitations" class="text-sm text-blue-600 hover:text-blue-700">
+                            <i class="fas fa-envelope-open-text mr-1"></i>Producer Invites
+                        </a>
                         <a href="/" class="text-sm text-gray-600 hover:text-gray-700">
                             <i class="fas fa-arrow-left mr-1"></i>Dashboard
                         </a>
@@ -86,8 +89,17 @@
                                     <button @click="openEditModal(user)" class="text-blue-600 hover:text-blue-800 text-sm">
                                         <i class="fas fa-edit"></i>
                                     </button>
+                                    <button @click="resetPassword(user)" class="text-indigo-600 hover:text-indigo-800 text-sm" title="Reset password">
+                                        <i class="fas fa-key"></i>
+                                    </button>
+                                    <button @click="setTempPassword(user)" class="text-cyan-600 hover:text-cyan-800 text-sm" title="Set temporary password">
+                                        <i class="fas fa-user-clock"></i>
+                                    </button>
                                     <button @click="deactivateUser(user)" class="text-red-600 hover:text-red-800 text-sm">
                                         <i class="fas fa-user-slash"></i>
+                                    </button>
+                                    <button @click="deleteUser(user)" class="text-red-800 hover:text-red-900 text-sm" title="Delete user permanently">
+                                        <i class="fas fa-trash"></i>
                                     </button>
                                 </td>
                             </tr>
@@ -154,22 +166,24 @@
                 brands: [],
                 showModal: false,
                 editingUser: null,
+                apiBase: '/api/admin',
                 form: { email: '', display_name: '', password: '', is_admin: false, brand_ids: [] },
                 alert: { show: false, type: '', message: '' },
 
                 init() {
+                    this.apiBase = window.location.pathname.startsWith('/marketing/') ? '/marketing/api/admin' : '/api/admin';
                     this.loadUsers();
                     this.loadBrands();
                 },
 
                 async loadUsers() {
-                    const res = await fetch('/api/admin/users');
+                    const res = await fetch(`${this.apiBase}/users`);
                     const data = await res.json();
                     if (data.success) this.users = data.users;
                 },
 
                 async loadBrands() {
-                    const res = await fetch('/api/admin/brands');
+                    const res = await fetch(`${this.apiBase}/brands`);
                     const data = await res.json();
                     if (data.success) this.brands = data.brands;
                 },
@@ -205,7 +219,7 @@
                     const payload = { ...this.form };
                     if (this.editingUser && !payload.password) delete payload.password;
 
-                    const url = this.editingUser ? `/api/admin/users/${this.editingUser.id}` : '/api/admin/users';
+                    const url = this.editingUser ? `${this.apiBase}/users/${this.editingUser.id}` : `${this.apiBase}/users`;
                     const method = this.editingUser ? 'PUT' : 'POST';
                     const res = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
                     const data = await res.json();
@@ -221,13 +235,59 @@
 
                 async deactivateUser(user) {
                     if (!confirm(`Deactivate ${user.email}?`)) return;
-                    const res = await fetch(`/api/admin/users/${user.id}`, { method: 'DELETE' });
+                    const res = await fetch(`${this.apiBase}/users/${user.id}`, { method: 'DELETE' });
                     const data = await res.json();
                     if (data.success) {
                         this.showAlert('success', data.message);
                         this.loadUsers();
                     } else {
                         this.showAlert('error', data.error);
+                    }
+                },
+
+                async deleteUser(user) {
+                    if (!confirm(`Delete ${user.email} permanently? This cannot be undone.`)) return;
+                    const res = await fetch(`${this.apiBase}/users/${user.id}?permanent=true`, { method: 'DELETE' });
+                    const data = await res.json();
+                    if (data.success) {
+                        this.showAlert('success', data.message);
+                        this.loadUsers();
+                    } else {
+                        this.showAlert('error', data.error || 'Failed to delete user');
+                    }
+                },
+
+                async resetPassword(user) {
+                    if (!confirm(`Generate a new temporary password for ${user.email}?`)) return;
+                    const res = await fetch(`${this.apiBase}/users/${user.id}/reset-password`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({}),
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        this.showAlert('success', `Reset for ${user.email}. Temporary password: ${data.temporary_password}`);
+                        this.loadUsers();
+                    } else {
+                        this.showAlert('error', data.error || 'Failed to reset password');
+                    }
+                },
+
+                async setTempPassword(user) {
+                    const temp = prompt(`Enter a temporary password for ${user.email} (leave blank to auto-generate):`, '');
+                    if (temp === null) return;
+                    const payload = temp ? { temporary_password: temp } : {};
+                    const res = await fetch(`${this.apiBase}/users/${user.id}/temporary-password`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload),
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                        this.showAlert('success', `Temporary password for ${user.email}: ${data.temporary_password}`);
+                        this.loadUsers();
+                    } else {
+                        this.showAlert('error', data.error || 'Failed to set temporary password');
                     }
                 },
 

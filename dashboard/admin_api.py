@@ -8,6 +8,8 @@ from functools import wraps
 from datetime import datetime
 from typing import Dict, Any, Tuple
 import logging
+import secrets
+import string
 
 from dashboard.models import db, Brand, BrandEmailConfig, BrandSettings, APICredentialLog, SystemConfig, User, UserBrand
 
@@ -817,13 +819,21 @@ def update_user(user_id: int):
 @admin_bp.route('/users/<int:user_id>', methods=['DELETE'])
 @admin_required
 def delete_user(user_id: int):
-    """Deactivate (soft-delete) a user. Does not remove the row."""
+    """Deactivate a user, or permanently delete with ?permanent=true."""
     try:
         user = User.query.get(user_id)
         if not user:
             return jsonify({'success': False, 'error': 'User not found'}), 404
         if user.id == current_user.id:
             return jsonify({'success': False, 'error': 'Cannot delete your own account'}), 400
+
+        permanent = str(request.args.get('permanent', '')).lower() in {'1', 'true', 'yes'}
+        if permanent:
+            deleted_email = user.email
+            db.session.delete(user)
+            db.session.commit()
+            logger.info(f"User deleted: {deleted_email} by {current_user.email}")
+            return jsonify({'success': True, 'message': f'User {deleted_email} deleted'}), 200
 
         user.is_active_user = False
         db.session.commit()
@@ -833,4 +843,70 @@ def delete_user(user_id: int):
     except Exception as e:
         db.session.rollback()
         logger.error(f"Error deactivating user: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@admin_bp.route('/users/<int:user_id>/temporary-password', methods=['POST'])
+@admin_required
+def set_temporary_password(user_id: int):
+    """Set or generate a temporary password and force change on next login."""
+    try:
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({'success': False, 'error': 'User not found'}), 404
+
+        data = request.get_json() or {}
+        temporary_password = (data.get('temporary_password') or '').strip()
+        if not temporary_password:
+            alphabet = string.ascii_letters + string.digits
+            temporary_password = ''.join(secrets.choice(alphabet) for _ in range(12))
+
+        if len(temporary_password) < 8:
+            return jsonify({'success': False, 'error': 'Temporary password must be at least 8 characters'}), 400
+
+        user.set_password(temporary_password)
+        user.must_change_password = True
+        user.is_active_user = True
+        db.session.commit()
+
+        logger.info(f"Temporary password set for {user.email} by {current_user.email}")
+        return jsonify({
+            'success': True,
+            'message': f'Temporary password set for {user.email}',
+            'temporary_password': temporary_password,
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error setting temporary password: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@admin_bp.route('/users/<int:user_id>/reset-password', methods=['POST'])
+@admin_required
+def reset_user_password(user_id: int):
+    """Generate a new temporary password for password-reset flows."""
+    try:
+        user = User.query.get(user_id)
+        if not user:
+            return jsonify({'success': False, 'error': 'User not found'}), 404
+
+        alphabet = string.ascii_letters + string.digits
+        temporary_password = ''.join(secrets.choice(alphabet) for _ in range(12))
+
+        user.set_password(temporary_password)
+        user.must_change_password = True
+        user.is_active_user = True
+        db.session.commit()
+
+        logger.info(f"Password reset for {user.email} by {current_user.email}")
+        return jsonify({
+            'success': True,
+            'message': f'Password reset for {user.email}',
+            'temporary_password': temporary_password,
+        }), 200
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error resetting password: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500

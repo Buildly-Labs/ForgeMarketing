@@ -61,6 +61,8 @@ class User(UserMixin, db.Model):
             'email': self.email,
             'display_name': self.display_name,
             'is_admin': self.is_admin,
+            'is_active': self.is_active_user,
+            'must_change_password': self.must_change_password,
             'brands': [ub.brand.name for ub in self.brand_memberships.all()],
             'last_login_at': self.last_login_at.isoformat() if self.last_login_at else None,
         }
