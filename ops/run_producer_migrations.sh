@@ -78,43 +78,53 @@ python manage.py migrate production_ledger 0002 --fake --no-input >/tmp/producer
 python manage.py migrate logic 0002 --fake --no-input >/tmp/producer_mig_pre_2.log 2>&1
 set -e
 
-set +e
-migrate_output=$(python manage.py migrate --no-input 2>&1)
-migrate_status=$?
-set -e
+max_attempts=6
+attempt=1
 
-if [[ $migrate_status -ne 0 ]]; then
+while [[ $attempt -le $max_attempts ]]; do
+    set +e
+    migrate_output=$(python manage.py migrate --no-input 2>&1)
+    migrate_status=$?
+    set -e
+
+    if [[ $migrate_status -eq 0 ]]; then
+        break
+    fi
+
     if echo "$migrate_output" | grep -q "InconsistentMigrationHistory" \
         && echo "$migrate_output" | grep -q "production_ledger\.0005_drop_episode_type_old" \
         && echo "$migrate_output" | grep -q "production_ledger\.0004_add_media_platform_and_label"; then
-        echo "Detected 0005-before-0004 inconsistency during migrate; applying compatibility fix and retrying."
+        echo "Detected 0005-before-0004 inconsistency during migrate; applying compatibility fix (attempt ${attempt}/${max_attempts})."
         python manage.py migrate production_ledger 0004_add_media_platform_and_label --fake --no-input
-        python manage.py migrate --no-input
     elif echo "$migrate_output" | grep -q "InconsistentMigrationHistory" \
         && echo "$migrate_output" | grep -q "production_ledger\.0006_auto_20260416_2221" \
         && echo "$migrate_output" | grep -q "production_ledger\.0005_drop_episode_type_old"; then
-        echo "Detected 0006-before-0005 inconsistency during migrate; applying compatibility fix and retrying."
+        echo "Detected 0006-before-0005 inconsistency during migrate; applying compatibility fix (attempt ${attempt}/${max_attempts})."
         python manage.py migrate production_ledger 0005_drop_episode_type_old --fake --no-input
-        python manage.py migrate --no-input
     elif echo "$migrate_output" | grep -q "Duplicate column name 'completed_at'"; then
-        echo "Detected duplicate completed_at column from production_ledger.0008; faking migration and retrying."
+        echo "Detected duplicate completed_at column from production_ledger.0008; faking migration (attempt ${attempt}/${max_attempts})."
         python manage.py migrate production_ledger 0008_add_segment_live_recording_fields --fake --no-input
-        python manage.py migrate --no-input
     elif echo "$migrate_output" | grep -q "production_ledger_showjoinrequest" \
         && echo "$migrate_output" | grep -q "already exists" \
         && echo "$migrate_output" | grep -q "production_ledger\.0009_show_join_request"; then
-        echo "Detected existing production_ledger_showjoinrequest table; faking production_ledger.0009 and retrying."
+        echo "Detected existing production_ledger_showjoinrequest table; faking production_ledger.0009 (attempt ${attempt}/${max_attempts})."
         python manage.py migrate production_ledger 0009_show_join_request --fake --no-input
-        python manage.py migrate --no-input
     elif echo "$migrate_output" | grep -qi "0007_fix_icon_column_charset\|CHARACTER SET\|MODIFY COLUMN"; then
-        echo "Detected failure in production_ledger.0007 charset migration; faking migration and retrying."
+        echo "Detected failure in production_ledger.0007 charset migration; faking migration (attempt ${attempt}/${max_attempts})."
         python manage.py migrate production_ledger 0007_fix_icon_column_charset --fake --no-input
-        python manage.py migrate --no-input
     else
         echo "$migrate_output"
         echo "Producer migration failed with unrecoverable error."
         exit $migrate_status
     fi
+
+    attempt=$((attempt + 1))
+done
+
+if [[ ${migrate_status:-1} -ne 0 ]]; then
+    echo "$migrate_output"
+    echo "Producer migration failed after ${max_attempts} recovery attempts."
+    exit ${migrate_status:-1}
 fi
 
 echo "Producer database migrations complete."
