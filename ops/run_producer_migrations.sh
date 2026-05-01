@@ -100,8 +100,14 @@ if [[ $migrate_status -ne 0 ]]; then
         echo "Detected duplicate completed_at column from production_ledger.0008; faking migration and retrying."
         python manage.py migrate production_ledger 0008_add_segment_live_recording_fields --fake --no-input
         python manage.py migrate --no-input
+    elif echo "$migrate_output" | grep -q "production_ledger_showjoinrequest" \
+        && echo "$migrate_output" | grep -q "already exists" \
+        && echo "$migrate_output" | grep -q "production_ledger\.0009_show_join_request"; then
+        echo "Detected existing production_ledger_showjoinrequest table; faking production_ledger.0009 and retrying."
+        python manage.py migrate production_ledger 0009_show_join_request --fake --no-input
+        python manage.py migrate --no-input
     elif echo "$migrate_output" | grep -qi "0007_fix_icon_column_charset\|CHARACTER SET\|MODIFY COLUMN"; then
-        echo "Detected MySQL-syntax failure in production_ledger.0007 (non-MySQL database); faking migration and retrying."
+        echo "Detected failure in production_ledger.0007 charset migration; faking migration and retrying."
         python manage.py migrate production_ledger 0007_fix_icon_column_charset --fake --no-input
         python manage.py migrate --no-input
     else
