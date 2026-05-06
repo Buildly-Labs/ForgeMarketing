@@ -201,7 +201,6 @@ def upload_presign():
                 'Bucket': cfg['bucket'],
                 'Key': key,
                 'ContentType': content_type,
-                'ACL': 'public-read',
             },
             ExpiresIn=expires,
         )
