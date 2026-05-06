@@ -119,6 +119,12 @@ while [[ $attempt -le $max_attempts ]]; do
         break
     fi
 
+    failed_production_ledger_migration=$(
+        echo "$migrate_output" \
+            | sed -n "s/.*Applying production_ledger\.\([a-zA-Z0-9_]*\)\.\.\.*/\1/p" \
+            | tail -1
+    )
+
     if echo "$migrate_output" | grep -q "InconsistentMigrationHistory" \
         && echo "$migrate_output" | grep -q "production_ledger\.0005_drop_episode_type_old" \
         && echo "$migrate_output" | grep -q "production_ledger\.0004_add_media_platform_and_label"; then
@@ -142,6 +148,10 @@ while [[ $attempt -le $max_attempts ]]; do
         && echo "$migrate_output" | grep -q "production_ledger_podcastdistribution\|production_ledger_podcastfeedconfig\|production_ledger_videoshort"; then
         echo "Detected existing 0010 distribution/shorts tables; faking production_ledger.0010 (attempt ${attempt}/${max_attempts})."
         "${PYTHON_BIN}" manage.py migrate production_ledger 0010_distribution_transcription_shorts --fake --no-input
+    elif [[ -n "$failed_production_ledger_migration" ]] \
+        && echo "$migrate_output" | grep -Eqi "already exists|duplicate column|duplicate key|duplicate index|index .* already exists|column .* already exists"; then
+        echo "Detected schema drift while applying production_ledger.${failed_production_ledger_migration}; faking migration (attempt ${attempt}/${max_attempts})."
+        "${PYTHON_BIN}" manage.py migrate production_ledger "${failed_production_ledger_migration}" --fake --no-input
     elif echo "$migrate_output" | grep -qi "0007_fix_icon_column_charset\|CHARACTER SET\|MODIFY COLUMN"; then
         echo "Detected failure in production_ledger.0007 charset migration; faking migration (attempt ${attempt}/${max_attempts})."
         "${PYTHON_BIN}" manage.py migrate production_ledger 0007_fix_icon_column_charset --fake --no-input
