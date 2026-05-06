@@ -7,6 +7,11 @@ Shares the same database and User model with ForgeMarketing.
 import os
 import sys
 import uuid
+import base64
+import hashlib
+import hmac
+import json
+import time
 from pathlib import Path
 from urllib.parse import quote
 
@@ -27,6 +32,10 @@ except ImportError:
 
 app = Flask(__name__, template_folder='gateway/templates', static_folder='gateway/static')
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'marketing-automation-dashboard-2025')
+
+AUTH_COOKIE_NAME = 'forge_auth'
+SHARED_SECRET = os.getenv('SHARED_AUTH_SECRET', 'forge-shared-auth-2025')
+MAX_AGE_SECONDS = 60 * 60 * 24 * 14
 
 
 def _spaces_config():
@@ -58,6 +67,28 @@ def _spaces_client():
 def _public_url(key: str) -> str:
     cfg = _spaces_config()
     return f"https://{cfg['custom_domain'].rstrip('/')}/{quote(key)}"
+
+
+def _verify_gateway_token(token: str):
+    """Verify the shared forge_auth cookie without requiring database access."""
+    if not token or '.' not in token:
+        return None
+    try:
+        encoded_payload, sig = token.rsplit('.', 1)
+        # base64 urlsafe decode with missing padding support
+        padding = '=' * (-len(encoded_payload) % 4)
+        payload_bytes = base64.urlsafe_b64decode(encoded_payload + padding)
+        expected_sig = hmac.new(
+            SHARED_SECRET.encode(), payload_bytes, hashlib.sha256
+        ).hexdigest()
+        if not hmac.compare_digest(sig, expected_sig):
+            return None
+        data = json.loads(payload_bytes)
+        if time.time() - data.get('ts', 0) > MAX_AGE_SECONDS:
+            return None
+        return data
+    except Exception:
+        return None
 
 # ── Database (same URI as ForgeMarketing) ────────────────────
 def _build_database_url():
@@ -115,6 +146,10 @@ app.register_blueprint(auth_bp)
 # ── Ensure DB tables + seed admin ────────────────────────────
 @app.before_request
 def ensure_db():
+    # Keep direct upload URL generation path lightweight and independent from DB.
+    if request.path in ('/upload/presign', '/health'):
+        return
+
     if not hasattr(app, '_db_ready'):
         from dashboard.database import DatabaseManager
         db_manager = DatabaseManager(app)
@@ -139,9 +174,13 @@ def health():
 
 
 @app.route('/upload/presign', methods=['POST'])
-@login_required
 def upload_presign():
     """Return a short-lived presigned PUT URL for direct browser upload."""
+    token = request.cookies.get(AUTH_COOKIE_NAME)
+    payload = _verify_gateway_token(token)
+    if not payload:
+        return jsonify({'detail': 'Authentication required.'}), 401
+
     body = request.get_json(silent=True) or {}
     filename = os.path.basename((body.get('filename') or 'upload.bin').strip())
     content_type = (body.get('content_type') or 'application/octet-stream').strip()
