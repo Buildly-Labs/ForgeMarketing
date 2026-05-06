@@ -6,13 +6,16 @@ Shares the same database and User model with ForgeMarketing.
 
 import os
 import sys
+import uuid
 from pathlib import Path
+from urllib.parse import quote
 
 # Ensure ForgeMarketing is on the path so we can reuse its models
 PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from flask import Flask, render_template, redirect, session, g
+import boto3
+from flask import Flask, jsonify, render_template, redirect, request, session, g
 from flask_login import LoginManager, current_user, login_required
 
 # Load .env
@@ -24,6 +27,37 @@ except ImportError:
 
 app = Flask(__name__, template_folder='gateway/templates', static_folder='gateway/static')
 app.secret_key = os.getenv('FLASK_SECRET_KEY', 'marketing-automation-dashboard-2025')
+
+
+def _spaces_config():
+    bucket = os.getenv('AWS_STORAGE_BUCKET_NAME', 'collab')
+    endpoint = os.getenv('AWS_S3_ENDPOINT_URL', 'https://cms-static.nyc3.digitaloceanspaces.com')
+    custom_domain = os.getenv('AWS_S3_CUSTOM_DOMAIN', f'cms-static.nyc3.digitaloceanspaces.com/{bucket}')
+    return {
+        'bucket': bucket,
+        'endpoint': endpoint,
+        'region': os.getenv('AWS_REGION', 'nyc3'),
+        'key': os.getenv('AWS_ACCESS_KEY_ID', 'DO00MW9V6QPPJKVCGHYA'),
+        'secret': os.getenv('SPACES_SECRET', ''),
+        'custom_domain': custom_domain,
+    }
+
+
+def _spaces_client():
+    cfg = _spaces_config()
+    session = boto3.session.Session()
+    return session.client(
+        's3',
+        region_name=cfg['region'],
+        endpoint_url=cfg['endpoint'],
+        aws_access_key_id=cfg['key'],
+        aws_secret_access_key=cfg['secret'],
+    )
+
+
+def _public_url(key: str) -> str:
+    cfg = _spaces_config()
+    return f"https://{cfg['custom_domain'].rstrip('/')}/{quote(key)}"
 
 # ── Database (same URI as ForgeMarketing) ────────────────────
 def _build_database_url():
@@ -102,6 +136,45 @@ def index():
 @app.route('/health')
 def health():
     return 'ok', 200
+
+
+@app.route('/upload/presign', methods=['POST'])
+@login_required
+def upload_presign():
+    """Return a short-lived presigned PUT URL for direct browser upload."""
+    body = request.get_json(silent=True) or {}
+    filename = os.path.basename((body.get('filename') or 'upload.bin').strip())
+    content_type = (body.get('content_type') or 'application/octet-stream').strip()
+    episode_id = (body.get('episode_id') or '').strip()
+    org_uuid = (body.get('organization_uuid') or '').strip()
+
+    if not episode_id or not org_uuid:
+        return jsonify({'detail': 'episode_id and organization_uuid are required.'}), 400
+
+    key = f"producer/{org_uuid}/episodes/{episode_id}/media/{uuid.uuid4().hex[:8]}_{filename}"
+    expires = 3600
+    cfg = _spaces_config()
+
+    try:
+        url = _spaces_client().generate_presigned_url(
+            'put_object',
+            Params={
+                'Bucket': cfg['bucket'],
+                'Key': key,
+                'ContentType': content_type,
+                'ACL': 'public-read',
+            },
+            ExpiresIn=expires,
+        )
+    except Exception as exc:
+        return jsonify({'detail': f'Could not generate upload URL: {exc}'}), 500
+
+    return jsonify({
+        'url': url,
+        'key': key,
+        'public_url': _public_url(key),
+        'expires_in': expires,
+    }), 200
 
 if __name__ == '__main__':
     port = int(os.getenv('GATEWAY_PORT', 5000))
