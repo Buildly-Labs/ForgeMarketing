@@ -39,9 +39,9 @@ MAX_AGE_SECONDS = 60 * 60 * 24 * 14
 
 
 def _spaces_config():
-    bucket = os.getenv('AWS_STORAGE_BUCKET_NAME', 'collab')
+    bucket = os.getenv('AWS_STORAGE_BUCKET_NAME', 'cms-static')
     endpoint = os.getenv('AWS_S3_ENDPOINT_URL', 'https://cms-static.nyc3.digitaloceanspaces.com')
-    custom_domain = os.getenv('AWS_S3_CUSTOM_DOMAIN', f'cms-static.nyc3.digitaloceanspaces.com/{bucket}')
+    custom_domain = os.getenv('AWS_S3_CUSTOM_DOMAIN', 'cms-static.nyc3.digitaloceanspaces.com')
     return {
         'bucket': bucket,
         'endpoint': endpoint,
@@ -175,7 +175,7 @@ def health():
 
 @app.route('/upload/presign', methods=['POST'])
 def upload_presign():
-    """Return a short-lived presigned PUT URL for direct browser upload."""
+    """Return a short-lived presigned POST policy for direct browser upload."""
     token = request.cookies.get(AUTH_COOKIE_NAME)
     payload = _verify_gateway_token(token)
     if not payload:
@@ -183,32 +183,28 @@ def upload_presign():
 
     body = request.get_json(silent=True) or {}
     filename = os.path.basename((body.get('filename') or 'upload.bin').strip())
-    content_type = (body.get('content_type') or 'application/octet-stream').strip()
     episode_id = (body.get('episode_id') or '').strip()
     org_uuid = (body.get('organization_uuid') or '').strip()
 
     if not episode_id or not org_uuid:
         return jsonify({'detail': 'episode_id and organization_uuid are required.'}), 400
 
-    key = f"producer/{org_uuid}/episodes/{episode_id}/media/{uuid.uuid4().hex[:8]}_{filename}"
+    key = f"foundry/producer/{org_uuid}/episodes/{episode_id}/media/{uuid.uuid4().hex[:8]}_{filename}"
     expires = 3600
     cfg = _spaces_config()
 
     try:
-        url = _spaces_client().generate_presigned_url(
-            'put_object',
-            Params={
-                'Bucket': cfg['bucket'],
-                'Key': key,
-                'ContentType': content_type,
-            },
+        post = _spaces_client().generate_presigned_post(
+            Bucket=cfg['bucket'],
+            Key=key,
             ExpiresIn=expires,
         )
     except Exception as exc:
         return jsonify({'detail': f'Could not generate upload URL: {exc}'}), 500
 
     return jsonify({
-        'url': url,
+        'url': post['url'],
+        'fields': post['fields'],
         'key': key,
         'public_url': _public_url(key),
         'expires_in': expires,
