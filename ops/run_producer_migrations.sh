@@ -5,11 +5,39 @@ set -euo pipefail
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_ROOT/Producer"
 
+# Ensure deployment runs against the correct settings without manual exports.
+if [[ -z "${RUNNING_IN_DOCKER:-}" ]]; then
+    if [[ -f "/.dockerenv" ]]; then
+        export RUNNING_IN_DOCKER="1"
+    else
+        export RUNNING_IN_DOCKER="0"
+    fi
+fi
+
+if [[ -z "${DJANGO_SETTINGS_MODULE:-}" ]]; then
+    if [[ "${RUNNING_IN_DOCKER}" == "1" ]]; then
+        export DJANGO_SETTINGS_MODULE="logic_service.settings.docker"
+    else
+        export DJANGO_SETTINGS_MODULE="logic_service.settings.dev"
+    fi
+fi
+
+echo "Producer migration env: DJANGO_SETTINGS_MODULE=${DJANGO_SETTINGS_MODULE}, RUNNING_IN_DOCKER=${RUNNING_IN_DOCKER}"
+
+if command -v python >/dev/null 2>&1; then
+    PYTHON_BIN="python"
+elif command -v python3 >/dev/null 2>&1; then
+    PYTHON_BIN="python3"
+else
+    echo "Python executable not found (expected python or python3)."
+    exit 1
+fi
+
 echo "Running producer database migrations..."
 
 # Preflight repair for known production_ledger migration ordering issue:
 # 0006 recorded as applied while dependency 0005 is missing.
-python - <<'PY'
+"${PYTHON_BIN}" - <<'PY'
 import os
 import sys
 
@@ -74,8 +102,8 @@ PY
 
 # Historical compatibility fakes (safe to repeat; no-op when already applied).
 set +e
-python manage.py migrate production_ledger 0002 --fake --no-input >/tmp/producer_mig_pre_1.log 2>&1
-python manage.py migrate logic 0002 --fake --no-input >/tmp/producer_mig_pre_2.log 2>&1
+"${PYTHON_BIN}" manage.py migrate production_ledger 0002 --fake --no-input >/tmp/producer_mig_pre_1.log 2>&1
+"${PYTHON_BIN}" manage.py migrate logic 0002 --fake --no-input >/tmp/producer_mig_pre_2.log 2>&1
 set -e
 
 max_attempts=6
@@ -83,7 +111,7 @@ attempt=1
 
 while [[ $attempt -le $max_attempts ]]; do
     set +e
-    migrate_output=$(python manage.py migrate --no-input 2>&1)
+    migrate_output=$("${PYTHON_BIN}" manage.py migrate --no-input 2>&1)
     migrate_status=$?
     set -e
 
@@ -95,23 +123,28 @@ while [[ $attempt -le $max_attempts ]]; do
         && echo "$migrate_output" | grep -q "production_ledger\.0005_drop_episode_type_old" \
         && echo "$migrate_output" | grep -q "production_ledger\.0004_add_media_platform_and_label"; then
         echo "Detected 0005-before-0004 inconsistency during migrate; applying compatibility fix (attempt ${attempt}/${max_attempts})."
-        python manage.py migrate production_ledger 0004_add_media_platform_and_label --fake --no-input
+        "${PYTHON_BIN}" manage.py migrate production_ledger 0004_add_media_platform_and_label --fake --no-input
     elif echo "$migrate_output" | grep -q "InconsistentMigrationHistory" \
         && echo "$migrate_output" | grep -q "production_ledger\.0006_auto_20260416_2221" \
         && echo "$migrate_output" | grep -q "production_ledger\.0005_drop_episode_type_old"; then
         echo "Detected 0006-before-0005 inconsistency during migrate; applying compatibility fix (attempt ${attempt}/${max_attempts})."
-        python manage.py migrate production_ledger 0005_drop_episode_type_old --fake --no-input
+        "${PYTHON_BIN}" manage.py migrate production_ledger 0005_drop_episode_type_old --fake --no-input
     elif echo "$migrate_output" | grep -q "Duplicate column name 'completed_at'"; then
         echo "Detected duplicate completed_at column from production_ledger.0008; faking migration (attempt ${attempt}/${max_attempts})."
-        python manage.py migrate production_ledger 0008_add_segment_live_recording_fields --fake --no-input
+        "${PYTHON_BIN}" manage.py migrate production_ledger 0008_add_segment_live_recording_fields --fake --no-input
     elif echo "$migrate_output" | grep -q "production_ledger_showjoinrequest" \
         && echo "$migrate_output" | grep -q "already exists" \
         && echo "$migrate_output" | grep -q "production_ledger\.0009_show_join_request"; then
         echo "Detected existing production_ledger_showjoinrequest table; faking production_ledger.0009 (attempt ${attempt}/${max_attempts})."
-        python manage.py migrate production_ledger 0009_show_join_request --fake --no-input
+        "${PYTHON_BIN}" manage.py migrate production_ledger 0009_show_join_request --fake --no-input
+    elif echo "$migrate_output" | grep -q "production_ledger\.0010_distribution_transcription_shorts" \
+        && echo "$migrate_output" | grep -qi "already exists" \
+        && echo "$migrate_output" | grep -q "production_ledger_podcastdistribution\|production_ledger_podcastfeedconfig\|production_ledger_videoshort"; then
+        echo "Detected existing 0010 distribution/shorts tables; faking production_ledger.0010 (attempt ${attempt}/${max_attempts})."
+        "${PYTHON_BIN}" manage.py migrate production_ledger 0010_distribution_transcription_shorts --fake --no-input
     elif echo "$migrate_output" | grep -qi "0007_fix_icon_column_charset\|CHARACTER SET\|MODIFY COLUMN"; then
         echo "Detected failure in production_ledger.0007 charset migration; faking migration (attempt ${attempt}/${max_attempts})."
-        python manage.py migrate production_ledger 0007_fix_icon_column_charset --fake --no-input
+        "${PYTHON_BIN}" manage.py migrate production_ledger 0007_fix_icon_column_charset --fake --no-input
     else
         echo "$migrate_output"
         echo "Producer migration failed with unrecoverable error."
@@ -128,3 +161,8 @@ if [[ ${migrate_status:-1} -ne 0 ]]; then
 fi
 
 echo "Producer database migrations complete."
+
+echo "Running Producer post-migration checks..."
+"${PYTHON_BIN}" manage.py showmigrations production_ledger --list
+"${PYTHON_BIN}" manage.py check
+echo "Producer post-migration checks complete."
