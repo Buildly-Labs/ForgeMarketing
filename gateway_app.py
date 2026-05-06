@@ -40,7 +40,9 @@ MAX_AGE_SECONDS = 60 * 60 * 24 * 14
 
 def _spaces_config():
     bucket = os.getenv('AWS_STORAGE_BUCKET_NAME', 'cms-static')
-    endpoint = os.getenv('AWS_S3_ENDPOINT_URL', 'https://cms-static.nyc3.digitaloceanspaces.com')
+    # Use the regional S3-compatible endpoint for signing requests.
+    # Bucket-specific endpoints can trigger redirects that break browser CORS.
+    endpoint = os.getenv('AWS_S3_ENDPOINT_URL', 'https://nyc3.digitaloceanspaces.com')
     custom_domain = os.getenv('AWS_S3_CUSTOM_DOMAIN', 'cms-static.nyc3.digitaloceanspaces.com')
     return {
         'bucket': bucket,
