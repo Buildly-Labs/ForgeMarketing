@@ -87,3 +87,7 @@ bcrypt>=4.0.0
 # CLI utilities
 click>=8.1.0
 rich>=13.5.0  # For beautiful terminal output
+
+# System dependency (not a Python package) — required for audio extraction
+# Install with: apt-get install ffmpeg  (Ubuntu/Debian)  or  brew install ffmpeg  (macOS)
+# ffmpeg

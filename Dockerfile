@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         nginx supervisor netcat-traditional poppler-utils \
         libsm6 libxext6 libxrender-dev postgresql-client \
         pkg-config default-libmysqlclient-dev build-essential \
+        ffmpeg espeak-ng \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
