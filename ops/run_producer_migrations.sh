@@ -121,7 +121,7 @@ while [[ $attempt -le $max_attempts ]]; do
 
     failed_production_ledger_migration=$(
         echo "$migrate_output" \
-            | sed -n "s/.*Applying production_ledger\.\([a-zA-Z0-9_]*\)\.\.\.*/\1/p" \
+            | sed -n "s/.*Applying production_ledger\.\([a-zA-Z0-9_]*\).*/\1/p" \
             | tail -1
     )
 
@@ -143,6 +143,10 @@ while [[ $attempt -le $max_attempts ]]; do
         && echo "$migrate_output" | grep -q "production_ledger\.0009_show_join_request"; then
         echo "Detected existing production_ledger_showjoinrequest table; faking production_ledger.0009 (attempt ${attempt}/${max_attempts})."
         "${PYTHON_BIN}" manage.py migrate production_ledger 0009_show_join_request --fake --no-input
+    elif echo "$migrate_output" | grep -q "0013_videoshort_platform_captions" \
+        && echo "$migrate_output" | grep -Eqi "already exists|duplicate column|duplicate key"; then
+        echo "Detected existing platform_captions column; faking production_ledger.0013 (attempt ${attempt}/${max_attempts})."
+        "${PYTHON_BIN}" manage.py migrate production_ledger 0013_videoshort_platform_captions --fake --no-input
     elif echo "$migrate_output" | grep -q "production_ledger\.0010_distribution_transcription_shorts" \
         && echo "$migrate_output" | grep -qi "already exists" \
         && echo "$migrate_output" | grep -q "production_ledger_podcastdistribution\|production_ledger_podcastfeedconfig\|production_ledger_videoshort"; then
