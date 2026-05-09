@@ -233,6 +233,45 @@ from dashboard.models import db, User, Brand, BrandTheme, BrandEmailConfig
 db.init_app(app)
 migrate = Migrate(app, db, compare_type=True)
 
+# ── OpenAPI 3 (flask-smorest) ────────────────────────────────
+# Must be configured before the app context so Api can read app.config.
+app.config['API_TITLE'] = 'ForgeMarketing API'
+app.config['API_VERSION'] = 'v1'
+app.config['OPENAPI_VERSION'] = '3.0.3'
+app.config['OPENAPI_URL_PREFIX'] = '/api/v1'
+app.config['OPENAPI_SWAGGER_UI_PATH'] = '/docs'
+app.config['OPENAPI_SWAGGER_UI_URL'] = 'https://cdn.jsdelivr.net/npm/swagger-ui-dist/'
+app.config['OPENAPI_REDOC_PATH'] = '/redoc'
+app.config['OPENAPI_REDOC_URL'] = 'https://cdn.jsdelivr.net/npm/redoc/bundles/redoc.standalone.js'
+# Security scheme definition (picked up by flask-smorest for the OpenAPI spec)
+app.config['API_SPEC_OPTIONS'] = {
+    'components': {
+        'securitySchemes': {
+            'ApiKeyAuth': {
+                'type': 'apiKey',
+                'in': 'header',
+                'name': 'X-API-Key',
+                'description': (
+                    'API key issued via Admin → API Keys. '
+                    'Format: `fmk_<40 random chars>`'
+                ),
+            }
+        }
+    },
+    'info': {
+        'x-logo': {'url': 'https://market.firstcityfoundry.com/static/logo.png'},
+    },
+}
+
+try:
+    from flask_smorest import Api as _SmorestApi
+    from dashboard.contacts_api import contacts_v1
+    _smorest_api = _SmorestApi(app)
+    _smorest_api.register_blueprint(contacts_v1)
+    print("✅ OpenAPI 3 spec available at /api/v1/openapi.json  |  UI at /api/v1/docs")
+except ImportError:
+    print("⚠️  flask-smorest not installed — run: pip install flask-smorest marshmallow")
+
 with app.app_context():
     if not _skip_startup_db_init:
         try:

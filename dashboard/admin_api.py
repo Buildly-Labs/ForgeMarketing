@@ -11,7 +11,7 @@ import logging
 import secrets
 import string
 
-from dashboard.models import db, Brand, BrandEmailConfig, BrandSettings, APICredentialLog, SystemConfig, User, UserBrand
+from dashboard.models import db, Brand, BrandEmailConfig, BrandSettings, APICredentialLog, SystemConfig, User, UserBrand, ExternalAPIKey
 
 logger = logging.getLogger(__name__)
 
@@ -910,3 +910,93 @@ def reset_user_password(user_id: int):
         db.session.rollback()
         logger.error(f"Error resetting password: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ============================================================================
+# EXTERNAL API KEY MANAGEMENT
+# ============================================================================
+
+@admin_bp.route('/api-keys', methods=['GET'])
+@login_required
+@admin_required
+def list_api_keys():
+    """List all external API keys (prefixes only, never the hash)."""
+    keys = ExternalAPIKey.query.order_by(ExternalAPIKey.created_at.desc()).all()
+    return jsonify({'success': True, 'api_keys': [k.to_dict() for k in keys]})
+
+
+@admin_bp.route('/api-keys', methods=['POST'])
+@login_required
+@admin_required
+def create_api_key():
+    """
+    Create a new external API key.
+
+    Body (JSON):
+        name           str   required  e.g. "LABs Production"
+        scopes         list  optional  default: ["contacts:write", "contacts:read"]
+        allowed_brands list  optional  default: [] (all brands)
+
+    Returns the plaintext key ONCE — it cannot be retrieved again.
+    """
+    try:
+        from dashboard.contacts_api import create_api_key as _create
+
+        data = request.get_json(force=True) or {}
+        name = (data.get('name') or '').strip()
+        if not name:
+            return jsonify({'success': False, 'error': 'name is required'}), 400
+
+        scopes = data.get('scopes', ['contacts:write', 'contacts:read'])
+        allowed_brands = data.get('allowed_brands', [])
+
+        key_obj, raw_key = _create(
+            name=name,
+            scopes=scopes,
+            allowed_brands=allowed_brands,
+            created_by=current_user.email,
+        )
+        db.session.add(key_obj)
+        db.session.commit()
+
+        logger.info('API key created: %s by %s', name, current_user.email)
+        return jsonify({
+            'success': True,
+            'message': 'API key created. Save the key now — it will not be shown again.',
+            'api_key': key_obj.to_dict(),
+            'raw_key': raw_key,
+        }), 201
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error('Error creating API key: %s', e)
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@admin_bp.route('/api-keys/<int:key_id>', methods=['DELETE'])
+@login_required
+@admin_required
+def delete_api_key(key_id: int):
+    """Permanently revoke (delete) an external API key."""
+    key = ExternalAPIKey.query.get(key_id)
+    if not key:
+        return jsonify({'success': False, 'error': 'API key not found'}), 404
+    db.session.delete(key)
+    db.session.commit()
+    logger.info('API key deleted: id=%s by %s', key_id, current_user.email)
+    return jsonify({'success': True, 'message': 'API key revoked'})
+
+
+@admin_bp.route('/api-keys/<int:key_id>/toggle', methods=['POST'])
+@login_required
+@admin_required
+def toggle_api_key(key_id: int):
+    """Enable or disable an external API key without deleting it."""
+    key = ExternalAPIKey.query.get(key_id)
+    if not key:
+        return jsonify({'success': False, 'error': 'API key not found'}), 404
+    key.is_active = not key.is_active
+    db.session.commit()
+    state = 'enabled' if key.is_active else 'disabled'
+    logger.info('API key %s id=%s by %s', state, key_id, current_user.email)
+    return jsonify({'success': True, 'is_active': key.is_active, 'message': f'Key {state}'})

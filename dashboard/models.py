@@ -665,3 +665,155 @@ class PressContact(db.Model):
             'is_active': self.is_active,
             'last_contacted_at': self.last_contacted_at.isoformat() if self.last_contacted_at else None,
         }
+
+
+# ============================================================================
+# CRM CONTACTS MODEL  (MySQL-backed, replaces SQLite UnifiedContactsManager)
+# ============================================================================
+
+class Contact(db.Model):
+    """
+    CRM contact record — stored in the main MySQL database.
+    Replaces the legacy SQLite-based UnifiedContactsManager for all new writes.
+    Supports leads submitted via the external LABs API.
+    """
+    __tablename__ = 'contacts'
+
+    id = db.Column(db.Integer, primary_key=True)
+
+    # Core identity
+    name    = db.Column(db.String(255), nullable=False, index=True)
+    email   = db.Column(db.String(255), default='', index=True)
+    company = db.Column(db.String(255), default='')
+    title   = db.Column(db.String(255), default='')
+
+    # Org / brand scoping
+    brand = db.Column(db.String(100), default='', index=True)  # brand slug
+
+    # Classification
+    contact_type = db.Column(db.String(50), default='lead', index=True)
+    # email | influencer | press | lead | partner | customer
+    source   = db.Column(db.String(100), default='manual', index=True)
+    # manual | labs | press_discovery | influencer_import | api | ...
+    status   = db.Column(db.String(50), default='active', index=True)
+    # active | inactive | unsubscribed | bounced | converted
+
+    # Social / web
+    linkedin_url      = db.Column(db.String(500), default='')
+    twitter_handle    = db.Column(db.String(100), default='')
+    instagram_handle  = db.Column(db.String(100), default='')
+    youtube_channel   = db.Column(db.String(255), default='')
+    website_url       = db.Column(db.String(500), default='')
+
+    # Influencer metrics
+    platform        = db.Column(db.String(50), default='')
+    followers_count = db.Column(db.Integer, default=0)
+    engagement_rate = db.Column(db.Float, default=0.0)
+    alignment_score = db.Column(db.Float, default=0.0)
+
+    # Lead / LABs fields
+    phone        = db.Column(db.String(50), default='')
+    message      = db.Column(db.Text, default='')  # free-form message from form / LABs
+    referrer     = db.Column(db.String(255), default='')  # where they came from
+    utm_source   = db.Column(db.String(100), default='')
+    utm_campaign = db.Column(db.String(100), default='')
+
+    notes = db.Column(db.Text, default='')
+    tags  = db.Column(db.Text, default='[]')  # JSON list
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def get_tags(self) -> List[str]:
+        try:
+            return json.loads(self.tags) if self.tags else []
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+    def set_tags(self, tag_list: List[str]) -> None:
+        self.tags = json.dumps(tag_list)
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'id': self.id,
+            'name': self.name,
+            'email': self.email,
+            'company': self.company,
+            'title': self.title,
+            'brand': self.brand,
+            'contact_type': self.contact_type,
+            'source': self.source,
+            'status': self.status,
+            'linkedin_url': self.linkedin_url,
+            'twitter_handle': self.twitter_handle,
+            'instagram_handle': self.instagram_handle,
+            'youtube_channel': self.youtube_channel,
+            'website_url': self.website_url,
+            'platform': self.platform,
+            'followers_count': self.followers_count,
+            'engagement_rate': self.engagement_rate,
+            'alignment_score': self.alignment_score,
+            'phone': self.phone,
+            'message': self.message,
+            'referrer': self.referrer,
+            'utm_source': self.utm_source,
+            'utm_campaign': self.utm_campaign,
+            'notes': self.notes,
+            'tags': self.get_tags(),
+            'created_at': self.created_at.isoformat(),
+            'updated_at': self.updated_at.isoformat(),
+        }
+
+
+# ============================================================================
+# API KEY MODEL  (for external integrations like LABs)
+# ============================================================================
+
+class ExternalAPIKey(db.Model):
+    """
+    API keys for external systems (e.g. LABs) to call the marketing API.
+    Stored hashed; plaintext only shown once at creation.
+    """
+    __tablename__ = 'external_api_keys'
+
+    id          = db.Column(db.Integer, primary_key=True)
+    name        = db.Column(db.String(255), nullable=False)          # e.g. "LABs Production"
+    key_prefix  = db.Column(db.String(10),  nullable=False, index=True)  # first 8 chars for lookup
+    key_hash    = db.Column(db.String(255), nullable=False)           # bcrypt hash of full key
+    allowed_brands = db.Column(db.Text, default='[]')                 # JSON list; empty = all brands
+    scopes      = db.Column(db.Text, default='["contacts:write","contacts:read"]')  # JSON list
+    is_active   = db.Column(db.Boolean, default=True, index=True)
+    last_used_at = db.Column(db.DateTime, nullable=True)
+    created_by  = db.Column(db.String(255), default='system')
+    created_at  = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def check_key(self, raw_key: str) -> bool:
+        try:
+            return bcrypt.checkpw(raw_key.encode(), self.key_hash.encode())
+        except Exception:
+            return False
+
+    def get_allowed_brands(self) -> List[str]:
+        try:
+            return json.loads(self.allowed_brands) if self.allowed_brands else []
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+    def get_scopes(self) -> List[str]:
+        try:
+            return json.loads(self.scopes) if self.scopes else []
+        except (json.JSONDecodeError, TypeError):
+            return []
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'id': self.id,
+            'name': self.name,
+            'key_prefix': self.key_prefix,
+            'allowed_brands': self.get_allowed_brands(),
+            'scopes': self.get_scopes(),
+            'is_active': self.is_active,
+            'last_used_at': self.last_used_at.isoformat() if self.last_used_at else None,
+            'created_by': self.created_by,
+            'created_at': self.created_at.isoformat(),
+        }
