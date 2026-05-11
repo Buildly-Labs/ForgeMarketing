@@ -100,10 +100,34 @@ except Exception as exc:
     raise SystemExit(0)
 PY
 
-# Historical compatibility fakes (safe to repeat; no-op when already applied).
+# Historical compatibility fakes.
+# IMPORTANT: Only fake when the actual DB tables already exist (i.e. upgrading an
+# existing deployment, not a fresh install). On a fresh DB, faking 0002 marks 0001
+# as applied without creating any tables, causing every subsequent migration to fail
+# with "table doesn't exist".
 set +e
-"${PYTHON_BIN}" manage.py migrate production_ledger 0002 --fake --no-input >/tmp/producer_mig_pre_1.log 2>&1
-"${PYTHON_BIN}" manage.py migrate logic 0002 --fake --no-input >/tmp/producer_mig_pre_2.log 2>&1
+has_tables=$("${PYTHON_BIN}" - <<'PYCHECK' 2>/dev/null
+import os, sys
+os.environ.setdefault(
+    "DJANGO_SETTINGS_MODULE",
+    os.getenv("DJANGO_SETTINGS_MODULE", "logic_service.settings.docker"),
+)
+try:
+    import django; django.setup()
+    from django.db import connection
+    tables = connection.introspection.table_names()
+    print("yes" if "production_ledger_episode" in tables else "no")
+except Exception:
+    print("no")
+PYCHECK
+)
+if [[ "$has_tables" == "yes" ]]; then
+    echo "Existing schema detected — applying historical compatibility fakes."
+    "${PYTHON_BIN}" manage.py migrate production_ledger 0002 --fake --no-input >/tmp/producer_mig_pre_1.log 2>&1
+    "${PYTHON_BIN}" manage.py migrate logic 0002 --fake --no-input >/tmp/producer_mig_pre_2.log 2>&1
+else
+    echo "Fresh database detected — skipping historical fakes (tables will be created normally)."
+fi
 set -e
 
 max_attempts=6
@@ -162,6 +186,7 @@ while [[ $attempt -le $max_attempts ]]; do
     else
         echo "$migrate_output"
         echo "Producer migration failed with unrecoverable error."
+        touch /tmp/forge_migrations_failed
         exit $migrate_status
     fi
 
@@ -171,6 +196,7 @@ done
 if [[ ${migrate_status:-1} -ne 0 ]]; then
     echo "$migrate_output"
     echo "Producer migration failed after ${max_attempts} recovery attempts."
+    touch /tmp/forge_migrations_failed
     exit ${migrate_status:-1}
 fi
 
