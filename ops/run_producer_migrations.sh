@@ -58,11 +58,26 @@ from django.db import connection
 from django.utils import timezone
 
 APP = "production_ledger"
+
+# ── Phase 1: fix ordering gaps (a later migration recorded but an earlier one
+#    missing → backfill the earlier one so Django's consistency check passes)
 MIGRATION_CHAIN = [
     "0003_add_guest_contact_fields",
     "0004_add_media_platform_and_label",
     "0005_drop_episode_type_old",
     "0006_auto_20260416_2221",
+]
+
+# ── Phase 2: table-exists drift repairs
+#    Maps migration_name → the DB table it creates.
+#    If the table already exists but the migration is NOT recorded, insert the
+#    record so Django's migrate treats it as already applied (safe fake).
+TABLE_MIGRATION_MAP = [
+    ("0009_show_join_request",                    "production_ledger_showjoinrequest"),
+    ("0010_distribution_transcription_shorts",    "production_ledger_videoshort"),
+    ("0015_platformcomment",                      "production_ledger_platformcomment"),
+    ("0016_orgapikey",                            "production_ledger_orgapikey"),
+    ("0017_background_task",                      "production_ledger_backgroundtask"),
 ]
 
 try:
@@ -72,14 +87,14 @@ try:
             [APP],
         )
         applied = {row[0] for row in cursor.fetchall()}
+        db_tables = set(connection.introspection.table_names())
 
         repaired = []
+
+        # Phase 1: ordering gaps
         for idx, migration_name in enumerate(MIGRATION_CHAIN):
             if migration_name in applied:
                 continue
-
-            # If any later migration in the chain is already marked applied,
-            # backfill this missing dependency to repair history consistency.
             later_applied = any(name in applied for name in MIGRATION_CHAIN[idx + 1 :])
             if later_applied:
                 cursor.execute(
@@ -87,13 +102,27 @@ try:
                     [APP, migration_name, timezone.now()],
                 )
                 applied.add(migration_name)
-                repaired.append(migration_name)
+                repaired.append(f"{migration_name} (ordering gap)")
+
+        # Phase 2: table-exists drift (table in DB but migration not recorded)
+        for migration_name, table_name in TABLE_MIGRATION_MAP:
+            if migration_name in applied:
+                continue
+            if table_name in db_tables:
+                cursor.execute(
+                    "INSERT INTO django_migrations (app, name, applied) VALUES (%s, %s, %s)",
+                    [APP, migration_name, timezone.now()],
+                )
+                applied.add(migration_name)
+                repaired.append(f"{migration_name} (table {table_name} already exists)")
 
         if repaired:
             print(
-                "Repaired migration history for production_ledger: "
-                + ", ".join(repaired)
+                "Repaired migration history for production_ledger:\n  "
+                + "\n  ".join(repaired)
             )
+        else:
+            print("Migration preflight: no repairs needed.")
 except Exception as exc:
     # Do not hard-fail preflight; migrate step below still handles recovery.
     print(f"Migration preflight check skipped: {exc}")
