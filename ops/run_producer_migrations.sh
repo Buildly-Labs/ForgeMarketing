@@ -167,6 +167,14 @@ while [[ $attempt -le $max_attempts ]]; do
         && echo "$migrate_output" | grep -q "production_ledger\.0009_show_join_request"; then
         echo "Detected existing production_ledger_showjoinrequest table; faking production_ledger.0009 (attempt ${attempt}/${max_attempts})."
         "${PYTHON_BIN}" manage.py migrate production_ledger 0009_show_join_request --fake --no-input
+    elif echo "$migrate_output" | grep -q "production_ledger_backgroundtask" \
+        && echo "$migrate_output" | grep -Eqi "already exists"; then
+        echo "Detected existing production_ledger_backgroundtask table; faking production_ledger.0017 (attempt ${attempt}/${max_attempts})."
+        "${PYTHON_BIN}" manage.py migrate production_ledger 0017_background_task --fake --no-input
+    elif echo "$migrate_output" | grep -q "production_ledger_orgapikey" \
+        && echo "$migrate_output" | grep -Eqi "already exists"; then
+        echo "Detected existing production_ledger_orgapikey table; faking production_ledger.0016 (attempt ${attempt}/${max_attempts})."
+        "${PYTHON_BIN}" manage.py migrate production_ledger 0016_orgapikey --fake --no-input
     elif echo "$migrate_output" | grep -q "0013_videoshort_platform_captions" \
         && echo "$migrate_output" | grep -Eqi "already exists|duplicate column|duplicate key"; then
         echo "Detected existing platform_captions column; faking production_ledger.0013 (attempt ${attempt}/${max_attempts})."
