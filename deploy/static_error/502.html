@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>502 — ProducerForge is momentarily unavailable</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0b1220;
+      color: #e2e8f0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .card {
+      background: #0f172a;
+      border: 1px solid #1e293b;
+      border-radius: 20px;
+      padding: 48px 40px;
+      max-width: 600px;
+      width: 100%;
+      box-shadow: 0 25px 50px -12px rgba(0,0,0,.5);
+    }
+
+    .top { display: flex; align-items: flex-start; gap: 20px; margin-bottom: 28px; }
+
+    .icon {
+      width: 56px; height: 56px; flex-shrink: 0;
+      background: rgba(249,115,22,.12);
+      border-radius: 14px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .icon svg { width: 28px; height: 28px; color: #f97316; }
+
+    .badge { font-size: 2.8rem; font-weight: 800; color: #f97316; letter-spacing: -2px; line-height: 1; }
+    .heading { font-size: 1.25rem; font-weight: 600; color: #f1f5f9; margin-top: 6px; }
+
+    p {
+      color: #94a3b8;
+      line-height: 1.7;
+      font-size: 0.9375rem;
+      margin-bottom: 14px;
+    }
+
+    .steps {
+      background: #1e293b;
+      border-radius: 12px;
+      padding: 18px 20px;
+      margin: 20px 0 28px;
+      list-style: none;
+      counter-reset: steps;
+    }
+    .steps li {
+      counter-increment: steps;
+      display: flex; align-items: flex-start; gap: 12px;
+      color: #cbd5e1; font-size: 0.875rem; line-height: 1.5;
+      padding: 5px 0;
+    }
+    .steps li::before {
+      content: counter(steps);
+      flex-shrink: 0;
+      width: 22px; height: 22px;
+      background: rgba(249,115,22,.2);
+      color: #f97316;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.75rem; font-weight: 700;
+      margin-top: 1px;
+    }
+
+    .actions { display: flex; flex-wrap: wrap; gap: 12px; }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 20px;
+      border-radius: 10px;
+      font-size: 0.875rem; font-weight: 500;
+      cursor: pointer; border: none;
+      text-decoration: none;
+      transition: all .15s;
+    }
+    .btn-primary { background: #f97316; color: #fff; }
+    .btn-primary:hover { background: #ea580c; }
+    .btn-secondary {
+      background: transparent;
+      border: 1px solid #334155;
+      color: #94a3b8;
+    }
+    .btn-secondary:hover { border-color: #475569; color: #e2e8f0; }
+
+    .footer {
+      margin-top: 32px;
+      padding-top: 20px;
+      border-top: 1px solid #1e293b;
+      font-size: 0.8rem;
+      color: #475569;
+      text-align: center;
+    }
+    .footer a { color: #64748b; text-decoration: none; }
+    .footer a:hover { color: #94a3b8; }
+
+    /* spinner for countdown */
+    #countdown { color: #64748b; font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body>
+<div class="card">
+
+  <div class="top">
+    <div class="icon">
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="#f97316" stroke-width="1.8">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+      </svg>
+    </div>
+    <div>
+      <div class="badge">502</div>
+      <div class="heading">ProducerForge is momentarily unavailable</div>
+    </div>
+  </div>
+
+  <p>
+    The application server restarted or is warming up. This is usually resolved in under a minute.
+  </p>
+
+  <ol class="steps">
+    <li>Wait 30–60 seconds, then refresh this page.</li>
+    <li>If the problem persists, clear your browser cache and try again.</li>
+    <li>Still down? Contact support and include the time and URL you were visiting.</li>
+  </ol>
+
+  <div class="actions">
+    <button class="btn btn-primary" onclick="location.reload()">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+      </svg>
+      Refresh now <span id="countdown"></span>
+    </button>
+    <a href="/" class="btn btn-secondary">
+      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+      </svg>
+      Go to homepage
+    </a>
+  </div>
+
+  <div class="footer">
+    ProducerForge &mdash; <a href="mailto:support@buildly.io">support@buildly.io</a>
+  </div>
+
+</div>
+
+<script>
+  // Auto-refresh countdown: 45 seconds
+  var secs = 45;
+  var el = document.getElementById('countdown');
+
+  function tick() {
+    if (secs <= 0) { location.reload(); return; }
+    el.textContent = '(' + secs + 's)';
+    secs--;
+    setTimeout(tick, 1000);
+  }
+  tick();
+</script>
+</body>
+</html>
