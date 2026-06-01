@@ -12,11 +12,12 @@ from pathlib import Path
 import json
 import yaml
 
+# Setup paths and logging
+project_root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(project_root))
+
 from config.brand_loader import get_all_brands
 
-# Setup paths and logging
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
 logs_dir = project_root / 'logs'
 reports_dir = project_root / 'reports'
 logs_dir.mkdir(exist_ok=True)

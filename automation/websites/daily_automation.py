@@ -11,11 +11,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 import asyncio
 
+# Setup paths and logging
+project_root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(project_root))
+
 from config.brand_loader import get_all_brands
 
-# Setup paths and logging
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
 logs_dir = project_root / 'logs'
 logs_dir.mkdir(exist_ok=True)
 
