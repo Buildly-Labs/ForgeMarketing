@@ -4,10 +4,8 @@ Automated Outreach & Discovery Scheduler
 ========================================
 
 Manages automated discovery and outreach campaigns for all brands.
-Sets up intelligent scheduling to discover new targets and run 
+Sets up intelligent scheduling to discover new targets and run
 outreach campaigns based on optimal timing and rate limits.
-
-Based on proven foundry and open-build automation systems.
 """
 
 import asyncio
@@ -23,6 +21,7 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 from automation.multi_brand_outreach import MultiBrandOutreachCampaign, BrandTargetDiscovery, BRAND_DISCOVERY_STRATEGIES
+from config.brand_loader import get_all_brands
 
 class OutreachAutomationScheduler:
     """Manages automated outreach and discovery scheduling"""
@@ -30,6 +29,31 @@ class OutreachAutomationScheduler:
     def __init__(self):
         self.project_root = project_root
         self.outreach_script = self.project_root / 'automation' / 'multi_brand_outreach.py'
+
+    def _scheduled_brands(self):
+        """Return brands supported by outreach strategies, preferring configured active brands."""
+        strategy_brands = list(BRAND_DISCOVERY_STRATEGIES.keys())
+        configured = get_all_brands(active_only=True)
+        configured_supported = [b for b in configured if b in strategy_brands]
+        return configured_supported or strategy_brands
+
+    def _build_brand_outreach_jobs(self):
+        """Create outreach cron entries distributed across weekday time slots."""
+        slots = [
+            ('30 9', '1-5'),   # Mon-Fri 9:30 AM
+            ('0 10', '2,4'),   # Tue/Thu 10:00 AM
+            ('30 14', '3,5'),  # Wed/Fri 2:30 PM
+        ]
+        jobs = []
+        for idx, brand in enumerate(self._scheduled_brands()):
+            slot_time, day_restriction = slots[idx % len(slots)]
+            jobs.append({
+                'time': slot_time,
+                'day_restriction': day_restriction,
+                'command': f'cd "{self.project_root}" && python3 automation/run_brand_outreach.py --brand {brand} --limit 3',
+                'description': f'{brand} outreach campaign'
+            })
+        return jobs
         
     def setup_outreach_crons(self):
         """Set up cron jobs for automated outreach and discovery"""
@@ -43,27 +67,6 @@ class OutreachAutomationScheduler:
                 'time': '0 8',  # 8:00 AM daily
                 'command': f'cd "{self.project_root}" && python3 -c "import asyncio; from automation.multi_brand_outreach import MultiBrandOutreachCampaign; asyncio.run(MultiBrandOutreachCampaign().run_discovery_for_all_brands())"',
                 'description': 'Daily target discovery for all brands'
-            },
-            # Foundry outreach (proven high-performing time)
-            {
-                'time': '30 9',  # 9:30 AM Mon-Fri
-                'day_restriction': '1-5',
-                'command': f'cd "{self.project_root}" && python3 automation/run_brand_outreach.py --brand foundry --limit 3',
-                'description': 'Foundry startup outreach (weekdays)'
-            },
-            # Buildly outreach (enterprise focus, Tuesday/Thursday)
-            {
-                'time': '0 10',  # 10:00 AM Tue/Thu
-                'day_restriction': '2,4',
-                'command': f'cd "{self.project_root}" && python3 automation/run_brand_outreach.py --brand buildly --limit 2',
-                'description': 'Buildly enterprise outreach (Tue/Thu)'
-            },
-            # Open Build outreach (developer focus, Wed/Fri)
-            {
-                'time': '30 14',  # 2:30 PM Wed/Fri
-                'day_restriction': '3,5',
-                'command': f'cd "{self.project_root}" && python3 automation/run_brand_outreach.py --brand openbuild --limit 3',
-                'description': 'Open Build developer outreach (Wed/Fri)'
             },
             # Weekly discovery deep dive (Sundays)
             {
@@ -83,7 +86,7 @@ class OutreachAutomationScheduler:
             {
                 'time': '0 14',  # 2:00 PM Wednesdays
                 'day_restriction': '3',
-                'command': f'cd "{self.project_root}" && python3 -c "import asyncio; from automation.influencer_discovery import BrandInfluencerDiscovery; discovery = BrandInfluencerDiscovery(); [asyncio.run(discovery.discover_brand_influencers(brand)) for brand in [\'foundry\', \'buildly\', \'openbuild\', \'radical\', \'oregonsoftware\']]"',
+                'command': f'cd "{self.project_root}" && python3 automation/run_influencer_discovery.py --all-brands',
                 'description': 'Weekly influencer discovery for all brands'
             },
             # Influencer reports generation (Sundays)
@@ -94,6 +97,7 @@ class OutreachAutomationScheduler:
                 'description': 'Weekly influencer reports generation'
             }
         ]
+        cron_jobs[1:1] = self._build_brand_outreach_jobs()
         
         # Get current crontab
         try:
@@ -137,15 +141,20 @@ class OutreachAutomationScheduler:
         """Display current outreach automation schedule"""
         print("📅 Current Outreach & Discovery Schedule")
         print("=" * 50)
-        
-        schedule_info = [
-            ("Daily 8:00 AM", "🔍 Target Discovery", "All brands"),
-            ("Mon-Fri 9:30 AM", "🏭 Foundry Outreach", "3 startup contacts"),
-            ("Tue/Thu 10:00 AM", "🏢 Buildly Outreach", "2 enterprise contacts"),
-            ("Wed/Fri 2:30 PM", "👨‍💻 Open Build Outreach", "3 developer contacts"),
+
+        schedule_info = [("Daily 8:00 AM", "🔍 Target Discovery", "All brands")]
+        slots = [
+            ("Mon-Fri 9:30 AM", "📨 Brand Outreach", "3 contacts"),
+            ("Tue/Thu 10:00 AM", "📨 Brand Outreach", "3 contacts"),
+            ("Wed/Fri 2:30 PM", "📨 Brand Outreach", "3 contacts"),
+        ]
+        for idx, brand in enumerate(self._scheduled_brands()):
+            time_str, task, details = slots[idx % len(slots)]
+            schedule_info.append((time_str, f"{task} ({brand})", details))
+        schedule_info.extend([
             ("Sunday 10:00 AM", "🔍 Extended Discovery", "All brands"),
             ("Sunday 5:00 PM", "📊 Weekly Analytics", "Performance reports")
-        ]
+        ])
         
         for time_str, task, details in schedule_info:
             print(f"{time_str:<20} {task:<25} {details}")
@@ -166,13 +175,14 @@ class OutreachAutomationScheduler:
         campaign = MultiBrandOutreachCampaign()
         
         try:
+            test_brand = self._scheduled_brands()[0]
             # Test discovery for one brand
-            discovery = BrandTargetDiscovery('foundry')
+            discovery = BrandTargetDiscovery(test_brand)
             targets = await discovery.discover_targets(max_targets=3)
             print(f"✅ Discovery test passed: {len(targets)} targets found")
             
             # Test campaign target retrieval
-            campaign_targets = campaign.get_campaign_targets('foundry', limit=2)
+            campaign_targets = campaign.get_campaign_targets(test_brand, limit=2)
             print(f"✅ Campaign targets: {len(campaign_targets)} ready for outreach")
             
             print("\n📊 System Status:")

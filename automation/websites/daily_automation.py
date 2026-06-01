@@ -11,6 +11,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 import asyncio
 
+from config.brand_loader import get_all_brands
+
 # Setup paths and logging
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
@@ -28,6 +30,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger('DailyAutomation')
 
+
+def _get_active_brands():
+    """Load active brands from database, with a conservative fallback set."""
+    brands = get_all_brands(active_only=True)
+    if brands:
+        return brands
+    return ['open_build', 'radical_therapy']
+
 async def run_daily_automation():
     """Run daily marketing automation for all brands"""
     logger.info("🚀 Starting daily marketing automation")
@@ -37,7 +47,10 @@ async def run_daily_automation():
         from automation.ai.ollama_integration import AIContentGenerator
         ai_generator = AIContentGenerator()
         
-        brands = ['buildly', 'foundry', 'open_build', 'radical_therapy']
+        brands = _get_active_brands()
+        if not brands:
+            logger.warning("No active brands configured; skipping daily automation run")
+            return {}
         results = {}
         
         for brand in brands:
