@@ -125,7 +125,7 @@ class Brand(db.Model):
     __tablename__ = 'brands'
     
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(255), unique=True, nullable=False, index=True)  # brand slug (e.g., washoku, northstar)
+    name = db.Column(db.String(255), unique=True, nullable=False, index=True)  # brand slug (e.g., acme, your-brand)
     display_name = db.Column(db.String(255), nullable=False)  # Human-facing brand name
     description = db.Column(db.Text, default='')
     logo_url = db.Column(db.String(500), default='')

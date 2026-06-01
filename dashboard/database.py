@@ -41,11 +41,9 @@ class DatabaseManager:
                     self._apply_schema_migrations()
                     print("✅ Database schema initialized successfully")
 
-                    # Seed brands + admin user if the DB is empty
+                    # Seed admin user if the DB is empty; brands are created via onboarding
                     brand_count = Brand.query.count()
                     user_count = User.query.count()
-                    if brand_count == 0:
-                        self._seed_brands_and_themes()
                     if user_count == 0:
                         self._seed_admin_user()
                     else:
@@ -102,63 +100,8 @@ class DatabaseManager:
     # ── Seed helpers ─────────────────────────────────────────
 
     def _seed_brands_and_themes(self) -> None:
-        """Create Buildly and Foundry brands with data-driven themes."""
-        seed = [
-            {
-                'name': 'buildly',
-                'display_name': 'Buildly',
-                'description': 'Low-code automation platform',
-                'website_url': 'https://buildly.io',
-                'theme': {
-                    'primary_color': '#4A90D9',
-                    'secondary_color': '#1E3A5F',
-                    'accent_color': '#10B981',
-                    'nav_gradient_from': '#4A90D9',
-                    'nav_gradient_to': '#1E3A5F',
-                },
-            },
-            {
-                'name': 'foundry',
-                'display_name': 'The Foundry',
-                'description': 'Founder-first startup accelerator',
-                'website_url': 'https://firstcityfoundry.com',
-                'theme': {
-                    'primary_color': '#F97316',
-                    'secondary_color': '#1E3A5F',
-                    'accent_color': '#10B981',
-                    'nav_gradient_from': '#F97316',
-                    'nav_gradient_to': '#1E3A5F',
-                },
-            },
-        ]
-
-        for item in seed:
-            try:
-                brand = Brand(
-                    name=item['name'],
-                    display_name=item['display_name'],
-                    description=item['description'],
-                    website_url=item['website_url'],
-                    is_active=True,
-                )
-                db.session.add(brand)
-                db.session.flush()
-
-                # Theme
-                theme = BrandTheme(brand_id=brand.id, **item['theme'])
-                db.session.add(theme)
-
-                # Default settings
-                db.session.add(BrandSettings(brand_id=brand.id))
-                print(f"✅ Seeded brand: {item['display_name']}")
-            except Exception as e:
-                print(f"⚠️  Failed to seed brand {item['display_name']}: {e}")
-
-        try:
-            db.session.commit()
-        except Exception as e:
-            db.session.rollback()
-            print(f"❌ Brand seed commit failed: {e}")
+        """Legacy hook retained for compatibility; default brand seeding is disabled."""
+        print("ℹ️  Default brand seeding is disabled. Add brands from onboarding or admin.")
 
     def _seed_admin_user(self) -> None:
         """Create a default admin user linked to all brands."""
@@ -271,112 +214,8 @@ class DatabaseManager:
             print(f"✅ Seeded {added} system config entries from environment")
     
     def _load_default_brands(self) -> None:
-        """Load default brands from environment"""
-        import os
-        
-        brands_data = [
-            {
-                'name': 'washoku',
-                'display_name': 'Washoku',
-                'description': 'Lifestyle habits companion app',
-                'website_url': 'https://example.com/washoku',
-                'email_config': {
-                    'provider': 'brevo',
-                    'api_key': os.getenv('BREVO_API_KEY', ''),
-                    'from_email': os.getenv('WASHOKU_FROM_EMAIL', 'team@washoku.example'),
-                    'from_name': 'Washoku Team'
-                }
-            },
-            {
-                'name': 'northstar',
-                'display_name': 'Northstar Labs',
-                'description': 'B2B product studio',
-                'website_url': 'https://example.com/northstar',
-                'email_config': {
-                    'provider': 'brevo',
-                    'api_key': os.getenv('BREVO_API_KEY', ''),
-                    'from_email': os.getenv('NORTHSTAR_FROM_EMAIL', 'team@northstar.example'),
-                    'from_name': 'Northstar Team'
-                }
-            },
-            {
-                'name': 'sunnyside',
-                'display_name': 'Sunnyside Goods',
-                'description': 'Consumer lifestyle brand',
-                'website_url': 'https://example.com/sunnyside',
-                'email_config': {
-                    'provider': 'brevo',
-                    'api_key': os.getenv('BREVO_API_KEY', ''),
-                    'from_email': os.getenv('SUNNYSIDE_FROM_EMAIL', 'team@sunnyside.example'),
-                    'from_name': 'Sunnyside Team'
-                }
-            },
-            {
-                'name': 'craftkit',
-                'display_name': 'CraftKit',
-                'description': 'Creator toolkit brand',
-                'website_url': 'https://example.com/craftkit',
-                'email_config': {
-                    'provider': 'brevo',
-                    'api_key': os.getenv('BREVO_API_KEY', ''),
-                    'from_email': os.getenv('CRAFTKIT_FROM_EMAIL', 'team@craftkit.example'),
-                    'from_name': 'CraftKit Team'
-                }
-            },
-            {
-                'name': 'trailhead',
-                'display_name': 'Trailhead Studio',
-                'description': 'Founder-led agency sample brand',
-                'website_url': 'https://example.com/trailhead',
-                'email_config': {
-                    'provider': 'brevo',
-                    'api_key': os.getenv('BREVO_API_KEY', ''),
-                    'from_email': os.getenv('TRAILHEAD_FROM_EMAIL', 'team@trailhead.example'),
-                    'from_name': 'Trailhead Team'
-                }
-            }
-        ]
-        
-        for brand_data in brands_data:
-            try:
-                # Create brand
-                brand = Brand(
-                    name=brand_data['name'],
-                    display_name=brand_data['display_name'],
-                    description=brand_data['description'],
-                    website_url=brand_data['website_url'],
-                    is_active=True
-                )
-                db.session.add(brand)
-                db.session.flush()  # Get the brand ID
-                
-                # Create email config
-                if brand_data['email_config']['api_key']:
-                    email_config = BrandEmailConfig(
-                        brand_id=brand.id,
-                        provider=brand_data['email_config']['provider'],
-                        api_key=brand_data['email_config']['api_key'],
-                        from_email=brand_data['email_config']['from_email'],
-                        from_name=brand_data['email_config']['from_name'],
-                        is_primary=True,
-                        is_verified=True
-                    )
-                    db.session.add(email_config)
-                
-                # Create settings
-                settings = BrandSettings(brand_id=brand.id)
-                db.session.add(settings)
-                
-                print(f"✅ Created brand: {brand_data['display_name']}")
-            except Exception as e:
-                print(f"⚠️  Failed to create brand {brand_data['display_name']}: {e}")
-        
-        try:
-            db.session.commit()
-            print(f"✅ Loaded {Brand.query.count()} default brands")
-        except Exception as e:
-            db.session.rollback()
-            print(f"❌ Failed to commit brands: {e}")
+        """Legacy hook retained for compatibility; default brand loading is disabled."""
+        print("ℹ️  No default brands are loaded during reset. Configure brands manually.")
     
     def reset_db(self) -> bool:
         """Drop all tables and recreate (DESTRUCTIVE!)"""
