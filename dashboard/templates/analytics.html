@@ -37,7 +37,7 @@
             </div>
             <div class="mt-4">
                 <div class="flex items-center">
-                    <span class="text-green-600 text-sm font-medium" x-text="metrics.contentGrowth">+12%</span>
+                    <span class="text-green-600 text-sm font-medium" x-text="metrics.contentGrowth">+0%</span>
                     <span class="text-gray-500 text-sm ml-2">vs last period</span>
                 </div>
             </div>
@@ -55,7 +55,7 @@
             </div>
             <div class="mt-4">
                 <div class="flex items-center">
-                    <span class="text-green-600 text-sm font-medium" x-text="metrics.engagementGrowth">+8%</span>
+                    <span class="text-green-600 text-sm font-medium" x-text="metrics.engagementGrowth">+0%</span>
                     <span class="text-gray-500 text-sm ml-2">vs last period</span>
                 </div>
             </div>
@@ -73,7 +73,7 @@
             </div>
             <div class="mt-4">
                 <div class="flex items-center">
-                    <span class="text-green-600 text-sm font-medium" x-text="metrics.aiGrowth">+25%</span>
+                    <span class="text-green-600 text-sm font-medium" x-text="metrics.aiGrowth">+0%</span>
                     <span class="text-gray-500 text-sm ml-2">vs last period</span>
                 </div>
             </div>
@@ -91,7 +91,7 @@
             </div>
             <div class="mt-4">
                 <div class="flex items-center">
-                    <span class="text-green-600 text-sm font-medium" x-text="metrics.responseGrowth">+15%</span>
+                    <span class="text-green-600 text-sm font-medium" x-text="metrics.responseGrowth">+0%</span>
                     <span class="text-gray-500 text-sm ml-2">vs last period</span>
                 </div>
             </div>
@@ -262,13 +262,13 @@ function analyticsPage() {
         showExportOptions: false,
         metrics: {
             totalContent: 0,
-            contentGrowth: '+12%',
+            contentGrowth: '+0%',
             engagementRate: '0%',
-            engagementGrowth: '+8%',
+            engagementGrowth: '+0%',
             aiGenerations: 0,
-            aiGrowth: '+25%',
+            aiGrowth: '+0%',
             responseRate: '0%',
-            responseGrowth: '+15%'
+            responseGrowth: '+0%'
         },
         brandPerformance: [],
         recentActivity: [],
@@ -291,15 +291,17 @@ function analyticsPage() {
                         const outreachOverview = comprehensiveData.data?.outreach_overview?.overview || {};
                         
                         // Update metrics with real data from the comprehensive API
+                        const responseRatePct = ((outreachOverview.overall_response_rate || 0) * 100).toFixed(1) + '%';
+                        const totalEmailsSent = summary.total_emails_sent || outreachOverview.total_emails_sent || 0;
                         this.metrics = {
-                            totalContent: summary.total_website_sessions || 1070,
-                            engagementRate: ((outreachOverview.overall_response_rate || 0) * 100).toFixed(1) + '%',
-                            aiGenerations: summary.total_emails_sent || 365,
-                            responseRate: ((outreachOverview.overall_response_rate || 0) * 100).toFixed(1) + '%',
-                            contentGrowth: '+12%',
-                            engagementGrowth: '+8%',
-                            aiGrowth: '+25%',
-                            responseGrowth: '+15%'
+                            totalContent: summary.total_website_sessions || 0,
+                            engagementRate: responseRatePct,
+                            aiGenerations: totalEmailsSent,
+                            responseRate: responseRatePct,
+                            contentGrowth: '+0%',
+                            engagementGrowth: '+0%',
+                            aiGrowth: '+0%',
+                            responseGrowth: '+0%'
                         };
                         
                         // Convert brand data to performance format using comprehensive data
@@ -328,9 +330,8 @@ function analyticsPage() {
                     }
                 }
                 
-                // Enhanced fallback with real unified database stats
+                // Enhanced fallback using configured brands
                 if (!this.brandPerformance.length) {
-                    // Load from API if fallback needed
                     try {
                         const bRes = await fetch('/api/admin/brands');
                         if (bRes.ok) {
@@ -355,16 +356,16 @@ function analyticsPage() {
                 console.error('Failed to load analytics:', error);
                 showNotification('Failed to load real-time analytics, using cached data', 'warning');
                 
-                // Emergency fallback with known unified database values
+                // Emergency fallback
                 this.metrics = {
-                    totalContent: 118,
-                    engagementRate: '10.6%',
-                    aiGenerations: 179,
-                    responseRate: '10.6%',
-                    contentGrowth: '+12%',
-                    engagementGrowth: '+8%',
-                    aiGrowth: '+25%',
-                    responseGrowth: '+15%'
+                    totalContent: 0,
+                    engagementRate: '0%',
+                    aiGenerations: 0,
+                    responseRate: '0%',
+                    contentGrowth: '+0%',
+                    engagementGrowth: '+0%',
+                    aiGrowth: '+0%',
+                    responseGrowth: '+0%'
                 };
             }
         },
@@ -387,7 +388,8 @@ function analyticsPage() {
             const colors = {
                 blog: 'bg-purple-100 text-purple-600',
                 social: 'bg-blue-100 text-blue-600',
-                email: 'bg-green-100 text-green-600'
+                email: 'bg-green-100 text-green-600',
+                system: 'bg-gray-100 text-gray-600'
             };
             return colors[type] || 'bg-gray-100 text-gray-600';
         },

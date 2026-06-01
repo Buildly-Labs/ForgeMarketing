@@ -215,7 +215,7 @@ function dashboard() {
                         this.recentActivity.push({
                             id: Date.now(),
                             title: 'AI Configuration Required',
-                            description: `Missing: ${statusData.missing_configuration?.ai?.join(', ') || 'OPENAI_API_KEY'}`,
+                            description: `Missing: ${statusData.missing_configuration?.ai?.join(', ') || 'AI provider settings'}`,
                             time: 'Config Issue',
                             type: 'warning'
                         });
@@ -225,7 +225,7 @@ function dashboard() {
                         this.recentActivity.push({
                             id: Date.now() + 1,
                             title: 'Email Configuration Required',
-                            description: `Missing: ${statusData.missing_configuration?.email?.join(', ') || 'Email credentials'}`,
+                            description: `Missing: ${statusData.missing_configuration?.email?.join(', ') || 'Email provider settings'}`,
                             time: 'Config Issue',
                             type: 'warning'
                         });
