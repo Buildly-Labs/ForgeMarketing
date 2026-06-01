@@ -109,19 +109,15 @@
 ### Admin UI
 - [ ] Navigate to `http://localhost:5000/admin/brands`
 - [ ] Confirm page loads without errors
-- [ ] Check all 5 default brands visible:
-  - [ ] Buildly
-  - [ ] Foundry
-  - [ ] OpenBuild
-  - [ ] Radical Therapy
-  - [ ] Oregon Software
+- [ ] Check configured active brands are visible
+- [ ] Verify at least one brand can be created via onboarding/admin if list is empty
 
 ### API Endpoints
 - [ ] Test GET /api/admin/brands
   ```bash
   curl http://localhost:5000/api/admin/brands
   ```
-- [ ] Should return JSON with 5 brands
+- [ ] Should return JSON with currently configured brands
 
 - [ ] Test GET /api/admin/brands/openbuild
   ```bash

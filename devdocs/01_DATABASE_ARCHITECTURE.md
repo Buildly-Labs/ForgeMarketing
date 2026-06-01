@@ -11,7 +11,7 @@ A **production-ready multi-tenant SaaS system** where:
 - Beautiful admin web UI for non-technical users
 
 ### 👥 Multi-Tenant Capabilities
-- **5 default brands** (buildly, foundry, openbuild, radical, oregonsoftware)
+- **Dynamic brands** loaded from the database (no hardcoded defaults)
 - **Dynamic brand addition** - Add new brands without code changes or redeployment
 - **Per-brand configuration** - Each brand has independent settings and email providers
 - **Multi-provider support** - Each brand can use Brevo, MailerSend, SendGrid, or Mailgun
@@ -116,7 +116,7 @@ api_key = config.api_key  # Can be updated without redeployment
 ```
 brands
 ├── id (PK)
-├── name (UNIQUE) ← "openbuild", "buildly", etc.
+├── name (UNIQUE) ← "brand_slug", e.g. "washokuplus"
 ├── display_name
 ├── description
 ├── is_active
@@ -232,11 +232,11 @@ Replace hardcoded brand lists:
 ```python
 from dashboard.models import Brand
 
-# OLD: brands = ['buildly', 'foundry', 'openbuild', 'radical', 'oregonsoftware']
+# OLD: brands = ['brand_a', 'brand_b', ...]
 # NEW: Get from database
 brands = Brand.query.filter_by(is_active=True).all()
 for brand in brands:
-    print(brand.name)  # 'buildly', 'foundry', etc.
+    print(brand.name)  # e.g. 'washokuplus', 'open_build', etc.
 ```
 
 ## Testing Your Setup
@@ -342,7 +342,7 @@ python /Users/greglind/Projects/me/marketing/dashboard/init_db.py
 
 See `IMPLEMENTATION_CHECKLIST.md` for detailed troubleshooting.
 
-## Compliance with Buildly Way
+## Compliance
 
 ✅ **REAL DATA ONLY** - Never uses mock/test data
 ✅ **ORGANIZED STRUCTURE** - Clear separation of concerns
