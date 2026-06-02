@@ -18,9 +18,13 @@ COPY requirements.txt /app/requirements-forge.txt
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r /app/requirements-forge.txt bcrypt
 
-# ── Producer deps ────────────────────────────────────────────
-COPY Producer/requirements.txt /app/requirements-producer.txt
-RUN pip install --no-cache-dir -r /app/requirements-producer.txt
+# ── Producer deps (optional in this repo) ───────────────────
+COPY Producer/ /app/Producer/
+RUN if [ -f /app/Producer/requirements.txt ]; then \
+        pip install --no-cache-dir -r /app/Producer/requirements.txt; \
+    else \
+        echo "No Producer requirements found; skipping Producer dependency install"; \
+    fi
 
 # ── Copy application code ────────────────────────────────────
 COPY . /app

@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6">
+  <div class="bg-white rounded-lg shadow p-6">
+    <h1 class="text-2xl font-bold">Lead Detail</h1>
+    <p class="text-sm text-gray-600">{{ lead.company_name }}{% if lead.first_name or lead.last_name %} - {{ lead.first_name }} {{ lead.last_name }}{% endif %}</p>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div class="bg-white rounded-lg shadow p-4">
+      <h2 class="font-semibold mb-2">Scoring</h2>
+      <p>Fit Score: <strong id="fit_score">{{ lead.fit_score }}</strong></p>
+      <p>Priority: <strong>{{ lead.priority }}</strong></p>
+      <button onclick="rescore()" class="mt-3 bg-gray-900 text-white rounded px-3 py-2">Recalculate Score</button>
+    </div>
+    <div class="bg-white rounded-lg shadow p-4">
+      <h2 class="font-semibold mb-2">Draft Outreach</h2>
+      <p class="text-xs text-amber-700">Human review and manual sending required.</p>
+      <button onclick="generateDraft()" class="mt-3 bg-blue-600 text-white rounded px-3 py-2">Generate Draft</button>
+      <pre id="draft_box" class="mt-3 p-3 bg-gray-50 rounded text-xs whitespace-pre-wrap"></pre>
+    </div>
+  </div>
+
+  <div class="bg-white rounded-lg shadow p-4">
+    <h2 class="font-semibold mb-3">Activities</h2>
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-2">
+      <input id="activity_type" placeholder="activity_type" class="border rounded p-2" value="note" />
+      <input id="channel" placeholder="channel" class="border rounded p-2" value="email" />
+      <input id="subject" placeholder="subject" class="border rounded p-2" />
+      <input id="next_action_date" placeholder="YYYY-MM-DDTHH:MM:SS" class="border rounded p-2" />
+      <textarea id="body" placeholder="notes/body" class="md:col-span-4 border rounded p-2"></textarea>
+      <button onclick="createActivity()" class="md:col-span-4 bg-gray-900 text-white rounded p-2">Add Activity</button>
+    </div>
+    <div id="activity_list" class="mt-4 text-sm"></div>
+  </div>
+</div>
+
+<script>
+const LEAD_ID = {{ lead.id }};
+
+async function loadActivities() {
+  const res = await fetch(`/api/leads/${LEAD_ID}/activities`);
+  const json = await res.json();
+  const wrap = document.getElementById('activity_list');
+  wrap.innerHTML = (json.data || []).map(a => `<div class="border-b py-2"><strong>${a.activity_type}</strong> (${a.channel}) - ${a.subject || ''}<br>${a.notes || ''}</div>`).join('') || 'No activities yet.';
+}
+
+async function createActivity() {
+  const payload = {
+    activity_type: document.getElementById('activity_type').value,
+    channel: document.getElementById('channel').value,
+    subject: document.getElementById('subject').value,
+    body: document.getElementById('body').value,
+    next_action_date: document.getElementById('next_action_date').value || null
+  };
+  const res = await fetch(`/api/leads/${LEAD_ID}/activities`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
+  });
+  const json = await res.json();
+  if (!json.success) { alert(json.error || 'Failed'); return; }
+  loadActivities();
+}
+
+async function rescore() {
+  const res = await fetch(`/api/leads/${LEAD_ID}/score`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}' });
+  const json = await res.json();
+  if (json.success) document.getElementById('fit_score').textContent = json.data.fit_score;
+}
+
+async function generateDraft() {
+  const res = await fetch(`/api/leads/${LEAD_ID}/generate-draft`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({channel: 'email'}) });
+  const json = await res.json();
+  if (!json.success) { alert(json.error || 'Failed'); return; }
+  document.getElementById('draft_box').textContent = `${json.data.subject}\n\n${json.data.body}`;
+}
+
+loadActivities();
+</script>
+{% endblock %}

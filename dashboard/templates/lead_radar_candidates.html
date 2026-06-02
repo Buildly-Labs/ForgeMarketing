@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6">
+  <div class="bg-white rounded-lg shadow p-6">
+    <h1 class="text-2xl font-bold">Lead Candidates</h1>
+    <p class="text-sm text-gray-600">Review candidates before conversion to leads. Human approval is required.</p>
+  </div>
+
+  <div class="bg-white rounded-lg shadow p-4 grid grid-cols-1 md:grid-cols-4 gap-2">
+    <input id="brand_name" placeholder="brand_name" class="border rounded p-2" />
+    <input id="status" placeholder="status (needs_review)" class="border rounded p-2" value="needs_review" />
+    <button onclick="loadCandidates()" class="bg-gray-900 text-white rounded p-2">Refresh</button>
+  </div>
+
+  <div class="bg-white rounded-lg shadow p-4" id="candidates"></div>
+</div>
+
+<script>
+async function act(candidateId, action) {
+  const reviewer = prompt('Reviewer name:', '');
+  const res = await fetch(`/api/lead-radar/candidates/${candidateId}/review`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({action, reviewer})
+  });
+  const json = await res.json();
+  if (!json.success) { alert(json.error || 'Failed'); return; }
+  loadCandidates();
+}
+
+async function convert(candidateId) {
+  const owner = prompt('Assign owner (optional):', '');
+  const res = await fetch(`/api/lead-radar/candidates/${candidateId}/convert`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({owner, create_tasks: true})
+  });
+  const json = await res.json();
+  if (!json.success) { alert(json.error || 'Failed'); return; }
+  loadCandidates();
+}
+
+async function loadCandidates() {
+  const q = new URLSearchParams();
+  const brand = document.getElementById('brand_name').value.trim();
+  const status = document.getElementById('status').value.trim();
+  if (brand) q.set('brand_name', brand);
+  if (status) q.set('status', status);
+  const res = await fetch('/api/lead-radar/candidates?' + q.toString());
+  const json = await res.json();
+  const wrap = document.getElementById('candidates');
+  wrap.innerHTML = (json.data || []).map(c => `
+    <div class="border rounded p-3 mb-3">
+      <div class="font-semibold">${c.raw_company || '(no company)'} - ${c.raw_name || ''}</div>
+      <div class="text-xs text-gray-600">source=${c.lead_source_id} region=${c.region_id || ''} status=${c.status}</div>
+      <div class="text-sm mt-1">${c.signal_summary || ''}</div>
+      <div class="text-xs mt-2">fit_score=<strong>${c.fit_score}</strong> why=${JSON.stringify(c.score_breakdown || [])}</div>
+      <div class="mt-2 space-x-2">
+        <button class="px-2 py-1 bg-green-600 text-white rounded" onclick="convert(${c.id})">Convert to Lead</button>
+        <button class="px-2 py-1 bg-yellow-600 text-white rounded" onclick="act(${c.id}, 'reject')">Reject</button>
+        <button class="px-2 py-1 bg-gray-800 text-white rounded" onclick="act(${c.id}, 'duplicate')">Duplicate</button>
+        <button class="px-2 py-1 bg-red-700 text-white rounded" onclick="act(${c.id}, 'do_not_contact')">Do Not Contact</button>
+      </div>
+    </div>
+  `).join('') || '<p class="text-sm text-gray-600">No candidates.</p>';
+}
+
+loadCandidates();
+</script>
+{% endblock %}

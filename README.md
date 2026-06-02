@@ -14,6 +14,7 @@ It helps teams plan campaigns, draft content, organize assets, track manual task
 - Represents manual platform setup and posting steps as checklist tasks.
 - Supports optional AI drafting assistance, always requiring human review.
 - Tracks posted URLs and follow-up performance checks.
+- Includes Lead Radar (Regional Lead Intelligence Engine) for configurable lead research, scoring, candidate review, draft outreach, and manual follow-up workflows.
 
 ## What ForgeMarketing Does Not Automate
 
@@ -61,6 +62,8 @@ App URL: http://localhost:8002
 - [docs/content-calendar.md](docs/content-calendar.md)
 - [docs/brand-voice.md](docs/brand-voice.md)
 - [docs/forge-marketing-v1-2-plan.md](docs/forge-marketing-v1-2-plan.md)
+- [docs/lead-radar.md](docs/lead-radar.md)
+- [docs/regional-lead-engine.md](docs/regional-lead-engine.md)
 
 Technical docs remain in [devdocs/README.md](devdocs/README.md).
 

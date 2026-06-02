@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6">
+  <div class="bg-white rounded-lg shadow p-6">
+    <h1 class="text-2xl font-bold">Scoring Rules</h1>
+    <p class="text-sm text-gray-600">Transparent, configurable scoring rules by brand/region.</p>
+  </div>
+
+  <div class="bg-white rounded-lg shadow p-4 grid grid-cols-1 md:grid-cols-5 gap-2">
+    <input id="brand_name" placeholder="brand_name" class="border rounded p-2" />
+    <input id="name" placeholder="rule name" class="border rounded p-2" />
+    <input id="rule_type" placeholder="rule_type" class="border rounded p-2" value="positive_keyword" />
+    <input id="match_value" placeholder="match_value" class="border rounded p-2" />
+    <input id="score_delta" placeholder="score_delta" class="border rounded p-2" value="10" />
+    <button onclick="createRule()" class="md:col-span-5 bg-gray-900 text-white rounded p-2">Create Rule</button>
+  </div>
+
+  <div class="bg-white rounded-lg shadow p-4" id="rules"></div>
+</div>
+
+<script>
+async function loadRules() {
+  const brand = document.getElementById('brand_name').value.trim();
+  const url = '/api/lead-radar/rules' + (brand ? ('?brand_name=' + encodeURIComponent(brand)) : '');
+  const res = await fetch(url);
+  const json = await res.json();
+  document.getElementById('rules').innerHTML = (json.data || []).map(r => `<div class="border-b py-2"><strong>${r.name}</strong> ${r.rule_type} match='${r.match_value}' delta=${r.score_delta}</div>`).join('') || 'No rules';
+}
+
+async function createRule() {
+  const payload = {
+    brand_name: document.getElementById('brand_name').value.trim(),
+    name: document.getElementById('name').value.trim(),
+    rule_type: document.getElementById('rule_type').value.trim(),
+    match_value: document.getElementById('match_value').value.trim(),
+    score_delta: parseInt(document.getElementById('score_delta').value || '0', 10)
+  };
+  const res = await fetch('/api/lead-radar/rules', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)});
+  const json = await res.json();
+  if (!json.success) { alert(json.error || 'Failed'); return; }
+  loadRules();
+}
+
+loadRules();
+</script>
+{% endblock %}

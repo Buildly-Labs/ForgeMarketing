@@ -9,6 +9,7 @@ from dashboard.models import (
     db, Brand, BrandEmailConfig, BrandSettings, BrandAPICredential,
     SystemConfig, APICredentialLog, User, UserBrand, BrandTheme,
 )
+from dashboard import lead_radar_models  # noqa: F401
 
 
 class DatabaseManager:
@@ -51,6 +52,15 @@ class DatabaseManager:
 
                     # Seed system config defaults (idempotent – skips existing keys)
                     self._seed_system_configs()
+
+                    # Seed optional Lead Radar defaults for Buildly if that brand exists.
+                    try:
+                        from dashboard.lead_radar_service import seed_buildly_defaults_if_present
+                        seeded = seed_buildly_defaults_if_present()
+                        if any(v > 0 for v in seeded.values()):
+                            print(f"✅ Seeded Lead Radar defaults: {seeded}")
+                    except Exception as seed_err:
+                        print(f"⚠️  Lead Radar seed skipped: {seed_err}")
 
                     brand_count = Brand.query.count()
                     if brand_count == 0:

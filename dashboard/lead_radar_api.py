@@ -1,0 +1,886 @@
+"""Lead Radar API and pages.
+
+Human-in-the-loop regional lead intelligence. No auto-send behavior.
+"""
+
+from datetime import datetime
+
+from flask import Blueprint, jsonify, render_template, request
+
+from dashboard.models import Brand, db
+from dashboard.lead_radar_models import (
+    Lead,
+    LeadActivity,
+    LeadCandidate,
+    LeadFeedback,
+    LeadRadarSetting,
+    LeadSource,
+    OutreachTemplate,
+    RegionProfile,
+    ScoringRule,
+)
+from dashboard.lead_radar_service import (
+    ALLOWED_SOURCE_TYPES,
+    FEEDBACK_TYPES,
+    LEAD_STATUSES,
+    calculate_fit_score,
+    capture_feedback,
+    convert_candidate_to_lead,
+    find_region_for_country,
+    generate_draft_for_lead,
+    get_dashboard_summary,
+    parse_csv_to_leads,
+    run_manual_research_job,
+    seed_buildly_defaults_if_present,
+    update_source_performance,
+    upsert_followup_task,
+    validate_lead_payload,
+)
+
+
+lead_api_bp = Blueprint("lead_api", __name__)
+
+
+def _dt(value):
+    return value.isoformat() if value else None
+
+
+def _lead_to_dict(lead: Lead):
+    return {
+        "id": lead.id,
+        "brand_name": lead.brand_name,
+        "region_id": lead.region_id,
+        "calendar_id": lead.calendar_id,
+        "owner": lead.owner,
+        "first_name": lead.first_name,
+        "last_name": lead.last_name,
+        "title": lead.title,
+        "company_name": lead.company_name,
+        "company_url": lead.company_url,
+        "linkedin_url": lead.linkedin_url,
+        "email": lead.email,
+        "country": lead.country,
+        "city": lead.city,
+        "company_stage": lead.company_stage,
+        "segment": lead.segment,
+        "source": lead.source,
+        "pain_signals": lead.pain_signals or [],
+        "fit_score": lead.fit_score,
+        "score_breakdown": lead.score_breakdown or [],
+        "priority": lead.priority,
+        "status": lead.status,
+        "consent_status": lead.consent_status,
+        "compliance_notes": lead.compliance_notes,
+        "notes": lead.notes,
+        "next_action_date": _dt(lead.next_action_date),
+        "is_do_not_contact": lead.is_do_not_contact,
+        "created_at": _dt(lead.created_at),
+        "updated_at": _dt(lead.updated_at),
+    }
+
+
+def _region_to_dict(region: RegionProfile):
+    return {
+        "id": region.id,
+        "brand_name": region.brand_name,
+        "name": region.name,
+        "slug": region.slug,
+        "owner": region.owner,
+        "countries": region.countries or [],
+        "timezone_notes": region.timezone_notes,
+        "primary_offer": region.primary_offer,
+        "entry_price_min": region.entry_price_min,
+        "entry_price_max": region.entry_price_max,
+        "currency": region.currency,
+        "target_segments": region.target_segments or [],
+        "preferred_channels": region.preferred_channels or [],
+        "outreach_tone": region.outreach_tone,
+        "local_notes": region.local_notes,
+        "is_active": region.is_active,
+        "created_at": _dt(region.created_at),
+        "updated_at": _dt(region.updated_at),
+    }
+
+
+def _activity_to_dict(activity: LeadActivity):
+    return {
+        "id": activity.id,
+        "lead_id": activity.lead_id,
+        "activity_type": activity.activity_type,
+        "channel": activity.channel,
+        "subject": activity.subject,
+        "body": activity.body,
+        "status": activity.status,
+        "completed_by": activity.completed_by,
+        "completed_at": _dt(activity.completed_at),
+        "next_action_date": _dt(activity.next_action_date),
+        "notes": activity.notes,
+        "created_at": _dt(activity.created_at),
+        "updated_at": _dt(activity.updated_at),
+    }
+
+
+def _template_to_dict(template: OutreachTemplate):
+    return {
+        "id": template.id,
+        "brand_name": template.brand_name,
+        "region_id": template.region_id,
+        "segment": template.segment,
+        "channel": template.channel,
+        "template_name": template.template_name,
+        "subject_template": template.subject_template,
+        "body_template": template.body_template,
+        "cta": template.cta,
+        "variables": template.variables or [],
+        "is_active": template.is_active,
+        "created_at": _dt(template.created_at),
+        "updated_at": _dt(template.updated_at),
+    }
+
+
+def _source_to_dict(source: LeadSource):
+    return {
+        "id": source.id,
+        "brand_name": source.brand_name,
+        "region_id": source.region_id,
+        "name": source.name,
+        "source_type": source.source_type,
+        "url": source.url,
+        "query_keywords": source.query_keywords or [],
+        "negative_keywords": source.negative_keywords or [],
+        "region_filters": source.region_filters or [],
+        "segment_filters": source.segment_filters or [],
+        "run_frequency": source.run_frequency,
+        "is_active": source.is_active,
+        "last_run_at": _dt(source.last_run_at),
+        "next_run_at": _dt(source.next_run_at),
+        "owner": source.owner,
+        "notes": source.notes,
+        "compliance_notes": source.compliance_notes,
+        "created_at": _dt(source.created_at),
+        "updated_at": _dt(source.updated_at),
+    }
+
+
+def _candidate_to_dict(candidate: LeadCandidate):
+    return {
+        "id": candidate.id,
+        "brand_name": candidate.brand_name,
+        "lead_source_id": candidate.lead_source_id,
+        "research_job_id": candidate.research_job_id,
+        "region_id": candidate.region_id,
+        "raw_name": candidate.raw_name,
+        "raw_company": candidate.raw_company,
+        "raw_title": candidate.raw_title,
+        "raw_url": candidate.raw_url,
+        "raw_text": candidate.raw_text,
+        "signal_summary": candidate.signal_summary,
+        "detected_keywords": candidate.detected_keywords or [],
+        "detected_region": candidate.detected_region,
+        "detected_segment": candidate.detected_segment,
+        "confidence_score": candidate.confidence_score,
+        "fit_score": candidate.fit_score,
+        "score_breakdown": candidate.score_breakdown or [],
+        "status": candidate.status,
+        "reviewer": candidate.reviewer,
+        "review_notes": candidate.review_notes,
+        "is_do_not_contact": candidate.is_do_not_contact,
+        "created_at": _dt(candidate.created_at),
+        "updated_at": _dt(candidate.updated_at),
+    }
+
+
+# Pages
+@lead_api_bp.route("/lead-radar")
+def lead_radar_home():
+    return render_template("lead_radar_dashboard.html", title="Lead Radar")
+
+
+@lead_api_bp.route("/lead-radar/sources")
+def lead_radar_sources_page():
+    return render_template("lead_radar_sources.html", title="Lead Radar Sources")
+
+
+@lead_api_bp.route("/lead-radar/candidates")
+def lead_radar_candidates_page():
+    return render_template("lead_radar_candidates.html", title="Lead Radar Candidates")
+
+
+@lead_api_bp.route("/lead-radar/rules")
+def lead_radar_rules_page():
+    return render_template("lead_radar_rules.html", title="Lead Radar Rules")
+
+
+@lead_api_bp.route("/lead-radar/feedback")
+def lead_radar_feedback_page():
+    return render_template("lead_radar_feedback.html", title="Lead Radar Feedback")
+
+
+@lead_api_bp.route("/lead-radar/settings")
+def lead_radar_settings_page():
+    return render_template("lead_radar_settings.html", title="Lead Radar Settings")
+
+
+@lead_api_bp.route("/leads")
+def leads_page():
+    return render_template("leads.html", title="Leads")
+
+
+@lead_api_bp.route("/leads/regions")
+def leads_regions_page():
+    return render_template("lead_regions.html", title="Lead Regions")
+
+
+@lead_api_bp.route("/leads/<int:lead_id>")
+def lead_detail_page(lead_id):
+    lead = Lead.query.get_or_404(lead_id)
+    return render_template("lead_detail.html", title=f"Lead {lead.company_name}", lead=lead)
+
+
+@lead_api_bp.route("/leads/import")
+def leads_import_page():
+    return render_template("lead_import.html", title="Import Leads")
+
+
+@lead_api_bp.route("/leads/dashboard")
+def leads_dashboard_page():
+    return render_template("lead_dashboard.html", title="Lead Dashboard")
+
+
+# Required lead routes
+@lead_api_bp.route("/api/leads/regions", methods=["GET"])
+def get_regions():
+    brand_name = request.args.get("brand_name")
+    q = RegionProfile.query
+    if brand_name:
+        q = q.filter_by(brand_name=brand_name)
+    return jsonify({"success": True, "data": [_region_to_dict(r) for r in q.order_by(RegionProfile.name.asc()).all()]})
+
+
+@lead_api_bp.route("/api/leads/regions", methods=["POST"])
+def create_region():
+    data = request.get_json() or {}
+    brand_name = data.get("brand_name")
+    if not brand_name:
+        return jsonify({"success": False, "error": "brand_name is required"}), 400
+
+    if not Brand.query.filter_by(name=brand_name).first():
+        return jsonify({"success": False, "error": "brand not found"}), 404
+
+    name = (data.get("name") or "").strip()
+    if not name:
+        return jsonify({"success": False, "error": "name is required"}), 400
+
+    slug = (data.get("slug") or name.lower().replace(" ", "-")).strip()
+    existing = RegionProfile.query.filter_by(brand_name=brand_name, slug=slug).first()
+    if existing:
+        return jsonify({"success": False, "error": "region slug already exists"}), 409
+
+    region = RegionProfile(
+        brand_name=brand_name,
+        name=name,
+        slug=slug,
+        owner=data.get("owner", ""),
+        countries=data.get("countries") or [],
+        timezone_notes=data.get("timezone_notes", ""),
+        primary_offer=data.get("primary_offer", ""),
+        entry_price_min=float(data.get("entry_price_min", 0) or 0),
+        entry_price_max=float(data.get("entry_price_max", 0) or 0),
+        currency=data.get("currency", "USD"),
+        target_segments=data.get("target_segments") or [],
+        preferred_channels=data.get("preferred_channels") or [],
+        outreach_tone=data.get("outreach_tone", ""),
+        local_notes=data.get("local_notes", ""),
+        is_active=bool(data.get("is_active", True)),
+    )
+    db.session.add(region)
+    db.session.commit()
+    return jsonify({"success": True, "data": _region_to_dict(region)}), 201
+
+
+@lead_api_bp.route("/api/leads", methods=["GET"])
+def get_leads():
+    q = Lead.query.filter_by(archived_at=None)
+    for field in ["brand_name", "owner", "status", "priority", "segment", "source"]:
+        value = request.args.get(field)
+        if value:
+            q = q.filter(getattr(Lead, field) == value)
+    region_id = request.args.get("region_id")
+    if region_id:
+        q = q.filter(Lead.region_id == int(region_id))
+    return jsonify({"success": True, "data": [_lead_to_dict(l) for l in q.order_by(Lead.updated_at.desc()).all()]})
+
+
+@lead_api_bp.route("/api/leads", methods=["POST"])
+def create_lead():
+    data = request.get_json() or {}
+    valid, err = validate_lead_payload(data)
+    if not valid:
+        return jsonify({"success": False, "error": err}), 400
+
+    # De-dup by linkedin/email when provided.
+    if data.get("linkedin_url"):
+        existing = Lead.query.filter_by(brand_name=data["brand_name"], linkedin_url=data.get("linkedin_url"), archived_at=None).first()
+        if existing:
+            return jsonify({"success": True, "data": _lead_to_dict(existing), "duplicate": True}), 200
+    if data.get("email"):
+        existing = Lead.query.filter_by(brand_name=data["brand_name"], email=data.get("email"), archived_at=None).first()
+        if existing:
+            return jsonify({"success": True, "data": _lead_to_dict(existing), "duplicate": True}), 200
+
+    region_id = data.get("region_id")
+    if not region_id:
+        region = find_region_for_country(data["brand_name"], data.get("region") or data.get("country") or "")
+        region_id = region.id if region else None
+
+    score = calculate_fit_score(data, rules=ScoringRule.query.filter_by(brand_name=data["brand_name"], is_active=True).all())
+
+    next_action = None
+    if data.get("next_action_date"):
+        try:
+            next_action = datetime.fromisoformat(data["next_action_date"])
+        except Exception:
+            return jsonify({"success": False, "error": "invalid next_action_date"}), 400
+
+    lead = Lead(
+        brand_name=data["brand_name"],
+        region_id=region_id,
+        calendar_id=data.get("calendar_id"),
+        owner=data.get("owner", ""),
+        first_name=data.get("first_name", ""),
+        last_name=data.get("last_name", ""),
+        title=data.get("title", ""),
+        company_name=data["company_name"],
+        company_url=data.get("company_url", ""),
+        linkedin_url=data.get("linkedin_url", ""),
+        email=data.get("email", ""),
+        country=data.get("country", ""),
+        city=data.get("city", ""),
+        company_stage=data.get("company_stage", ""),
+        segment=data.get("segment", ""),
+        source=data.get("source", "manual"),
+        pain_signals=data.get("pain_signals") or [],
+        fit_score=int(data.get("fit_score", score["fit_score"])),
+        score_breakdown=data.get("score_breakdown") or score["score_breakdown"],
+        priority=data.get("priority") if data.get("priority") else score["priority"],
+        status=data.get("status", "researched") if data.get("status", "researched") in LEAD_STATUSES else "researched",
+        consent_status=data.get("consent_status", "unknown"),
+        compliance_notes=data.get("compliance_notes", ""),
+        notes=data.get("notes", ""),
+        next_action_date=next_action,
+        is_do_not_contact=bool(data.get("is_do_not_contact", False)),
+    )
+    if lead.status == "do_not_contact":
+        lead.is_do_not_contact = True
+
+    db.session.add(lead)
+    db.session.flush()
+    if lead.next_action_date and not lead.is_do_not_contact:
+        upsert_followup_task(lead)
+
+    db.session.commit()
+    return jsonify({"success": True, "data": _lead_to_dict(lead)}), 201
+
+
+@lead_api_bp.route("/api/leads/<int:lead_id>", methods=["GET"])
+def get_lead(lead_id):
+    lead = Lead.query.get_or_404(lead_id)
+    return jsonify({"success": True, "data": _lead_to_dict(lead)})
+
+
+@lead_api_bp.route("/api/leads/<int:lead_id>", methods=["PUT"])
+def update_lead(lead_id):
+    lead = Lead.query.get_or_404(lead_id)
+    data = request.get_json() or {}
+
+    editable = [
+        "owner", "first_name", "last_name", "title", "company_name", "company_url",
+        "linkedin_url", "email", "country", "city", "company_stage", "segment", "source",
+        "consent_status", "compliance_notes", "notes", "status", "priority",
+    ]
+    for field in editable:
+        if field in data:
+            setattr(lead, field, data[field])
+
+    if "region_id" in data:
+        lead.region_id = data.get("region_id")
+    if "pain_signals" in data:
+        lead.pain_signals = data.get("pain_signals") or []
+    if "fit_score" in data:
+        lead.fit_score = int(data["fit_score"])
+    if "score_breakdown" in data:
+        lead.score_breakdown = data["score_breakdown"]
+    if "next_action_date" in data:
+        lead.next_action_date = datetime.fromisoformat(data["next_action_date"]) if data.get("next_action_date") else None
+    if "is_do_not_contact" in data:
+        lead.is_do_not_contact = bool(data["is_do_not_contact"])
+    if lead.status == "do_not_contact":
+        lead.is_do_not_contact = True
+
+    if lead.next_action_date and not lead.is_do_not_contact:
+        upsert_followup_task(lead)
+
+    db.session.commit()
+    return jsonify({"success": True, "data": _lead_to_dict(lead)})
+
+
+@lead_api_bp.route("/api/leads/<int:lead_id>", methods=["DELETE"])
+def delete_lead(lead_id):
+    lead = Lead.query.get_or_404(lead_id)
+    lead.archived_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({"success": True, "mode": "archive"})
+
+
+@lead_api_bp.route("/api/leads/import-csv", methods=["POST"])
+def import_leads_csv():
+    brand_name = request.form.get("brand_name") or request.args.get("brand_name")
+    if not brand_name:
+        data = request.get_json(silent=True) or {}
+        brand_name = data.get("brand_name")
+    if not brand_name:
+        return jsonify({"success": False, "error": "brand_name is required"}), 400
+
+    if "file" in request.files:
+        result = parse_csv_to_leads(request.files["file"], brand_name=brand_name)
+        return jsonify({"success": True, "data": result})
+
+    data = request.get_json(silent=True) or {}
+    csv_text = data.get("csv") or ""
+    if not csv_text:
+        return jsonify({"success": False, "error": "CSV file or csv text is required"}), 400
+
+    class _MemFile:
+        def __init__(self, text):
+            self._text = text
+
+        def read(self):
+            return self._text.encode("utf-8")
+
+    result = parse_csv_to_leads(_MemFile(csv_text), brand_name=brand_name)
+    return jsonify({"success": True, "data": result})
+
+
+@lead_api_bp.route("/api/leads/<int:lead_id>/score", methods=["POST"])
+def score_lead(lead_id):
+    lead = Lead.query.get_or_404(lead_id)
+    payload = request.get_json(silent=True) or {}
+
+    if payload.get("manual_override"):
+        if "fit_score" in payload:
+            lead.fit_score = int(payload["fit_score"])
+        if "priority" in payload:
+            lead.priority = payload["priority"]
+        if "score_breakdown" in payload:
+            lead.score_breakdown = payload["score_breakdown"]
+        db.session.commit()
+        return jsonify({"success": True, "data": _lead_to_dict(lead), "manual_override": True})
+
+    scored = calculate_fit_score(
+        {
+            "title": lead.title,
+            "segment": lead.segment,
+            "company_stage": lead.company_stage,
+            "source": lead.source,
+            "notes": lead.notes,
+            "pain_signals": lead.pain_signals,
+            "region_id": lead.region_id,
+        },
+        rules=ScoringRule.query.filter_by(brand_name=lead.brand_name, is_active=True).all(),
+    )
+    lead.fit_score = scored["fit_score"]
+    lead.priority = scored["priority"]
+    lead.score_breakdown = scored["score_breakdown"]
+    db.session.commit()
+    return jsonify({"success": True, "data": _lead_to_dict(lead)})
+
+
+@lead_api_bp.route("/api/leads/<int:lead_id>/activities", methods=["GET"])
+def get_lead_activities(lead_id):
+    Lead.query.get_or_404(lead_id)
+    activities = LeadActivity.query.filter_by(lead_id=lead_id).order_by(LeadActivity.created_at.desc()).all()
+    return jsonify({"success": True, "data": [_activity_to_dict(a) for a in activities]})
+
+
+@lead_api_bp.route("/api/leads/<int:lead_id>/activities", methods=["POST"])
+def create_lead_activity(lead_id):
+    lead = Lead.query.get_or_404(lead_id)
+    data = request.get_json() or {}
+
+    activity = LeadActivity(
+        lead_id=lead_id,
+        activity_type=data.get("activity_type", "note"),
+        channel=data.get("channel", "other"),
+        subject=data.get("subject", ""),
+        body=data.get("body", ""),
+        status=data.get("status", "draft"),
+        completed_by=data.get("completed_by", ""),
+        completed_at=datetime.fromisoformat(data["completed_at"]) if data.get("completed_at") else None,
+        next_action_date=datetime.fromisoformat(data["next_action_date"]) if data.get("next_action_date") else None,
+        notes=data.get("notes", ""),
+    )
+    db.session.add(activity)
+
+    if activity.next_action_date and not lead.is_do_not_contact:
+        lead.next_action_date = activity.next_action_date
+        upsert_followup_task(lead, summary=activity.subject or activity.notes or "Follow-up activity")
+
+    db.session.commit()
+    return jsonify({"success": True, "data": _activity_to_dict(activity)}), 201
+
+
+@lead_api_bp.route("/api/leads/<int:lead_id>/generate-draft", methods=["POST"])
+def generate_lead_draft(lead_id):
+    lead = Lead.query.get_or_404(lead_id)
+    data = request.get_json() or {}
+    channel = data.get("channel", "email")
+    template_id = data.get("template_id")
+
+    try:
+        draft = generate_draft_for_lead(lead, channel=channel, template_id=template_id)
+    except ValueError as exc:
+        return jsonify({"success": False, "error": str(exc)}), 400
+
+    return jsonify({"success": True, "data": draft})
+
+
+@lead_api_bp.route("/api/leads/templates", methods=["GET"])
+def get_templates():
+    brand_name = request.args.get("brand_name")
+    q = OutreachTemplate.query
+    if brand_name:
+        q = q.filter_by(brand_name=brand_name)
+    return jsonify({"success": True, "data": [_template_to_dict(t) for t in q.order_by(OutreachTemplate.id.desc()).all()]})
+
+
+@lead_api_bp.route("/api/leads/templates", methods=["POST"])
+def create_template():
+    data = request.get_json() or {}
+    if not data.get("brand_name"):
+        return jsonify({"success": False, "error": "brand_name is required"}), 400
+
+    template = OutreachTemplate(
+        brand_name=data["brand_name"],
+        region_id=data.get("region_id"),
+        segment=data.get("segment", ""),
+        channel=data.get("channel", "email"),
+        template_name=data.get("template_name", "Untitled Template"),
+        subject_template=data.get("subject_template", ""),
+        body_template=data.get("body_template", ""),
+        cta=data.get("cta", ""),
+        variables=data.get("variables") or [],
+        is_active=bool(data.get("is_active", True)),
+    )
+    db.session.add(template)
+    db.session.commit()
+    return jsonify({"success": True, "data": _template_to_dict(template)}), 201
+
+
+@lead_api_bp.route("/api/leads/dashboard-summary", methods=["GET"])
+def lead_dashboard_summary():
+    brand_name = request.args.get("brand_name")
+    return jsonify({"success": True, "data": get_dashboard_summary(brand_name=brand_name)})
+
+
+# Lead Radar configuration/workflow routes
+@lead_api_bp.route("/api/lead-radar/sources", methods=["GET"])
+def list_sources():
+    brand_name = request.args.get("brand_name")
+    q = LeadSource.query
+    if brand_name:
+        q = q.filter_by(brand_name=brand_name)
+    return jsonify({"success": True, "data": [_source_to_dict(s) for s in q.order_by(LeadSource.updated_at.desc()).all()]})
+
+
+@lead_api_bp.route("/api/lead-radar/sources", methods=["POST"])
+def create_source():
+    data = request.get_json() or {}
+    brand_name = data.get("brand_name")
+    if not brand_name:
+        return jsonify({"success": False, "error": "brand_name is required"}), 400
+
+    source_type = data.get("source_type", "manual")
+    if source_type not in ALLOWED_SOURCE_TYPES:
+        return jsonify({"success": False, "error": "invalid source_type"}), 400
+
+    source = LeadSource(
+        brand_name=brand_name,
+        region_id=data.get("region_id"),
+        name=data.get("name") or "Unnamed Source",
+        source_type=source_type,
+        url=data.get("url", ""),
+        query_keywords=data.get("query_keywords") or [],
+        negative_keywords=data.get("negative_keywords") or [],
+        region_filters=data.get("region_filters") or [],
+        segment_filters=data.get("segment_filters") or [],
+        run_frequency=data.get("run_frequency", "manual"),
+        is_active=bool(data.get("is_active", True)),
+        owner=data.get("owner", ""),
+        notes=data.get("notes", ""),
+        compliance_notes=data.get("compliance_notes", ""),
+    )
+    db.session.add(source)
+    db.session.commit()
+    return jsonify({"success": True, "data": _source_to_dict(source)}), 201
+
+
+@lead_api_bp.route("/api/lead-radar/sources/<int:source_id>", methods=["PUT"])
+def update_source(source_id):
+    source = LeadSource.query.get_or_404(source_id)
+    data = request.get_json() or {}
+    for field in [
+        "region_id", "name", "source_type", "url", "query_keywords", "negative_keywords",
+        "region_filters", "segment_filters", "run_frequency", "is_active", "owner", "notes", "compliance_notes",
+    ]:
+        if field in data:
+            setattr(source, field, data[field])
+    db.session.commit()
+    return jsonify({"success": True, "data": _source_to_dict(source)})
+
+
+@lead_api_bp.route("/api/lead-radar/research-jobs/run", methods=["POST"])
+def run_research_job():
+    data = request.get_json() or {}
+    source_id = data.get("lead_source_id")
+    if not source_id:
+        return jsonify({"success": False, "error": "lead_source_id is required"}), 400
+
+    source = LeadSource.query.get_or_404(int(source_id))
+    manual_items = data.get("manual_items") or []
+    job = run_manual_research_job(source, manual_items)
+    return jsonify({
+        "success": True,
+        "data": {
+            "id": job.id,
+            "lead_source_id": job.lead_source_id,
+            "status": job.status,
+            "results_count": job.results_count,
+            "candidates_created": job.candidates_created,
+            "run_log": job.run_log,
+            "started_at": _dt(job.started_at),
+            "completed_at": _dt(job.completed_at),
+        },
+    })
+
+
+@lead_api_bp.route("/api/lead-radar/candidates", methods=["GET"])
+def list_candidates():
+    q = LeadCandidate.query
+    brand_name = request.args.get("brand_name")
+    if brand_name:
+        q = q.filter_by(brand_name=brand_name)
+    status = request.args.get("status")
+    if status:
+        q = q.filter_by(status=status)
+    return jsonify({"success": True, "data": [_candidate_to_dict(c) for c in q.order_by(LeadCandidate.updated_at.desc()).all()]})
+
+
+@lead_api_bp.route("/api/lead-radar/candidates/<int:candidate_id>/review", methods=["POST"])
+def review_candidate(candidate_id):
+    candidate = LeadCandidate.query.get_or_404(candidate_id)
+    data = request.get_json() or {}
+    action = data.get("action")
+    if action not in {"approve", "reject", "duplicate", "do_not_contact"}:
+        return jsonify({"success": False, "error": "invalid action"}), 400
+
+    candidate.reviewer = data.get("reviewer", "")
+    candidate.review_notes = data.get("review_notes", "")
+
+    if action == "approve":
+        candidate.status = "approved"
+    elif action == "reject":
+        candidate.status = "rejected"
+    elif action == "duplicate":
+        candidate.status = "duplicate"
+    elif action == "do_not_contact":
+        candidate.status = "do_not_contact"
+        candidate.is_do_not_contact = True
+
+    update_source_performance(candidate.lead_source_id, candidate.brand_name, candidate.region_id)
+    db.session.commit()
+    return jsonify({"success": True, "data": _candidate_to_dict(candidate)})
+
+
+@lead_api_bp.route("/api/lead-radar/candidates/<int:candidate_id>/convert", methods=["POST"])
+def convert_candidate(candidate_id):
+    candidate = LeadCandidate.query.get_or_404(candidate_id)
+    if candidate.is_do_not_contact or candidate.status == "do_not_contact":
+        return jsonify({"success": False, "error": "candidate marked do_not_contact"}), 400
+
+    data = request.get_json() or {}
+    lead = convert_candidate_to_lead(candidate, owner=data.get("owner", ""), create_tasks=bool(data.get("create_tasks", True)))
+
+    update_source_performance(candidate.lead_source_id, candidate.brand_name, candidate.region_id)
+    db.session.commit()
+    return jsonify({"success": True, "data": _lead_to_dict(lead)})
+
+
+@lead_api_bp.route("/api/lead-radar/rules", methods=["GET"])
+def list_rules():
+    brand_name = request.args.get("brand_name")
+    q = ScoringRule.query
+    if brand_name:
+        q = q.filter_by(brand_name=brand_name)
+    data = [
+        {
+            "id": r.id,
+            "brand_name": r.brand_name,
+            "region_id": r.region_id,
+            "name": r.name,
+            "rule_type": r.rule_type,
+            "match_value": r.match_value,
+            "score_delta": r.score_delta,
+            "is_active": r.is_active,
+            "notes": r.notes,
+            "created_at": _dt(r.created_at),
+            "updated_at": _dt(r.updated_at),
+        }
+        for r in q.order_by(ScoringRule.updated_at.desc()).all()
+    ]
+    return jsonify({"success": True, "data": data})
+
+
+@lead_api_bp.route("/api/lead-radar/rules", methods=["POST"])
+def create_rule():
+    data = request.get_json() or {}
+    if not data.get("brand_name"):
+        return jsonify({"success": False, "error": "brand_name is required"}), 400
+
+    rule = ScoringRule(
+        brand_name=data["brand_name"],
+        region_id=data.get("region_id"),
+        name=data.get("name", "Untitled Rule"),
+        rule_type=data.get("rule_type", "custom"),
+        match_value=data.get("match_value", ""),
+        score_delta=int(data.get("score_delta", 0)),
+        is_active=bool(data.get("is_active", True)),
+        notes=data.get("notes", ""),
+    )
+    db.session.add(rule)
+    db.session.commit()
+
+    return jsonify({
+        "success": True,
+        "data": {
+            "id": rule.id,
+            "brand_name": rule.brand_name,
+            "region_id": rule.region_id,
+            "name": rule.name,
+            "rule_type": rule.rule_type,
+            "match_value": rule.match_value,
+            "score_delta": rule.score_delta,
+            "is_active": rule.is_active,
+            "notes": rule.notes,
+        },
+    }), 201
+
+
+@lead_api_bp.route("/api/lead-radar/feedback", methods=["GET"])
+def list_feedback():
+    brand_name = request.args.get("brand_name")
+    q = LeadFeedback.query
+    if brand_name:
+        q = q.outerjoin(Lead, Lead.id == LeadFeedback.lead_id).outerjoin(LeadCandidate, LeadCandidate.id == LeadFeedback.lead_candidate_id)
+        q = q.filter((Lead.brand_name == brand_name) | (LeadCandidate.brand_name == brand_name))
+
+    data = [
+        {
+            "id": f.id,
+            "lead_id": f.lead_id,
+            "lead_candidate_id": f.lead_candidate_id,
+            "user": f.user,
+            "feedback_type": f.feedback_type,
+            "feedback_notes": f.feedback_notes,
+            "created_at": _dt(f.created_at),
+        }
+        for f in q.order_by(LeadFeedback.created_at.desc()).all()
+    ]
+    return jsonify({"success": True, "data": data})
+
+
+@lead_api_bp.route("/api/lead-radar/feedback", methods=["POST"])
+def create_feedback():
+    data = request.get_json() or {}
+    if data.get("feedback_type") not in FEEDBACK_TYPES:
+        return jsonify({"success": False, "error": "invalid feedback_type"}), 400
+
+    feedback = capture_feedback(
+        feedback_type=data["feedback_type"],
+        user=data.get("user", ""),
+        lead_id=data.get("lead_id"),
+        lead_candidate_id=data.get("lead_candidate_id"),
+        feedback_notes=data.get("feedback_notes", ""),
+    )
+    return jsonify({
+        "success": True,
+        "data": {
+            "id": feedback.id,
+            "lead_id": feedback.lead_id,
+            "lead_candidate_id": feedback.lead_candidate_id,
+            "user": feedback.user,
+            "feedback_type": feedback.feedback_type,
+            "feedback_notes": feedback.feedback_notes,
+            "created_at": _dt(feedback.created_at),
+        },
+    }), 201
+
+
+@lead_api_bp.route("/api/lead-radar/settings", methods=["GET"])
+def get_settings():
+    brand_name = request.args.get("brand_name")
+    if not brand_name:
+        return jsonify({"success": False, "error": "brand_name is required"}), 400
+
+    setting = LeadRadarSetting.query.filter_by(brand_name=brand_name).first()
+    if not setting:
+        setting = LeadRadarSetting(brand_name=brand_name, settings_json={})
+        db.session.add(setting)
+        db.session.commit()
+
+    return jsonify({
+        "success": True,
+        "data": {
+            "id": setting.id,
+            "brand_name": setting.brand_name,
+            "settings_json": setting.settings_json or {},
+            "updated_at": _dt(setting.updated_at),
+        },
+    })
+
+
+@lead_api_bp.route("/api/lead-radar/settings", methods=["POST"])
+def update_settings():
+    data = request.get_json() or {}
+    brand_name = data.get("brand_name")
+    if not brand_name:
+        return jsonify({"success": False, "error": "brand_name is required"}), 400
+
+    setting = LeadRadarSetting.query.filter_by(brand_name=brand_name).first()
+    if not setting:
+        setting = LeadRadarSetting(brand_name=brand_name, settings_json={})
+        db.session.add(setting)
+
+    setting.settings_json = data.get("settings_json") or setting.settings_json or {}
+    db.session.commit()
+
+    return jsonify({
+        "success": True,
+        "data": {
+            "id": setting.id,
+            "brand_name": setting.brand_name,
+            "settings_json": setting.settings_json,
+            "updated_at": _dt(setting.updated_at),
+        },
+    })
+
+
+@lead_api_bp.route("/api/lead-radar/dashboard-summary", methods=["GET"])
+def lead_radar_dashboard_summary():
+    brand_name = request.args.get("brand_name")
+    return jsonify({"success": True, "data": get_dashboard_summary(brand_name=brand_name)})
+
+
+@lead_api_bp.route("/api/lead-radar/seed-defaults", methods=["POST"])
+def seed_defaults():
+    result = seed_buildly_defaults_if_present()
+    return jsonify({"success": True, "data": result})

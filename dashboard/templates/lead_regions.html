@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6">
+  <div class="bg-white rounded-lg shadow p-6">
+    <h1 class="text-2xl font-bold">Region Profiles</h1>
+    <p class="text-gray-600 text-sm mt-2">Create and manage configurable regions per brand.</p>
+  </div>
+
+  <div class="bg-white rounded-lg shadow p-4 grid grid-cols-1 md:grid-cols-3 gap-2">
+    <input id="brand_name" placeholder="brand_name" class="border rounded p-2" />
+    <input id="name" placeholder="region name" class="border rounded p-2" />
+    <input id="owner" placeholder="owner" class="border rounded p-2" />
+    <button onclick="createRegion()" class="md:col-span-3 bg-gray-900 text-white rounded p-2">Create Region</button>
+  </div>
+
+  <div class="bg-white rounded-lg shadow p-4" id="regions_list"></div>
+</div>
+
+<script>
+async function loadRegions() {
+  const brand = document.getElementById('brand_name').value.trim();
+  const url = '/api/leads/regions' + (brand ? ('?brand_name=' + encodeURIComponent(brand)) : '');
+  const res = await fetch(url);
+  const json = await res.json();
+  const wrap = document.getElementById('regions_list');
+  const rows = (json.data || []).map(r => `<div class="border-b py-2"><strong>${r.name}</strong> (${r.slug}) - owner: ${r.owner || 'unassigned'}</div>`);
+  wrap.innerHTML = rows.join('') || '<p class="text-sm text-gray-600">No regions found.</p>';
+}
+
+async function createRegion() {
+  const payload = {
+    brand_name: document.getElementById('brand_name').value.trim(),
+    name: document.getElementById('name').value.trim(),
+    owner: document.getElementById('owner').value.trim()
+  };
+  const res = await fetch('/api/leads/regions', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  });
+  const json = await res.json();
+  if (!json.success) {
+    alert(json.error || 'Failed to create region');
+    return;
+  }
+  loadRegions();
+}
+
+loadRegions();
+</script>
+{% endblock %}

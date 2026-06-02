@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6">
+  <div class="bg-white rounded-lg shadow p-6">
+    <div class="flex items-center justify-between">
+      <h1 class="text-2xl font-bold">Leads</h1>
+      <a href="/leads/import" class="px-3 py-2 bg-blue-600 text-white rounded">Import CSV</a>
+    </div>
+    <p class="text-sm text-gray-600 mt-2">Filter and manage leads by region, owner, score, and status.</p>
+  </div>
+
+  <div class="bg-white rounded-lg shadow p-4">
+    <div class="grid grid-cols-1 md:grid-cols-6 gap-2">
+      <input id="brand_name" placeholder="brand_name" class="border rounded p-2" />
+      <input id="region_id" placeholder="region_id" class="border rounded p-2" />
+      <input id="owner" placeholder="owner" class="border rounded p-2" />
+      <input id="status" placeholder="status" class="border rounded p-2" />
+      <input id="priority" placeholder="priority" class="border rounded p-2" />
+      <button onclick="loadLeads()" class="bg-gray-900 text-white rounded p-2">Apply</button>
+    </div>
+  </div>
+
+  <div class="bg-white rounded-lg shadow p-4 overflow-x-auto">
+    <table class="min-w-full text-sm">
+      <thead>
+        <tr class="text-left border-b">
+          <th class="py-2">Company</th>
+          <th>Contact</th>
+          <th>Region</th>
+          <th>Owner</th>
+          <th>Score</th>
+          <th>Priority</th>
+          <th>Status</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="lead_rows"></tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+async function loadLeads() {
+  const q = new URLSearchParams();
+  ['brand_name', 'region_id', 'owner', 'status', 'priority'].forEach(id => {
+    const v = document.getElementById(id).value.trim();
+    if (v) q.set(id, v);
+  });
+  const res = await fetch('/api/leads?' + q.toString());
+  const json = await res.json();
+  const rows = document.getElementById('lead_rows');
+  rows.innerHTML = '';
+  (json.data || []).forEach(lead => {
+    rows.innerHTML += `
+      <tr class="border-b">
+        <td class="py-2">${lead.company_name || ''}</td>
+        <td>${(lead.first_name || '')} ${(lead.last_name || '')}</td>
+        <td>${lead.region_id || ''}</td>
+        <td>${lead.owner || ''}</td>
+        <td>${lead.fit_score || 0}</td>
+        <td>${lead.priority || ''}</td>
+        <td>${lead.status || ''}${lead.is_do_not_contact ? ' (DNC)' : ''}</td>
+        <td><a href="/leads/${lead.id}" class="text-blue-600">Open</a></td>
+      </tr>
+    `;
+  });
+}
+loadLeads();
+</script>
+{% endblock %}

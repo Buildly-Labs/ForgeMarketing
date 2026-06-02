@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6">
+  <div class="bg-white rounded-lg shadow p-6">
+    <h1 class="text-2xl font-bold">Feedback Trends</h1>
+    <p class="text-sm text-gray-600">Capture review outcomes and improve source quality/rules over time.</p>
+  </div>
+
+  <div class="bg-white rounded-lg shadow p-4 grid grid-cols-1 md:grid-cols-5 gap-2">
+    <input id="user" placeholder="user" class="border rounded p-2" />
+    <input id="lead_id" placeholder="lead_id (optional)" class="border rounded p-2" />
+    <input id="lead_candidate_id" placeholder="candidate_id (optional)" class="border rounded p-2" />
+    <input id="feedback_type" placeholder="feedback_type" class="border rounded p-2" value="good_fit" />
+    <input id="feedback_notes" placeholder="notes" class="border rounded p-2" />
+    <button onclick="saveFeedback()" class="md:col-span-5 bg-gray-900 text-white rounded p-2">Save Feedback</button>
+  </div>
+
+  <div class="bg-white rounded-lg shadow p-4">
+    <h2 class="font-semibold">Recent Feedback</h2>
+    <div id="feedback_list" class="text-sm mt-2"></div>
+  </div>
+</div>
+
+<script>
+async function loadFeedback() {
+  const res = await fetch('/api/lead-radar/feedback');
+  const json = await res.json();
+  const items = json.data || [];
+  document.getElementById('feedback_list').innerHTML = items.map(f => `<div class="border-b py-2">${f.feedback_type} by ${f.user || 'unknown'} (lead=${f.lead_id || '-'}, candidate=${f.lead_candidate_id || '-'})<br><span class="text-xs text-gray-600">${f.feedback_notes || ''}</span></div>`).join('') || 'No feedback yet';
+}
+
+async function saveFeedback() {
+  const payload = {
+    user: document.getElementById('user').value.trim(),
+    lead_id: document.getElementById('lead_id').value ? parseInt(document.getElementById('lead_id').value, 10) : null,
+    lead_candidate_id: document.getElementById('lead_candidate_id').value ? parseInt(document.getElementById('lead_candidate_id').value, 10) : null,
+    feedback_type: document.getElementById('feedback_type').value.trim(),
+    feedback_notes: document.getElementById('feedback_notes').value.trim()
+  };
+  const res = await fetch('/api/lead-radar/feedback', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)});
+  const json = await res.json();
+  if (!json.success) { alert(json.error || 'Failed'); return; }
+  loadFeedback();
+}
+
+loadFeedback();
+</script>
+{% endblock %}

@@ -180,9 +180,14 @@ db.init_app(app)
 # Initialize admin API blueprint
 from dashboard.admin_api import admin_bp
 from dashboard.marketing_calendar_api import marketing_calendar_bp
+from dashboard.lead_radar_api import lead_api_bp
+
+# Import Lead Radar models so SQLAlchemy metadata includes these tables.
+from dashboard import lead_radar_models  # noqa: F401
 
 app.register_blueprint(admin_bp)
 app.register_blueprint(marketing_calendar_bp)
+app.register_blueprint(lead_api_bp)
 
 # Initialize database on app startup
 @app.before_request
