@@ -22,8 +22,8 @@ python dashboard/init_db.py
 This will:
 - Create `marketing_dashboard.db` SQLite database
 - Initialize schema with Brand, BrandEmailConfig, BrandSettings, and APICredentialLog tables
-- Load 5 default brands from environment variables (buildly, foundry, openbuild, radical, oregonsoftware)
-- Configure default email providers (Brevo for most, MailerSend for buildly)
+- Keep brand list dynamic (brands are created via onboarding/admin flows)
+- Store provider configuration per brand in the database
 
 ### 2. Start Dashboard
 
@@ -45,7 +45,7 @@ Represents a brand managed in the system.
 
 **Fields:**
 - `id` - Primary key
-- `name` - Unique identifier (buildly, foundry, etc.)
+- `name` - Unique identifier (brand slug, e.g. `washokuplus`)
 - `display_name` - Human-readable name
 - `description` - Brand description
 - `logo_url` - Brand logo
@@ -123,8 +123,8 @@ Response: {
   "brands": [
     {
       "id": 1,
-      "name": "buildly",
-      "display_name": "Buildly",
+      "name": "washokuplus",
+      "display_name": "Washoku Plus",
       "is_active": true,
       "email_providers": [{"provider": "mailersend", "is_primary": true}]
     }
@@ -359,4 +359,4 @@ ls -la /Users/greglind/Projects/me/marketing/dashboard/templates/
 For issues or questions:
 1. Check logs: `tail -f /Users/greglind/Projects/me/marketing/logs/*.log`
 2. Test database directly: `python dashboard/init_db.py`
-3. Review Buildly Way standards: `/github/prompts/BUILDLY_WAY_SYSTEM.md`
+3. Review project standards and current implementation notes in `devdocs/`

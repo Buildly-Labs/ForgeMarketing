@@ -1,6 +1,6 @@
 # Support
 
-ForgeMark is an open-source marketing automation platform maintained by Buildly Labs.
+ForgeMarketing is an open-source marketing operations platform maintained by the project contributors.
 
 ## Support Scope & SLA
 
@@ -12,7 +12,7 @@ ForgeMark is an open-source marketing automation platform maintained by Buildly 
 
 ### Labs Premium Support (Optional)
 
-Users can access premium support through the Buildly Forge marketplace:
+Users can access premium support through project-maintained support channels:
 
 - **Response Time Goal:** 24 business hours
 - **Scope:** Priority bug fixes, deployment assistance, custom integration guidance
@@ -23,18 +23,18 @@ Users can access premium support through the Buildly Forge marketplace:
 ### GitHub Issues (Community)
 - **Primary support channel**
 - Report bugs, request features, ask questions
-- GitHub repository: https://github.com/buildlyio/marketing
+- GitHub repository: https://github.com/Buildly-Marketplace/ForgeMarketing
 - **Expected response:** 24-48 hours
 
 ### Discord (Community)
 - **Secondary support channel**
 - Real-time community discussions
-- Join: https://discord.gg/buildly
+- Join: project community channel
 - **Best for:** quick questions, troubleshooting tips from community
 
 ### Email (Labs Premium Only)
 - **For premium support subscribers**
-- Email: support@buildly.io
+- Email: support@example.com
 - **Subject line:** Include "ForgeMark" and brief issue title
 - **Response:** Within 24 business hours
 
@@ -72,7 +72,7 @@ Users can access premium support through the Buildly Forge marketplace:
 
 ## Security Issues
 
-**Do not report security vulnerabilities publicly.** Email security@buildly.io with:
+**Do not report security vulnerabilities publicly.** Email security@example.com with:
 - Vulnerability description
 - Affected version(s)
 - Steps to reproduce

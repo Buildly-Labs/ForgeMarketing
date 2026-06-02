@@ -226,6 +226,50 @@
                     </div>
                 </div>
 
+                <div class="discovered-card" style="margin-bottom: 20px;">
+                    <div class="section-label">Product Type + Marketing Approach</div>
+                    <div class="form-group">
+                        <label for="product_type">Product Type *</label>
+                        <select id="product_type" onchange="updateMarketingGuidance()">
+                            <option value="">Select a product type</option>
+                            <option value="ios_lifestyle_app">Lifestyle / consumer app</option>
+                            <option value="android_mobile_app">Mobile app</option>
+                            <option value="developer_tool">Developer tool / SaaS</option>
+                            <option value="b2b_saas">B2B SaaS</option>
+                            <option value="marketplace">Marketplace</option>
+                            <option value="creator_tool">Creator tool</option>
+                            <option value="service_business">Service business</option>
+                            <option value="other">Other</option>
+                        </select>
+                        <div class="help">This helps ForgeMarketing suggest the right message, channels, and content techniques.</div>
+                    </div>
+                    <div id="marketing-guidance" class="alert alert-info" style="margin-top: 12px; display:none;"></div>
+                    <div class="form-group">
+                        <label for="target_audience">Target Audience</label>
+                        <textarea id="target_audience" placeholder="Who is this for, and what do they care about?"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="brand_voice_notes">Brand Voice Notes</label>
+                        <textarea id="brand_voice_notes" placeholder="Calm, playful, technical, direct, premium, etc."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="primary_cta">Primary CTA</label>
+                        <input type="text" id="primary_cta" placeholder="Download the app, book a demo, join the waitlist...">
+                    </div>
+                    <div class="form-group">
+                        <label for="default_hashtags">Default Hashtags</label>
+                        <input type="text" id="default_hashtags" placeholder="#health #habits #productivity">
+                    </div>
+                    <div class="form-group">
+                        <label for="visual_style_notes">Visual Style Notes</label>
+                        <textarea id="visual_style_notes" placeholder="Soft colors, app screenshots, calm imagery, UI demos, etc."></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label for="marketing_notes">Extra Marketing Notes</label>
+                        <textarea id="marketing_notes" placeholder="Anything unique about the launch, audience, or positioning."></textarea>
+                    </div>
+                </div>
+
                 <div class="form-group">
                     <label for="edit_description">Description</label>
                     <textarea id="edit_description" placeholder="A short description of your brand"></textarea>
@@ -528,6 +572,7 @@
 
         document.getElementById('edit_description').value = discovered.description || '';
         document.getElementById('edit_logo_url').value = discovered.logo_url || '';
+        updateMarketingGuidance();
 
         /* social links */
         const links = discovered.social_links || {};
@@ -556,6 +601,18 @@
         const email       = document.getElementById('admin_email').value.trim();
         const description = document.getElementById('edit_description').value.trim();
         const logoUrl     = document.getElementById('edit_logo_url').value.trim();
+        const productType = document.getElementById('product_type').value.trim();
+        const targetAudience = document.getElementById('target_audience').value.trim();
+        const brandVoiceNotes = document.getElementById('brand_voice_notes').value.trim();
+        const primaryCta = document.getElementById('primary_cta').value.trim();
+        const defaultHashtags = document.getElementById('default_hashtags').value.trim();
+        const visualStyleNotes = document.getElementById('visual_style_notes').value.trim();
+        const marketingNotes = document.getElementById('marketing_notes').value.trim();
+
+        if (!productType) {
+            showAlert('Please select a product type so we can tailor the marketing guidance.');
+            return;
+        }
 
         try {
             const resp = await fetch('/api/onboarding/complete', {
@@ -568,7 +625,14 @@
                     description: description,
                     logo_url: logoUrl,
                     social_links: discovered.social_links || {},
-                    theme_color: discovered.theme_color || ''
+                    theme_color: discovered.theme_color || '',
+                    product_type: productType,
+                    target_audience: targetAudience,
+                    brand_voice_notes: brandVoiceNotes,
+                    primary_cta: primaryCta,
+                    default_hashtags: defaultHashtags,
+                    visual_style_notes: visualStyleNotes,
+                    marketing_notes: marketingNotes
                 })
             });
             const data = await resp.json();
@@ -795,6 +859,7 @@
     function buildDoneSummary() {
         const items = [];
         items.push('<strong>Brand:</strong> ' + (document.getElementById('brand_display_name').value.trim()));
+        items.push('<strong>Product Type:</strong> ' + document.getElementById('product_type').selectedOptions[0].text);
         const provider = document.getElementById('email_provider').value;
         if (provider) items.push('<strong>Email:</strong> ' + provider);
         if (selectedAIProvider) items.push('<strong>AI:</strong> ' + selectedAIProvider);
@@ -808,6 +873,140 @@
         el.innerHTML = '<div class="discovered-card"><div class="section-label">Configuration Summary</div>' +
             items.map(i => '<div style="padding:4px 0;">' + i + '</div>').join('') +
             '<div style="padding:4px 0;color:#888;font-size:13px;">You can change any of these settings later in Admin &rarr; Brands.</div></div>';
+    }
+
+    const marketingGuidance = {
+        ios_lifestyle_app: {
+            title: 'Lifestyle app strategy',
+            message: 'Lead with habit transformation, daily rituals, calm visuals, and simple social proof. Use short-form video, App Store language, creator-style demos, and gentle reminder content.',
+            channels: 'Instagram, TikTok, YouTube Shorts, App Store, Bluesky',
+            techniques: 'Before/after framing, habit streaks, calm UI demos, founder voice notes, user wins'
+        },
+        android_mobile_app: {
+            title: 'Mobile app strategy',
+            message: 'Focus on utility, ease of use, screenshots, and clear download reasons. Show the app in motion and keep the CTA simple.',
+            channels: 'TikTok, YouTube Shorts, X, Play Store, Reddit',
+            techniques: 'Feature demos, problem/solution hooks, device screenshots, short tutorials'
+        },
+        developer_tool: {
+            title: 'Developer tool strategy',
+            message: 'Show the technical problem, the time saved, and the exact workflow improvement. Use proof, code-adjacent examples, and concise comparison posts.',
+            channels: 'LinkedIn, X, Dev.to, Product Hunt, Hacker News',
+            techniques: 'Comparison posts, ship logs, changelogs, technical walkthroughs, pain-point hooks'
+        },
+        b2b_saas: {
+            title: 'B2B SaaS strategy',
+            message: 'Focus on ROI, team workflow, and buyer clarity. Show how the product saves time, reduces risk, or improves outcomes.',
+            channels: 'LinkedIn, email, webinars, blog, case studies',
+            techniques: 'Problem/solution, ROI framing, customer proof, demo clips, thought leadership'
+        },
+        marketplace: {
+            title: 'Marketplace strategy',
+            message: 'Emphasize supply, trust, discovery, and how people get value quickly. Highlight community and network effects.',
+            channels: 'Instagram, X, LinkedIn, email, referral loops',
+            techniques: 'Listings, social proof, featured users, category highlights, trust-building content'
+        },
+        creator_tool: {
+            title: 'Creator tool strategy',
+            message: 'Show how the tool speeds up content creation, improves quality, and helps creators stay consistent.',
+            channels: 'TikTok, Instagram, YouTube, LinkedIn',
+            techniques: 'Workflow demos, templates, transformation posts, creator stories'
+        },
+        service_business: {
+            title: 'Service business strategy',
+            message: 'Lead with expertise, trust, outcomes, and clarity about who it helps. Use case studies and before/after stories.',
+            channels: 'LinkedIn, website, email, blog, referrals',
+            techniques: 'Testimonials, authority content, process posts, FAQ posts, proof points'
+        },
+        other: {
+            title: 'General strategy',
+            message: 'Use the brand voice and audience notes below to tailor the approach. Keep the first campaign simple and measurable.',
+            channels: 'Start with 2-3 channels only',
+            techniques: 'Clear CTA, consistent messaging, test-and-learn content'
+        }
+    };
+
+    function updateMarketingGuidance() {
+        const productType = document.getElementById('product_type').value;
+        const guidance = marketingGuidance[productType];
+        const panel = document.getElementById('marketing-guidance');
+
+        if (!guidance) {
+            panel.style.display = 'none';
+            panel.innerHTML = '';
+            return;
+        }
+
+        panel.style.display = '';
+        panel.innerHTML = `<strong>${guidance.title}</strong><br>${guidance.message}<br><br><strong>Recommended channels:</strong> ${guidance.channels}<br><strong>Techniques:</strong> ${guidance.techniques}`;
+
+        const autoFill = {
+            ios_lifestyle_app: {
+                target_audience: 'People building healthier daily habits and wanting a calmer app experience',
+                brand_voice_notes: 'Calm, encouraging, non-judgmental, lightly playful',
+                primary_cta: 'Download the app and start a gentle streak',
+                default_hashtags: '#wellness #habits #lifestyle',
+                visual_style_notes: 'Soft gradients, peaceful screenshots, app UI, lifestyle imagery'
+            },
+            developer_tool: {
+                target_audience: 'Developers, founders, and product teams who want to move faster',
+                brand_voice_notes: 'Direct, technical, credible, concise',
+                primary_cta: 'Try the tool or book a demo',
+                default_hashtags: '#devtools #buildinpublic #saas',
+                visual_style_notes: 'Product screenshots, diagrams, terminal captures, workflow visuals'
+            },
+            b2b_saas: {
+                target_audience: 'Teams and decision makers evaluating tools that improve workflow and ROI',
+                brand_voice_notes: 'Professional, confident, outcome-focused',
+                primary_cta: 'Book a demo or start a trial',
+                default_hashtags: '#b2bsaas #productivity #growth',
+                visual_style_notes: 'Clean UI, charts, product benefits, team workflow graphics'
+            },
+            marketplace: {
+                target_audience: 'Buyers and sellers looking for a trustworthy place to connect',
+                brand_voice_notes: 'Clear, community-driven, trust-building',
+                primary_cta: 'Browse listings or join the marketplace',
+                default_hashtags: '#marketplace #community #growth',
+                visual_style_notes: 'Directory views, user stories, matching flows, credibility signals'
+            },
+            creator_tool: {
+                target_audience: 'Creators and marketers making content consistently',
+                brand_voice_notes: 'Helpful, energetic, practical',
+                primary_cta: 'Start creating faster',
+                default_hashtags: '#creatortools #contentcreation #workflow',
+                visual_style_notes: 'Before/after examples, templates, editing workflows'
+            },
+            service_business: {
+                target_audience: 'People seeking expert help and proven outcomes',
+                brand_voice_notes: 'Experienced, clear, reassuring',
+                primary_cta: 'Book a consult',
+                default_hashtags: '#services #consulting #growth',
+                visual_style_notes: 'Case study imagery, team photos, proof points, process visuals'
+            },
+            other: {
+                target_audience: '',
+                brand_voice_notes: '',
+                primary_cta: '',
+                default_hashtags: '',
+                visual_style_notes: ''
+            }
+        };
+
+        const suggested = autoFill[productType];
+        if (!suggested) return;
+
+        const fillIfBlank = (id, value) => {
+            const el = document.getElementById(id);
+            if (el && !el.value.trim() && value) {
+                el.value = value;
+            }
+        };
+
+        fillIfBlank('target_audience', suggested.target_audience);
+        fillIfBlank('brand_voice_notes', suggested.brand_voice_notes);
+        fillIfBlank('primary_cta', suggested.primary_cta);
+        fillIfBlank('default_hashtags', suggested.default_hashtags);
+        fillIfBlank('visual_style_notes', suggested.visual_style_notes);
     }
 </script>
 </body>

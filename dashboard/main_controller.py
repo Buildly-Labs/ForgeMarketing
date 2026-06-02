@@ -1,5 +1,5 @@
-# Marketing Automation System - Main Controller
-# Central orchestration for all Buildly ecosystem marketing activities
+# ForgeMarketing - Main Controller
+# Central orchestration for multi-brand marketing operations
 
 import os
 import sys
@@ -17,8 +17,8 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 class MarketingController:
     """
-    Central controller for the Buildly marketing ecosystem
-    Coordinates automation across all brands: Buildly, Radical Therapy, Open Build, The Foundry
+    Central controller for ForgeMarketing operations.
+    Coordinates content planning, scheduling, and tracking across brands.
     """
     
     def __init__(self):
@@ -121,39 +121,16 @@ class MarketingController:
         # - Post scheduled content
         # - Track engagement metrics
         
-        brands = ['buildly', 'radical_therapy', 'open_build', 'foundry']
+        brands = []  # Load from database via Brand model
         for brand in brands:
             self.logger.info(f"Processing social media for {brand}")
             # Placeholder for social automation
     
     async def run_outreach_automation(self):
-        """Execute outreach campaigns across all brands"""
+        """Execute outreach campaigns across configured brands"""
         self.logger.info("📧 Running outreach automation")
         
-        # TODO: Integrate existing outreach systems
-        # - Foundry: Use existing daily_automation.py
-        # - Open Build: Use existing outreach_automation.py  
-        # - Add Buildly and Radical Therapy campaigns
-        
-        # Foundry outreach (already operational)
-        await self.run_foundry_outreach()
-        
-        # Open Build outreach (integrate existing)
-        await self.run_open_build_outreach()
-    
-    async def run_foundry_outreach(self):
-        """Run the proven Foundry outreach system"""
-        self.logger.info("🏭 Running Foundry outreach automation")
-        
-        # TODO: Import and execute foundry daily_automation.py
-        # This system is fully operational and should be preserved
-        pass
-    
-    async def run_open_build_outreach(self):
-        """Run Open Build outreach campaigns"""
-        self.logger.info("🔧 Running Open Build outreach automation")
-        
-        # TODO: Import and execute open-build outreach_automation.py
+        # TODO: Load campaigns from the database and dispatch outreach tasks
         pass
     
     async def run_content_automation(self):

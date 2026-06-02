@@ -9,6 +9,7 @@ from dashboard.models import (
     db, Brand, BrandEmailConfig, BrandSettings, BrandAPICredential,
     SystemConfig, APICredentialLog, User, UserBrand, BrandTheme,
 )
+from dashboard import lead_radar_models  # noqa: F401
 
 
 class DatabaseManager:
@@ -41,11 +42,9 @@ class DatabaseManager:
                     self._apply_schema_migrations()
                     print("✅ Database schema initialized successfully")
 
-                    # Seed brands + admin user if the DB is empty
+                    # Seed admin user if the DB is empty; brands are created via onboarding
                     brand_count = Brand.query.count()
                     user_count = User.query.count()
-                    if brand_count == 0:
-                        self._seed_brands_and_themes()
                     if user_count == 0:
                         self._seed_admin_user()
                     else:
@@ -53,6 +52,15 @@ class DatabaseManager:
 
                     # Seed system config defaults (idempotent – skips existing keys)
                     self._seed_system_configs()
+
+                    # Seed optional Lead Radar defaults for Buildly if that brand exists.
+                    try:
+                        from dashboard.lead_radar_service import seed_buildly_defaults_if_present
+                        seeded = seed_buildly_defaults_if_present()
+                        if any(v > 0 for v in seeded.values()):
+                            print(f"✅ Seeded Lead Radar defaults: {seeded}")
+                    except Exception as seed_err:
+                        print(f"⚠️  Lead Radar seed skipped: {seed_err}")
 
                     brand_count = Brand.query.count()
                     if brand_count == 0:
@@ -102,63 +110,8 @@ class DatabaseManager:
     # ── Seed helpers ─────────────────────────────────────────
 
     def _seed_brands_and_themes(self) -> None:
-        """Create Buildly and Foundry brands with data-driven themes."""
-        seed = [
-            {
-                'name': 'buildly',
-                'display_name': 'Buildly',
-                'description': 'Low-code automation platform',
-                'website_url': 'https://buildly.io',
-                'theme': {
-                    'primary_color': '#4A90D9',
-                    'secondary_color': '#1E3A5F',
-                    'accent_color': '#10B981',
-                    'nav_gradient_from': '#4A90D9',
-                    'nav_gradient_to': '#1E3A5F',
-                },
-            },
-            {
-                'name': 'foundry',
-                'display_name': 'The Foundry',
-                'description': 'Founder-first startup accelerator',
-                'website_url': 'https://firstcityfoundry.com',
-                'theme': {
-                    'primary_color': '#F97316',
-                    'secondary_color': '#1E3A5F',
-                    'accent_color': '#10B981',
-                    'nav_gradient_from': '#F97316',
-                    'nav_gradient_to': '#1E3A5F',
-                },
-            },
-        ]
-
-        for item in seed:
-            try:
-                brand = Brand(
-                    name=item['name'],
-                    display_name=item['display_name'],
-                    description=item['description'],
-                    website_url=item['website_url'],
-                    is_active=True,
-                )
-                db.session.add(brand)
-                db.session.flush()
-
-                # Theme
-                theme = BrandTheme(brand_id=brand.id, **item['theme'])
-                db.session.add(theme)
-
-                # Default settings
-                db.session.add(BrandSettings(brand_id=brand.id))
-                print(f"✅ Seeded brand: {item['display_name']}")
-            except Exception as e:
-                print(f"⚠️  Failed to seed brand {item['display_name']}: {e}")
-
-        try:
-            db.session.commit()
-        except Exception as e:
-            db.session.rollback()
-            print(f"❌ Brand seed commit failed: {e}")
+        """Legacy hook retained for compatibility; default brand seeding is disabled."""
+        print("ℹ️  Default brand seeding is disabled. Add brands from onboarding or admin.")
 
     def _seed_admin_user(self) -> None:
         """Create a default admin user linked to all brands."""
@@ -271,112 +224,8 @@ class DatabaseManager:
             print(f"✅ Seeded {added} system config entries from environment")
     
     def _load_default_brands(self) -> None:
-        """Load default brands from environment"""
-        import os
-        
-        brands_data = [
-            {
-                'name': 'buildly',
-                'display_name': 'Buildly',
-                'description': 'Project management platform',
-                'website_url': 'https://buildly.io',
-                'email_config': {
-                    'provider': 'mailersend',
-                    'api_key': os.getenv('MAILERSEND_API_TOKEN', ''),
-                    'from_email': os.getenv('BUILDLY_FROM_EMAIL', 'team@buildly.io'),
-                    'from_name': 'Buildly Team'
-                }
-            },
-            {
-                'name': 'foundry',
-                'display_name': 'Foundry',
-                'description': 'Startup accelerator platform',
-                'website_url': 'https://firstcityfoundry.com',
-                'email_config': {
-                    'provider': 'brevo',
-                    'api_key': os.getenv('BREVO_API_KEY', ''),
-                    'from_email': os.getenv('FOUNDRY_FROM_EMAIL', 'team@firstcityfoundry.com'),
-                    'from_name': 'Foundry Team'
-                }
-            },
-            {
-                'name': 'openbuild',
-                'display_name': 'OpenBuild',
-                'description': 'Community-driven development platform',
-                'website_url': 'https://open.build',
-                'email_config': {
-                    'provider': 'brevo',
-                    'api_key': os.getenv('BREVO_API_KEY', ''),
-                    'from_email': os.getenv('OPEN_BUILD_FROM_EMAIL', 'team@open.build'),
-                    'from_name': 'OpenBuild Team'
-                }
-            },
-            {
-                'name': 'radical',
-                'display_name': 'Radical Therapy',
-                'description': 'Digital therapy platform',
-                'website_url': 'https://radicaltherapy.com',
-                'email_config': {
-                    'provider': 'brevo',
-                    'api_key': os.getenv('BREVO_API_KEY', ''),
-                    'from_email': os.getenv('RADICAL_THERAPY_FROM_EMAIL', 'team@radicaltherapy.com'),
-                    'from_name': 'Radical Therapy'
-                }
-            },
-            {
-                'name': 'oregonsoftware',
-                'display_name': 'Oregon Software',
-                'description': 'Software development services',
-                'website_url': 'https://oregonsoftware.com',
-                'email_config': {
-                    'provider': 'brevo',
-                    'api_key': os.getenv('BREVO_API_KEY', ''),
-                    'from_email': os.getenv('OREGON_SOFTWARE_FROM_EMAIL', 'team@oregonsoftware.com'),
-                    'from_name': 'Oregon Software'
-                }
-            }
-        ]
-        
-        for brand_data in brands_data:
-            try:
-                # Create brand
-                brand = Brand(
-                    name=brand_data['name'],
-                    display_name=brand_data['display_name'],
-                    description=brand_data['description'],
-                    website_url=brand_data['website_url'],
-                    is_active=True
-                )
-                db.session.add(brand)
-                db.session.flush()  # Get the brand ID
-                
-                # Create email config
-                if brand_data['email_config']['api_key']:
-                    email_config = BrandEmailConfig(
-                        brand_id=brand.id,
-                        provider=brand_data['email_config']['provider'],
-                        api_key=brand_data['email_config']['api_key'],
-                        from_email=brand_data['email_config']['from_email'],
-                        from_name=brand_data['email_config']['from_name'],
-                        is_primary=True,
-                        is_verified=True
-                    )
-                    db.session.add(email_config)
-                
-                # Create settings
-                settings = BrandSettings(brand_id=brand.id)
-                db.session.add(settings)
-                
-                print(f"✅ Created brand: {brand_data['display_name']}")
-            except Exception as e:
-                print(f"⚠️  Failed to create brand {brand_data['display_name']}: {e}")
-        
-        try:
-            db.session.commit()
-            print(f"✅ Loaded {Brand.query.count()} default brands")
-        except Exception as e:
-            db.session.rollback()
-            print(f"❌ Failed to commit brands: {e}")
+        """Legacy hook retained for compatibility; default brand loading is disabled."""
+        print("ℹ️  No default brands are loaded during reset. Configure brands manually.")
     
     def reset_db(self) -> bool:
         """Drop all tables and recreate (DESTRUCTIVE!)"""

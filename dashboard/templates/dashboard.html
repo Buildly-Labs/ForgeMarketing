@@ -4,8 +4,8 @@
 <div class="space-y-6" x-data="dashboard()">
     <!-- Hero Section -->
     <div class="gradient-bg rounded-lg p-8 text-white card-shadow">
-        <h1 class="text-4xl font-bold mb-4">🚀 Marketing Automation Dashboard</h1>
-        <p class="text-xl opacity-90 mb-6">Unified AI-powered content generation for all your brands</p>
+        <h1 class="text-4xl font-bold mb-4">Marketing Command Center</h1>
+        <p class="text-xl opacity-90 mb-6">Plan campaigns, move drafts through review, and track manual publishing work.</p>
         <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
             <div class="bg-white bg-opacity-20 rounded-lg p-4">
                 <div class="flex items-center">
@@ -21,7 +21,7 @@
                     <i class="fas fa-robot text-2xl mr-3"></i>
                     <div>
                         <div class="text-2xl font-bold" x-text="aiStatus ? '✓' : '✗'">-</div>
-                        <div class="text-sm opacity-80">AI Integration</div>
+                        <div class="text-sm opacity-80">AI Drafting</div>
                     </div>
                 </div>
             </div>
@@ -30,7 +30,7 @@
                     <i class="fas fa-chart-line text-2xl mr-3"></i>
                     <div>
                         <div class="text-2xl font-bold" x-text="contentGenerated">0</div>
-                        <div class="text-sm opacity-80">Content Generated</div>
+                        <div class="text-sm opacity-80">Drafts Created</div>
                     </div>
                 </div>
             </div>
@@ -50,70 +50,102 @@
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div class="bg-white rounded-lg p-6 card-shadow">
             <div class="flex items-center mb-4">
-                <i class="fas fa-magic text-purple-600 text-2xl mr-3"></i>
-                <h3 class="text-lg font-semibold">Quick Generate</h3>
+                <i class="fas fa-bullhorn text-purple-600 text-2xl mr-3"></i>
+                <h3 class="text-lg font-semibold">Plan Campaigns</h3>
             </div>
-            <p class="text-gray-600 mb-4">Generate content instantly for any brand</p>
-            <a href="{{ request.script_root }}/generate" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors">
-                Start Generating
+            <p class="text-gray-600 mb-4">Create campaign timelines and track deliverables.</p>
+            <a href="/content-calendar" class="bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition-colors">
+                Open Calendar
             </a>
         </div>
         
         <div class="bg-white rounded-lg p-6 card-shadow">
             <div class="flex items-center mb-4">
-                <i class="fas fa-palette text-blue-600 text-2xl mr-3"></i>
-                <h3 class="text-lg font-semibold">Brand Management</h3>
+                <i class="fas fa-tasks text-blue-600 text-2xl mr-3"></i>
+                <h3 class="text-lg font-semibold">Manual Tasks</h3>
             </div>
-            <p class="text-gray-600 mb-4">Configure and manage your brand voices</p>
-            <a href="{{ request.script_root }}/brands" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
-                Manage Brands
+            <p class="text-gray-600 mb-4">Track human steps for setup, approvals, and posting.</p>
+            <a href="/content-calendar" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                View Task Board
             </a>
         </div>
         
         <div class="bg-white rounded-lg p-6 card-shadow">
             <div class="flex items-center mb-4">
-                <i class="fas fa-envelope text-red-600 text-2xl mr-3"></i>
-                <h3 class="text-lg font-semibold">Email Outreach</h3>
+                <i class="fas fa-check-circle text-red-600 text-2xl mr-3"></i>
+                <h3 class="text-lg font-semibold">Review Drafts</h3>
             </div>
-            <p class="text-gray-600 mb-4">Manage user outreach campaigns by brand</p>
-            <a href="{{ request.script_root }}/outreach" class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors">
-                Manage Outreach
+            <p class="text-gray-600 mb-4">Move content from draft to approved and ready to schedule.</p>
+            <a href="/content-calendar" class="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 transition-colors">
+                Review Queue
             </a>
         </div>
         
         <div class="bg-white rounded-lg p-6 card-shadow">
             <div class="flex items-center mb-4">
                 <i class="fas fa-chart-bar text-green-600 text-2xl mr-3"></i>
-                <h3 class="text-lg font-semibold">View Analytics</h3>
+                <h3 class="text-lg font-semibold">Track Performance</h3>
             </div>
-            <p class="text-gray-600 mb-4">Track performance and engagement metrics</p>
-            <a href="{{ request.script_root }}/analytics" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors">
-                View Reports
+            <p class="text-gray-600 mb-4">Capture 24h and 7d post results for weekly review.</p>
+            <a href="/analytics" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors">
+                Open Analytics
             </a>
+        </div>
+    </div>
+
+    <!-- Intern Action Board -->
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div class="bg-white rounded-lg p-6 card-shadow">
+            <h3 class="text-lg font-semibold mb-3">Due Today</h3>
+            <template x-for="item in dueToday" :key="item.id">
+                <p class="text-sm text-gray-700 mb-2" x-text="item.task_name"></p>
+            </template>
+            <p x-show="dueToday.length === 0" class="text-sm text-gray-500">No items due today.</p>
+        </div>
+        <div class="bg-white rounded-lg p-6 card-shadow">
+            <h3 class="text-lg font-semibold mb-3">Needs Review</h3>
+            <template x-for="item in needsReview" :key="item.id">
+                <p class="text-sm text-gray-700 mb-2" x-text="item.task_name"></p>
+            </template>
+            <p x-show="needsReview.length === 0" class="text-sm text-gray-500">No drafts waiting for review.</p>
+        </div>
+        <div class="bg-white rounded-lg p-6 card-shadow">
+            <h3 class="text-lg font-semibold mb-3">Ready To Schedule</h3>
+            <template x-for="item in readyToSchedule" :key="item.id">
+                <p class="text-sm text-gray-700 mb-2" x-text="item.task_name"></p>
+            </template>
+            <p x-show="readyToSchedule.length === 0" class="text-sm text-gray-500">No items in scheduling queue.</p>
+        </div>
+        <div class="bg-white rounded-lg p-6 card-shadow">
+            <h3 class="text-lg font-semibold mb-3">Performance Checks</h3>
+            <template x-for="item in performanceChecks" :key="item.id">
+                <p class="text-sm text-gray-700 mb-2" x-text="item.task_name"></p>
+            </template>
+            <p x-show="performanceChecks.length === 0" class="text-sm text-gray-500">No checks due right now.</p>
         </div>
     </div>
 
     <!-- Brand Overview -->
     <div class="bg-white rounded-lg p-6 card-shadow">
-        <h3 class="text-xl font-semibold mb-6">Brand Overview</h3>
+        <h3 class="text-xl font-semibold mb-6">Active Brands And Products</h3>
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {% for brand in user_brands %}
+            {% for brand in brands %}
             <div class="border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
                 <div class="flex items-center justify-between mb-2">
-                    <h4 class="font-semibold">{{ brand.display_name }}</h4>
+                    <h4 class="font-semibold capitalize">{{ brand }}</h4>
                     <span class="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">Active</span>
                 </div>
                 <p class="text-gray-600 text-sm mb-3">AI-powered content generation ready</p>
                 <div class="flex space-x-2">
-                    <button @click="generateContent('{{ brand.name }}', 'social')" 
+                    <button @click="generateContent('{{ brand }}', 'social')" 
                             class="bg-blue-500 text-white text-xs px-2 py-1 rounded hover:bg-blue-600">
                         <i class="fas fa-share-alt mr-1"></i>Social
                     </button>
-                    <button @click="generateContent('{{ brand.name }}', 'blog')" 
+                    <button @click="generateContent('{{ brand }}', 'blog')" 
                             class="bg-purple-500 text-white text-xs px-2 py-1 rounded hover:bg-purple-600">
                         <i class="fas fa-blog mr-1"></i>Blog
                     </button>
-                    <button @click="generateContent('{{ brand.name }}', 'email')" 
+                    <button @click="generateContent('{{ brand }}', 'email')" 
                             class="bg-green-500 text-white text-xs px-2 py-1 rounded hover:bg-green-600">
                         <i class="fas fa-envelope mr-1"></i>Email
                     </button>
@@ -157,6 +189,10 @@ function dashboard() {
         contentGenerated: 0,
         lastUpdate: '-',
         recentActivity: [],
+        dueToday: [],
+        needsReview: [],
+        readyToSchedule: [],
+        performanceChecks: [],
         
         async init() {
             await this.loadStatus();
@@ -179,7 +215,7 @@ function dashboard() {
                         this.recentActivity.push({
                             id: Date.now(),
                             title: 'AI Configuration Required',
-                            description: `Missing: ${statusData.missing_configuration?.ai?.join(', ') || 'OPENAI_API_KEY'}`,
+                            description: `Missing: ${statusData.missing_configuration?.ai?.join(', ') || 'AI provider settings'}`,
                             time: 'Config Issue',
                             type: 'warning'
                         });
@@ -189,26 +225,19 @@ function dashboard() {
                         this.recentActivity.push({
                             id: Date.now() + 1,
                             title: 'Email Configuration Required',
-                            description: `Missing: ${statusData.missing_configuration?.email?.join(', ') || 'Email credentials'}`,
+                            description: `Missing: ${statusData.missing_configuration?.email?.join(', ') || 'Email provider settings'}`,
                             time: 'Config Issue',
                             type: 'warning'
                         });
                     }
                 }
+
+                await this.loadMarketingWorkQueue();
                 
                 // Try to load real activity data from unified analytics
-                const overviewController = new AbortController();
-                const overviewTimer = setTimeout(() => overviewController.abort(), 8000);
-                let outreachRes = null;
-                try {
-                    outreachRes = await fetch('/api/outreach/overview?days=7&timeout=6', {
-                        signal: overviewController.signal
-                    });
-                } finally {
-                    clearTimeout(overviewTimer);
-                }
+                const outreachRes = await fetch('/api/outreach/overview');
                 
-                if (outreachRes && outreachRes.ok) {
+                if (outreachRes.ok) {
                     const outreachData = await outreachRes.json();
                     
                     if (outreachData.overview) {
@@ -236,9 +265,9 @@ function dashboard() {
                     this.contentGenerated = 0;
                     this.recentActivity.push({
                         id: Date.now() + 2,
-                        title: 'No Outreach Activity Yet',
-                        description: 'Start a campaign or run outreach to see activity here',
-                        time: 'Ready',
+                        title: 'No Activity Data',
+                        description: 'No outreach activity found - check configuration',
+                        time: 'Data Issue',
                         type: 'info'
                     });
                 }
@@ -249,8 +278,48 @@ function dashboard() {
                 this.contentGenerated = 0;
                 this.lastUpdate = 'Error';
                 this.recentActivity = [
-                    { id: 1, title: 'Connection Error', description: 'Failed to load dashboard data', time: 'Error', type: 'error' }
+                    { id: 1, title: 'Connection Error', description: 'Failed to load dashboard data', time: 'Error', type: 'error' },
+                    { id: 2, title: 'Campaign Discovery', description: 'New targets identified', time: '08:15 AM' },
+                    { id: 3, title: 'Analytics Report', description: 'Daily summary generated', time: '07:00 AM' }
                 ];
+            }
+        },
+
+        async loadMarketingWorkQueue() {
+            try {
+                const [tasksRes, campaignsRes] = await Promise.all([
+                    fetch('/api/marketing/tasks'),
+                    fetch('/api/marketing/campaigns')
+                ]);
+
+                if (!tasksRes.ok || !campaignsRes.ok) {
+                    return;
+                }
+
+                const tasksData = await tasksRes.json();
+                const campaignsData = await campaignsRes.json();
+
+                const tasks = tasksData.success ? tasksData.data : [];
+                const today = new Date().toISOString().split('T')[0];
+
+                this.dueToday = tasks.filter(t => (t.scheduled_date || '').startsWith(today) && t.status !== 'completed').slice(0, 5);
+                this.needsReview = tasks.filter(t => t.status === 'draft' || t.status === 'in_progress').slice(0, 5);
+                this.readyToSchedule = tasks.filter(t => t.status === 'scheduled').slice(0, 5);
+                this.performanceChecks = tasks.filter(t => t.status === 'completed').slice(0, 5);
+
+                const campaigns = campaignsData.success ? campaignsData.data : [];
+                const activeCampaigns = campaigns.filter(c => c.status === 'active');
+                if (activeCampaigns.length > 0) {
+                    this.recentActivity.unshift({
+                        id: `campaign-${Date.now()}`,
+                        title: 'Active Campaigns',
+                        description: `${activeCampaigns.length} campaign(s) currently active`,
+                        time: 'Now',
+                        type: 'info'
+                    });
+                }
+            } catch (error) {
+                console.error('Failed to load marketing queue:', error);
             }
         },
         

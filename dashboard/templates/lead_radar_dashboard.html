@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6">
+  <div class="bg-white rounded-lg shadow p-6">
+    <h1 class="text-2xl font-bold mb-2">Lead Radar</h1>
+    <p class="text-gray-600">Human-in-the-loop lead research, scoring, and draft workflow.</p>
+    <p class="text-sm text-amber-700 mt-3">ForgeMarketing creates research notes and draft outreach only. Review all information manually and send only through approved channels in compliance with platform rules and applicable laws.</p>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <a href="/lead-radar/sources" class="bg-white rounded-lg shadow p-4 hover:shadow-md">
+      <h2 class="font-semibold">Lead Sources</h2>
+      <p class="text-sm text-gray-600">Manage approved/manual source strategies.</p>
+    </a>
+    <a href="/lead-radar/candidates" class="bg-white rounded-lg shadow p-4 hover:shadow-md">
+      <h2 class="font-semibold">Candidates</h2>
+      <p class="text-sm text-gray-600">Review, approve, reject, or convert candidates.</p>
+    </a>
+    <a href="/leads" class="bg-white rounded-lg shadow p-4 hover:shadow-md">
+      <h2 class="font-semibold">Leads</h2>
+      <p class="text-sm text-gray-600">Track regional pipeline and next actions.</p>
+    </a>
+  </div>
+
+  <div class="bg-white rounded-lg shadow p-6">
+    <h2 class="text-lg font-semibold mb-4">Summary</h2>
+    <div id="summary" class="text-sm text-gray-700">Loading...</div>
+  </div>
+</div>
+
+<script>
+(async function loadSummary() {
+  const params = new URLSearchParams(window.location.search);
+  const brand = params.get('brand_name');
+  const url = '/api/lead-radar/dashboard-summary' + (brand ? ('?brand_name=' + encodeURIComponent(brand)) : '');
+  const res = await fetch(url);
+  const json = await res.json();
+  const data = json.data || {};
+  const summary = document.getElementById('summary');
+  summary.innerHTML = `
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div class="p-3 bg-gray-50 rounded">Calls Booked: <strong>${data.calls_booked || 0}</strong></div>
+      <div class="p-3 bg-gray-50 rounded">Proposals Sent: <strong>${data.proposals_sent || 0}</strong></div>
+      <div class="p-3 bg-gray-50 rounded">Won: <strong>${data.won || 0}</strong></div>
+      <div class="p-3 bg-gray-50 rounded">Due This Week: <strong>${data.next_actions_due_this_week || 0}</strong></div>
+    </div>
+  `;
+})();
+</script>
+{% endblock %}

@@ -27,42 +27,42 @@ from dashboard.models import (
 
 
 def seed_brands():
-    """Seed the 5 default brands"""
+    """Seed default sample brands for a standalone workspace."""
     brands_data = [
         {
-            'name': 'buildly',
-            'display_name': 'Buildly',
-            'description': 'Build software that scales with AI-assisted team collaboration. Transparent, maintainable development platform for serious teams building enterprise-ready applications.',
-            'logo_url': 'https://www.buildly.io/media/buildly-logo.svg',
-            'website_url': 'https://www.buildly.io/',
+            'name': 'washoku',
+            'display_name': 'Washoku',
+            'description': 'A peaceful lifestyle companion for healthier eating, movement, sleep, and mindfulness habits.',
+            'logo_url': '',
+            'website_url': 'https://example.com/washoku',
         },
         {
-            'name': 'foundry',
-            'display_name': 'The Foundry',
-            'description': 'Startup accelerator and innovation platform helping entrepreneurs launch and scale technology ventures.',
+            'name': 'northstar',
+            'display_name': 'Northstar Labs',
+            'description': 'B2B product studio sharing practical insights, feature releases, and customer wins.',
             'logo_url': '',
-            'website_url': 'https://firstcityfoundry.com',
+            'website_url': 'https://example.com/northstar',
         },
         {
-            'name': 'openbuild',
-            'display_name': 'OpenBuild',
-            'description': 'Community-driven open source development platform connecting developers and projects worldwide.',
+            'name': 'sunnyside',
+            'display_name': 'Sunnyside Goods',
+            'description': 'Consumer lifestyle brand focused on practical habits, routines, and everyday products.',
             'logo_url': '',
-            'website_url': 'https://open.build',
+            'website_url': 'https://example.com/sunnyside',
         },
         {
-            'name': 'radical',
-            'display_name': 'Radical Therapy',
-            'description': 'Digital therapy platform providing accessible mental health resources and professional support.',
+            'name': 'craftkit',
+            'display_name': 'CraftKit',
+            'description': 'Template and toolkit brand for creators and small teams launching digital products.',
             'logo_url': '',
-            'website_url': 'https://radicaltherapy.com',
+            'website_url': 'https://example.com/craftkit',
         },
         {
-            'name': 'oregonsoftware',
-            'display_name': 'Oregon Software',
-            'description': 'Software development services and consulting for Pacific Northwest businesses.',
+            'name': 'trailhead',
+            'display_name': 'Trailhead Studio',
+            'description': 'Small agency model used as a sample for founder-led marketing operations workflows.',
             'logo_url': '',
-            'website_url': 'https://oregonsoftware.com',
+            'website_url': 'https://example.com/trailhead',
         },
     ]
 
@@ -98,56 +98,56 @@ def seed_email_configs():
     """Seed email configurations for each brand"""
     configs = [
         {
-            'brand_name': 'buildly',
-            'provider': 'mailersend',
+            'brand_name': 'washoku',
+            'provider': 'brevo',
             'api_key': '',  # Set via admin panel: MAILERSEND_API_TOKEN
-            'from_email': 'marketing@buildly.io',
-            'from_name': 'Buildly Team',
-            'reply_to_email': 'support@buildly.io',
+            'from_email': 'team@washoku.example',
+            'from_name': 'Washoku Team',
+            'reply_to_email': 'team@washoku.example',
         },
         {
-            'brand_name': 'foundry',
+            'brand_name': 'northstar',
             'provider': 'brevo',
             'api_key': '',  # Set via admin panel: BREVO_API_KEY
             'smtp_host': 'smtp-relay.brevo.com',
             'smtp_port': 587,
             'smtp_user': '',  # Set via admin panel
-            'from_email': 'team@firstcityfoundry.com',
-            'from_name': 'Foundry Team',
-            'reply_to_email': 'team@firstcityfoundry.com',
+            'from_email': 'team@northstar.example',
+            'from_name': 'Northstar Team',
+            'reply_to_email': 'team@northstar.example',
         },
         {
-            'brand_name': 'openbuild',
+            'brand_name': 'sunnyside',
             'provider': 'brevo',
             'api_key': '',  # Set via admin panel: BREVO_API_KEY
             'smtp_host': 'smtp-relay.brevo.com',
             'smtp_port': 587,
             'smtp_user': '',  # Set via admin panel
-            'from_email': 'team@open.build',
-            'from_name': 'OpenBuild Team',
-            'reply_to_email': 'team@open.build',
+            'from_email': 'team@sunnyside.example',
+            'from_name': 'Sunnyside Team',
+            'reply_to_email': 'team@sunnyside.example',
         },
         {
-            'brand_name': 'radical',
+            'brand_name': 'craftkit',
             'provider': 'brevo',
             'api_key': '',  # Set via admin panel: BREVO_API_KEY
             'smtp_host': 'smtp-relay.brevo.com',
             'smtp_port': 587,
             'smtp_user': '',
-            'from_email': 'team@radicaltherapy.com',
-            'from_name': 'Radical Therapy',
-            'reply_to_email': 'team@radicaltherapy.com',
+            'from_email': 'team@craftkit.example',
+            'from_name': 'CraftKit Team',
+            'reply_to_email': 'team@craftkit.example',
         },
         {
-            'brand_name': 'oregonsoftware',
+            'brand_name': 'trailhead',
             'provider': 'brevo',
             'api_key': '',
             'smtp_host': 'smtp-relay.brevo.com',
             'smtp_port': 587,
             'smtp_user': '',
-            'from_email': 'team@oregonsoftware.com',
-            'from_name': 'Oregon Software',
-            'reply_to_email': 'team@oregonsoftware.com',
+            'from_email': 'team@trailhead.example',
+            'from_name': 'Trailhead Team',
+            'reply_to_email': 'team@trailhead.example',
         },
     ]
 
@@ -221,7 +221,7 @@ def seed_system_configs():
         ('flask_env', 'development', 'Flask environment', False, 'general'),
         ('debug_mode', 'true', 'Enable debug mode', False, 'general'),
         ('log_level', 'INFO', 'Logging level', False, 'general'),
-        ('daily_notification_email', 'team@open.build', 'Daily notification recipient', False, 'general'),
+        ('daily_notification_email', 'team@example.com', 'Daily notification recipient', False, 'general'),
 
         # Google Ads (placeholders)
         ('google_ads_developer_token', '', 'Google Ads developer token', True, 'google_ads'),
@@ -256,8 +256,8 @@ def seed_system_configs():
 
 def seed_api_credentials():
     """Seed API credential placeholders for each brand"""
-    # Twitter credentials structure for each brand
-    twitter_brands = ['buildly', 'foundry', 'openbuild', 'radical']
+    # Social credential placeholders for each sample brand
+    twitter_brands = ['washoku', 'northstar', 'sunnyside', 'craftkit', 'trailhead']
     
     created = 0
     for brand_name in twitter_brands:

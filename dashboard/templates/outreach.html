@@ -24,7 +24,13 @@
                     </div>
                     <div class="flex items-center space-x-4">
                         <span class="text-sm text-gray-600">Brand:</span>
-                        <span class="px-3 py-2 text-sm font-medium text-gray-700" x-text="selectedBrand"></span>
+                        <select x-model="selectedBrand" @change="loadBrandConfig()" 
+                                class="px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500">
+                            <option value="">Select Brand</option>
+                            <template x-for="b in availableBrands" :key="b">
+                                <option :value="b" x-text="b"></option>
+                            </template>
+                        </select>
                     </div>
                 </div>
             </div>
@@ -668,10 +674,9 @@
     </div>
 
     <script>
-        const ACTIVE_BRAND = {{ (active_brand.name if active_brand else '') | tojson }};
         function outreachManager() {
             return {
-                selectedBrand: ACTIVE_BRAND,
+                selectedBrand: '',
                 brandConfig: {},
                 csvFile: null,
                 csvData: [],

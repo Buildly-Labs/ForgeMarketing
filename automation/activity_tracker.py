@@ -16,6 +16,7 @@ import logging
 
 from sqlalchemy import (create_engine, text, MetaData, Table, Column, Index,
                         Integer, String, Float, Boolean, Text, DateTime)
+from sqlalchemy.exc import OperationalError
 
 
 class ActivityTracker:
@@ -33,28 +34,10 @@ class ActivityTracker:
         """
         self.database_url = database_url or os.getenv('DATABASE_URL')
         
-        # If no DATABASE_URL, try to build one from individual env vars (DigitalOcean style)
-        if not self.database_url:
-            db_host = os.getenv('DATABASE_HOST') or os.getenv('DB_HOST')
-            if db_host and db_host in {'db', 'database', 'mysql', 'postgres'} and not Path('/.dockerenv').exists():
-                db_host = None
-            if db_host:
-                db_user = os.getenv('DATABASE_USER') or os.getenv('DB_USER', 'root')
-                db_pass = os.getenv('DATABASE_PASSWORD') or os.getenv('DB_PASSWORD', '')
-                db_port = os.getenv('DATABASE_PORT') or os.getenv('DB_PORT', '25060')
-                db_name = os.getenv('DATABASE_NAME') or os.getenv('DB_NAME', 'defaultdb')
-                self.database_url = f'mysql+mysqldb://{db_user}:{db_pass}@{db_host}:{db_port}/{db_name}'
-        
         if self.database_url:
             # Fix Heroku-style postgres:// -> postgresql://
             if self.database_url.startswith('postgres://'):
                 self.database_url = self.database_url.replace('postgres://', 'postgresql://', 1)
-            # Fix mysql:// -> mysql+mysqldb:// for mysqlclient driver
-            if self.database_url.startswith('mysql://'):
-                self.database_url = self.database_url.replace('mysql://', 'mysql+mysqldb://', 1)
-            # Strip query params (e.g. ?ssl-mode=REQUIRED) that break mysqlclient
-            if '?' in self.database_url:
-                self.database_url = self.database_url.split('?')[0]
         else:
             db_path = str(Path(__file__).parent.parent / 'data' / 'activity_tracker.db')
             Path(db_path).parent.mkdir(parents=True, exist_ok=True)
@@ -176,8 +159,17 @@ class ActivityTracker:
     
     def _initialize_database(self):
         """Create all tables if they don't exist"""
-        self.sa_metadata.create_all(self.engine, checkfirst=True)
-        self.logger.info("✅ Activity tracking database initialized")
+        try:
+            self.sa_metadata.create_all(self.engine)
+            self.logger.info("✅ Activity tracking database initialized")
+        except OperationalError as e:
+            # SQLite can throw "table already exists" under concurrent startup.
+            if "already exists" in str(e).lower():
+                self.logger.warning(
+                    "⚠️  Activity tracking tables already exist; continuing startup"
+                )
+                return
+            raise
     
     # AI Activity Tracking
     def track_ai_generation(self, brand: str, content_type: str, template_used: str = None, 

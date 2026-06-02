@@ -29,7 +29,7 @@ Thumbs.db
 *.log
 logs/
 automation/logs/
-marketing/buildly_outreach_data/logs/
+marketing/outreach_data/logs/
 
 # Flask instance folder
 instance/

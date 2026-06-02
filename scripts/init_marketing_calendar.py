@@ -20,7 +20,7 @@ from dashboard.marketing_calendar_models import (
 
 
 def init_marketing_calendar():
-    """Initialize the marketing calendar with Buildly Labs data"""
+    """Initialize the marketing calendar with Washoku sample data"""
     
     print("\n🚀 Initializing Marketing Calendar System...")
     print("=" * 60)
@@ -43,18 +43,18 @@ def init_marketing_calendar():
         for brand in brands:
             print(f"      - {brand.name}: {brand.display_name}")
         
-        # Create Buildly Labs campaign
-        print("\n3️⃣  Creating Buildly Labs Campaign...")
+        # Create Washoku campaign
+        print("\n3️⃣  Creating Washoku Campaign...")
         start_date = datetime.now().replace(day=6, hour=0, minute=0, second=0, microsecond=0)
         if start_date < datetime.now():
             start_date = start_date + timedelta(days=30)
         
         campaign = MarketingCalendar(
-            brand_name='buildly',
-            campaign_name='Buildly Labs - 30 Day Growth Engine',
-            campaign_slug='buildly-labs-growth-30d',
-            description='Complete 30-day marketing blitz for Buildly Labs. Target: 1000+ signups through Reddit, HN, Indie Hackers, LinkedIn, Dev.to, and YouTube Shorts.',
-            goal='1000+ new Labs signups',
+            brand_name='washoku',
+            campaign_name='Washoku v1.2 Awareness Campaign',
+            campaign_slug='washoku-v1-2-awareness',
+            description='A calm awareness campaign for Washoku focused on peaceful habits, gentle logging, and balanced lifestyle content.',
+            goal='Increase Washoku awareness and early signups',
             target_metric='1000 signups',
             start_date=start_date,
             end_date=start_date + timedelta(days=30),
@@ -62,12 +62,12 @@ def init_marketing_calendar():
             currency='USD',
             status='draft',
             owner='Growth Team',
-            notes='This is a 0-20 budget growth campaign using organic content and compounding social media effects.',
+            notes='This is a human-reviewed awareness campaign using organic content and weekly review.',
             metadata={
-                'source': 'Buildly Labs Growth Playbook',
-                'weekly_rhythm': 'Mon: Reddit, Tue: LinkedIn, Wed: Dev.to, Thu: YouTube Short, Fri: Indie Hackers, Sat: YouTube Short, Sun: Engage',
-                'special_events': ['Day 5 - Show HN', 'Day 14 - Product Hunt'],
-                'content_pillars': ['AI Specs', 'Agile Alternative', 'Founder Tools']
+                'source': 'Washoku sample seed data',
+                'weekly_rhythm': 'Mon: Instagram, Tue: TikTok, Wed: YouTube Shorts, Thu: X, Fri: LinkedIn, Sat: Bluesky, Sun: Review',
+                'special_events': ['Week 1 - Brand voice review', 'Week 2 - First analytics check'],
+                'content_pillars': ['Peaceful meal habits', 'Sprout check-ins', 'Balance Garden progress']
             }
         )
         
@@ -82,64 +82,64 @@ def init_marketing_calendar():
             {
                 'day_offset': 0,
                 'hour': 9,
-                'name': 'Reddit: r/startups - Founder Idea Tool',
+                'name': 'Reddit: Peaceful Meal Habits',
                 'platform': PlatformType.REDDIT,
                 'priority': TaskPriority.HIGH,
-                'title': 'I built an AI tool that turns startup ideas into MVP specs + budgets in minutes',
+                'title': 'Real meals count too: a gentle reminder for Washoku users',
                 'is_automated': False
             },
             {
                 'day_offset': 1,
                 'hour': 10,
-                'name': 'LinkedIn: Agile is Breaking Down',
+                'name': 'LinkedIn: Sprout Check-in',
                 'platform': PlatformType.LINKEDIN,
                 'priority': TaskPriority.HIGH,
-                'title': 'Teams aren\'t struggling because they\'re bad at Agile',
+                'title': 'Meet Sprout, your gentle lifestyle companion',
                 'is_automated': False
             },
             {
                 'day_offset': 2,
                 'hour': 8,
-                'name': 'Dev.to: Agile is Broken - RAD Process',
+                'name': 'Dev.to: One-sentence logging',
                 'platform': PlatformType.DEVTO,
                 'priority': TaskPriority.HIGH,
-                'title': 'Agile is Broken. Here\'s the AI-Driven RAD Process We Use Instead',
+                'title': 'One sentence meal logging with Washoku',
                 'is_automated': False
             },
             {
                 'day_offset': 3,
                 'hour': 12,
-                'name': 'YouTube Short: Idea → Spec in 20 Seconds',
+                'name': 'YouTube: Real meals count',
                 'platform': PlatformType.YOUTUBE,
                 'priority': TaskPriority.MEDIUM,
-                'title': 'YouTube Short - Idea to Spec Demo',
+                'title': 'Real meals count too',
                 'is_automated': False
             },
             {
                 'day_offset': 4,
                 'hour': 14,
-                'name': 'Indie Hackers: Week 1 Progress Update',
-                'platform': PlatformType.INDIE_HACKERS,
+                'name': 'LinkedIn: Building without shame',
+                'platform': PlatformType.LINKEDIN,
                 'priority': TaskPriority.MEDIUM,
-                'title': 'Week 1: Built an AI that generates MVP specs',
+                'title': 'Building healthier habits without shame',
                 'is_automated': False
             },
             {
                 'day_offset': 5,
                 'hour': 13,
-                'name': 'YouTube Short: Agile is Too Slow',
-                'platform': PlatformType.YOUTUBE,
+                'name': 'Indie Hackers: Balance Garden progress',
+                'platform': PlatformType.INDIE_HACKERS,
                 'priority': TaskPriority.MEDIUM,
-                'title': 'YouTube Short - Agile vs RAD Process',
+                'title': 'Your Balance Garden grows through small choices',
                 'is_automated': False
             },
             {
                 'day_offset': 4,  # Friday
                 'hour': 10,
-                'name': 'Hacker News: Show HN - Buildly Labs',
+                'name': 'Hacker News: Recipe and plating ideas',
                 'platform': PlatformType.HACKER_NEWS,
                 'priority': TaskPriority.CRITICAL,
-                'title': 'Show HN: Buildly Labs — AI tool that turns ideas into specs',
+                'title': 'Recipe and plating ideas for calm, healthy meals',
                 'is_automated': False
             }
         ]
@@ -147,7 +147,7 @@ def init_marketing_calendar():
         for task_data in tasks_data:
             task = MarketingTask(
                 calendar_id=campaign.id,
-                brand_name='buildly',
+                brand_name='washoku',
                 task_name=task_data['name'],
                 task_slug=task_data['name'].lower().replace(': ', '-').replace(' ', '-'),
                 task_type=TaskType.SOCIAL_POST if task_data['platform'] != PlatformType.YOUTUBE else TaskType.VIDEO,
@@ -172,7 +172,7 @@ def init_marketing_calendar():
         
         templates = [
             ContentTemplate(
-                brand_name='buildly',
+                brand_name='washoku',
                 template_name='Reddit Post - Founder Pain',
                 template_slug='reddit-founder-pain',
                 category='social_proof',
@@ -183,15 +183,15 @@ def init_marketing_calendar():
                 cta='Try it free',
                 hashtags='#startup #ai #productmanagement',
                 variables={
-                    'tool_name': 'Buildly Labs',
-                    'main_benefit': 'turns startup ideas into MVP specs + budgets',
-                    'tagline': 'AI that turns ideas into clear specs'
+                    'tool_name': 'Washoku',
+                    'main_benefit': 'helps people build healthier habits gently',
+                    'tagline': 'A peaceful lifestyle companion'
                 },
-                description='Template for Reddit posts about founder pain points'
+                description='Template for social posts about peaceful habit building'
             ),
             ContentTemplate(
-                brand_name='buildly',
-                template_name='LinkedIn Post - Thought Leadership',
+                brand_name='washoku',
+                template_name='LinkedIn Post - Gentle Thought Leadership',
                 template_slug='linkedin-thought-leadership',
                 category='thought_leadership',
                 platform=PlatformType.LINKEDIN,
@@ -199,13 +199,13 @@ def init_marketing_calendar():
                 title_template='{{headline}}',
                 body_template='{{main_message}}\n\nSo we built {{solution}}',
                 cta='Learn more',
-                hashtags='#ai #productivity #startup',
+                hashtags='#wellness #habits #health',
                 variables={
-                    'headline': 'Agile is Breaking Down',
-                    'main_message': 'Teams aren\'t struggling because they\'re bad at Agile',
-                    'solution': 'a new model'
+                    'headline': 'Healthy habits work best when they feel gentle',
+                    'main_message': 'People stay consistent when the system is calm and easy to return to',
+                    'solution': 'a peaceful companion'
                 },
-                description='Template for LinkedIn thought leadership posts'
+                description='Template for Washoku thought leadership posts'
             )
         ]
         
@@ -220,14 +220,14 @@ def init_marketing_calendar():
             db.session.commit()
             print("\n✅ Marketing Calendar initialized successfully!")
             print("\n📊 Summary:")
-            print(f"   - Campaign: Buildly Labs 30-Day Growth Engine")
+            print(f"   - Campaign: Washoku v1.2 Awareness Campaign")
             print(f"   - Start Date: {start_date.strftime('%B %d, %Y')}")
             print(f"   - Tasks: {len(tasks_data)}")
             print(f"   - Templates: {len(templates)}")
             print(f"   - Platforms: Reddit, LinkedIn, Dev.to, YouTube, Indie Hackers, Hacker News")
             print("\n🚀 Next steps:")
             print("   1. Visit http://localhost:5003/marketing-calendar")
-            print("   2. Review the Buildly Labs campaign")
+            print("   2. Review the Washoku campaign")
             print("   3. Assign tasks to team members")
             print("   4. Start executing from Monday")
             print("\n" + "=" * 60 + "\n")

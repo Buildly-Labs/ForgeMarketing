@@ -36,6 +36,8 @@ except ImportError:
 PROJECT_ROOT = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
+from config.brand_loader import get_all_brands
+
 class SocialMediaManager:
     """Unified social media posting and analytics manager"""
     
@@ -92,34 +94,41 @@ class SocialMediaManager:
                         'twitter': {'max_length': 280}
                     }
                 },
-                'brand_platforms': {
-                    'buildly': {'active_platforms': ['twitter', 'linkedin']},
-                    'foundry': {'active_platforms': ['twitter', 'linkedin']},
-                    'open_build': {'active_platforms': ['twitter', 'linkedin']},
-                    'radical_therapy': {'active_platforms': ['twitter', 'instagram']}
-                }
+                'brand_platforms': self._default_brand_platforms()
             }
             
     def get_env_var(self, var_name: str, default: str = "") -> str:
         """Get environment variable with fallback to config"""
         return os.getenv(var_name, default)
+
+    def _default_brand_platforms(self) -> Dict[str, Dict[str, List[str]]]:
+        """Create default platform config for active brands."""
+        brands = get_all_brands(active_only=True)
+        if not brands:
+            brands = ['open_build', 'radical_therapy']
+        return {brand: {'active_platforms': ['twitter', 'linkedin']} for brand in brands}
+
+    def _default_mastodon_brand_mapping(self) -> Dict[str, List[str]]:
+        """Map active brands to available Mastodon account slots."""
+        brands = get_all_brands(active_only=True)
+        if not brands:
+            brands = ['open_build', 'radical_therapy']
+        slots = ['BRAND1', 'BRAND2']
+        mapping = {
+            'personal': ['PERSONAL'],
+            'all': ['BRAND1', 'BRAND2', 'PERSONAL']
+        }
+        for idx, brand in enumerate(brands):
+            mapping[brand] = [slots[idx % len(slots)]]
+        return mapping
     
     def get_mastodon_accounts_for_brand(self, brand: str) -> List[Dict[str, str]]:
         """Get all Mastodon accounts configured for a brand"""
         accounts = []
-        
-        # Brand-specific account mapping
-        brand_accounts = {
-            'buildly': ['BUILDLY', 'CLOUDNATIVE'],  # Both buildly accounts
-            'foundry': ['BUILDLY', 'CLOUDNATIVE'],  # Use buildly accounts for foundry
-            'open_build': ['OPENBUILD'],  # Dedicated open build account
-            'open-build': ['OPENBUILD'],  # Alternative naming
-            'personal': ['PERSONAL'],  # Personal account
-            'all': ['BUILDLY', 'CLOUDNATIVE', 'OPENBUILD', 'PERSONAL']  # All accounts
-        }
+        brand_accounts = self._default_mastodon_brand_mapping()
         
         # Get account prefixes for this brand
-        account_prefixes = brand_accounts.get(brand.lower(), ['BUILDLY'])  # Default to buildly
+        account_prefixes = brand_accounts.get(brand.lower(), ['BRAND1'])
         
         for prefix in account_prefixes:
             instance = self.get_env_var(f'MASTODON_{prefix}_INSTANCE')
@@ -246,12 +255,7 @@ class SocialMediaManager:
     
     def get_mastodon_accounts_for_brand(self, brand):
         """Get list of Mastodon account keys for a specific brand"""
-        brand_mapping = {
-            'buildly': ['BUILDLY', 'CLOUDNATIVE'],
-            'open_build': ['OPENBUILD'], 
-            'personal': ['PERSONAL'],
-            'all': ['BUILDLY', 'CLOUDNATIVE', 'OPENBUILD', 'PERSONAL']
-        }
+        brand_mapping = self._default_mastodon_brand_mapping()
         
         account_keys = brand_mapping.get(brand.lower(), [])
         
@@ -652,10 +656,13 @@ async def main():
     """Test the social media manager"""
     manager = SocialMediaManager()
     
+    active_brands = get_all_brands(active_only=True)
+    test_brand = active_brands[0] if active_brands else 'open_build'
+
     # Test cross-platform posting
     result = await manager.cross_platform_post(
         content="Testing unified social media integration! 🚀 #Marketing #Automation",
-        brand="buildly",
+        brand=test_brand,
         platforms=["twitter", "bluesky", "linkedin"]
     )
     

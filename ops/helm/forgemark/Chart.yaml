@@ -9,9 +9,9 @@ keywords:
   - automation
   - ai
   - analytics
-home: https://github.com/buildlyio/marketing
+home: https://github.com/Buildly-Marketplace/ForgeMarketing
 sources:
-  - https://github.com/buildlyio/marketing
+  - https://github.com/Buildly-Marketplace/ForgeMarketing
 maintainers:
-  - name: Buildly Labs
-    email: labs@buildly.io
+  - name: ForgeMarketing contributors
+    email: support@example.com

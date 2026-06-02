@@ -21,6 +21,7 @@ SKIP_VENV=false
 CLEAN_MODE=false
 PID_FILE="${PROJECT_ROOT}/ops/.server.pid"
 LOG_FILE="${PROJECT_ROOT}/ops/server.log"
+GUNICORN_WORKERS="${GUNICORN_WORKERS:-1}"
 
 # Functions
 print_header() {
@@ -47,10 +48,19 @@ print_info() {
 
 run_marketing_migrations() {
     print_info "Running marketing database migrations..."
-    if bash "$PROJECT_ROOT/ops/run_marketing_migrations.sh"; then
+    local migration_output
+    migration_output=$(bash "$PROJECT_ROOT/ops/run_marketing_migrations.sh" 2>&1)
+    local migration_exit_code=$?
+
+    if [ "$migration_exit_code" -eq 0 ]; then
         print_success "Marketing database migrations applied"
     else
+        if echo "$migration_output" | grep -q "No such command 'db'"; then
+            print_warning "Flask-Migrate CLI is unavailable; skipping migrations for local run"
+            return 0
+        fi
         print_error "Marketing database migration failed"
+        echo "$migration_output"
         return 1
     fi
 }
@@ -395,7 +405,7 @@ print('Database initialization complete!')
         # Use gunicorn if available, fall back to flask run
         if python3 -c "import gunicorn" 2>/dev/null; then
             print_info "Using Gunicorn server..."
-            nohup gunicorn --bind "0.0.0.0:$PORT" --workers 4 --timeout 120 --reload "${APP_FILE}:app" > "$LOG_FILE" 2>&1 &
+            nohup gunicorn --bind "0.0.0.0:$PORT" --workers "$GUNICORN_WORKERS" --timeout 120 --reload "${APP_FILE}:app" > "$LOG_FILE" 2>&1 &
         else
             print_info "Using Flask development server..."
             nohup python3 -m flask run --host 0.0.0.0 --port "$PORT" > "$LOG_FILE" 2>&1 &

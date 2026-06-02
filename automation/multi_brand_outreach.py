@@ -128,6 +128,46 @@ class MultiBrandOutreachDatabase:
         """Initialize database with multi-brand schema"""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
+
+        # Legacy-compatible table used by discovery and campaign execution.
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS unified_targets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand TEXT NOT NULL,
+                target_key TEXT NOT NULL,
+                name TEXT NOT NULL,
+                website TEXT,
+                category TEXT,
+                email TEXT DEFAULT '',
+                contact_name TEXT DEFAULT '',
+                contact_role TEXT DEFAULT '',
+                description TEXT,
+                focus_areas TEXT,
+                priority INTEGER DEFAULT 1,
+                source TEXT DEFAULT 'automated_discovery',
+                last_contacted TEXT,
+                contact_count INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(brand, target_key)
+            )
+        """)
+
+        # Legacy-compatible outreach log table used by execute_brand_campaign.
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS unified_outreach_log (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                brand TEXT NOT NULL,
+                target_id INTEGER,
+                target_key TEXT,
+                campaign_id TEXT,
+                email_address TEXT,
+                subject TEXT,
+                message_template TEXT,
+                status TEXT DEFAULT 'sent',
+                delivery_time TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
         
         # Targets table
         cursor.execute("""

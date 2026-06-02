@@ -157,8 +157,13 @@ class ContentTemplate(db.Model):
     # Template content
     title_template = db.Column(db.String(500))
     body_template = db.Column(db.Text)
+    prompt_instructions = db.Column(db.Text)
+    example_output = db.Column(db.Text)
+    required_assets = db.Column(JSON, default=list)
     cta = db.Column(db.String(255))  # Call-to-action
     hashtags = db.Column(db.String(500))
+    suggested_cta = db.Column(db.String(255))
+    suggested_hashtags = db.Column(db.String(500))
     variables = db.Column(JSON, default={})  # {{variable}} placeholders
     
     # Meta
@@ -211,3 +216,144 @@ class MarketingWeekly(db.Model):
     
     def __repr__(self):
         return f"<MarketingWeekly {self.brand_name} Week {self.week_start.strftime('%Y-%m-%d')}>"
+
+
+class ContentPillar(db.Model):
+    """Reusable content categories for planning consistency."""
+    __tablename__ = 'content_pillar'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text)
+    examples = db.Column(db.Text)
+    brand_name = db.Column(db.String(255), db.ForeignKey('brands.name'), nullable=True)
+    is_active = db.Column(db.Boolean, default=True)
+
+    brand = db.relationship('Brand', backref='content_pillars')
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ContentIdea(db.Model):
+    """Channel-agnostic idea before platform-specific drafting."""
+    __tablename__ = 'content_idea'
+
+    id = db.Column(db.Integer, primary_key=True)
+    campaign_id = db.Column(db.Integer, db.ForeignKey('marketing_calendar.id'), nullable=False)
+    title = db.Column(db.String(255), nullable=False)
+    pillar_id = db.Column(db.Integer, db.ForeignKey('content_pillar.id'), nullable=True)
+    audience = db.Column(db.String(255))
+    message = db.Column(db.Text)
+    cta = db.Column(db.String(255))
+    source_notes = db.Column(db.Text)
+    status = db.Column(db.String(50), default='idea', index=True)
+    owner = db.Column(db.String(255))
+    due_date = db.Column(db.DateTime)
+
+    campaign = db.relationship('MarketingCalendar', backref='content_ideas')
+    pillar = db.relationship('ContentPillar', backref='content_ideas')
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class SocialPostDraft(db.Model):
+    """Platform-specific draft linked to a content idea."""
+    __tablename__ = 'social_post_draft'
+
+    id = db.Column(db.Integer, primary_key=True)
+    content_idea_id = db.Column(db.Integer, db.ForeignKey('content_idea.id'), nullable=False)
+    platform = db.Column(db.String(100), nullable=False, index=True)
+    post_format = db.Column(db.String(100), nullable=False)
+    caption_body = db.Column(db.Text)
+    hashtags = db.Column(db.Text)
+    cta = db.Column(db.String(255))
+    link = db.Column(db.String(500))
+    media_asset = db.Column(db.String(500))
+    status = db.Column(db.String(50), default='draft', index=True)
+    scheduled_datetime = db.Column(db.DateTime)
+    external_scheduler_name = db.Column(db.String(100))
+    external_scheduler_url = db.Column(db.String(500))
+    posted_url = db.Column(db.String(500))
+    notes = db.Column(db.Text)
+    draft_origin = db.Column(db.String(50), default='human')  # human, ai_draft
+
+    content_idea = db.relationship('ContentIdea', backref='social_post_drafts')
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class ManualTask(db.Model):
+    """Explicit human task for account setup, approvals, posting, and checks."""
+    __tablename__ = 'manual_task'
+
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text)
+    related_brand_name = db.Column(db.String(255), db.ForeignKey('brands.name'), nullable=True)
+    related_campaign_id = db.Column(db.Integer, db.ForeignKey('marketing_calendar.id'), nullable=True)
+    related_content_idea_id = db.Column(db.Integer, db.ForeignKey('content_idea.id'), nullable=True)
+    related_social_post_id = db.Column(db.Integer, db.ForeignKey('social_post_draft.id'), nullable=True)
+    platform = db.Column(db.String(100), nullable=True)
+    task_type = db.Column(db.String(100), default='manual_posting', index=True)
+    checklist_steps = db.Column(JSON, default=list)
+    owner = db.Column(db.String(255))
+    status = db.Column(db.String(50), default='not_started', index=True)
+    due_date = db.Column(db.DateTime)
+    completed_date = db.Column(db.DateTime)
+    notes = db.Column(db.Text)
+    reference_url = db.Column(db.String(500))
+
+    related_brand = db.relationship('Brand', backref='manual_tasks')
+    related_campaign = db.relationship('MarketingCalendar', backref='manual_tasks')
+    related_content_idea = db.relationship('ContentIdea', backref='manual_tasks')
+    related_social_post = db.relationship('SocialPostDraft', backref='manual_tasks')
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class Asset(db.Model):
+    """Reusable asset metadata and approval tracking."""
+    __tablename__ = 'marketing_asset'
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(255), nullable=False)
+    asset_type = db.Column(db.String(100), nullable=False, index=True)
+    file_or_url = db.Column(db.String(500), nullable=False)
+    brand_name = db.Column(db.String(255), db.ForeignKey('brands.name'), nullable=True)
+    usage_notes = db.Column(db.Text)
+    alt_text = db.Column(db.Text)
+    platform_suitability = db.Column(JSON, default=list)
+    status = db.Column(db.String(50), default='draft', index=True)
+
+    brand = db.relationship('Brand', backref='marketing_assets')
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+class PerformanceSnapshot(db.Model):
+    """Manual or imported post-performance check records."""
+    __tablename__ = 'performance_snapshot'
+
+    id = db.Column(db.Integer, primary_key=True)
+    platform = db.Column(db.String(100), nullable=False, index=True)
+    related_social_post_id = db.Column(db.Integer, db.ForeignKey('social_post_draft.id'), nullable=True)
+    post_url = db.Column(db.String(500), nullable=False)
+    date_checked = db.Column(db.DateTime, nullable=False, index=True)
+    impressions_views = db.Column(db.Integer, default=0)
+    likes = db.Column(db.Integer, default=0)
+    comments = db.Column(db.Integer, default=0)
+    shares_reposts = db.Column(db.Integer, default=0)
+    saves = db.Column(db.Integer, default=0)
+    clicks = db.Column(db.Integer, default=0)
+    follows_subscribers = db.Column(db.Integer, default=0)
+    notes = db.Column(db.Text)
+
+    related_social_post = db.relationship('SocialPostDraft', backref='performance_snapshots')
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

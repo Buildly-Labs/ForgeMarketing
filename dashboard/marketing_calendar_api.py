@@ -4,9 +4,9 @@ Marketing Calendar API endpoints for campaign and task management.
 
 from flask import Blueprint, request, jsonify
 from datetime import datetime, timedelta
-import re
 from dashboard.marketing_calendar_models import (
     MarketingCalendar, MarketingTask, ContentTemplate, MarketingWeekly,
+    ContentPillar, ContentIdea, SocialPostDraft, ManualTask, Asset, PerformanceSnapshot,
     TaskStatus, TaskPriority, TaskType, PlatformType
 )
 from dashboard.models import Brand, SystemConfig, db
@@ -15,30 +15,121 @@ import json
 marketing_calendar_bp = Blueprint('marketing_calendar', __name__, url_prefix='/api/marketing')
 
 
-def _normalize_brand_key(value: str) -> str:
-    return re.sub(r'[^a-z0-9]+', '_', (value or '').strip().lower()).strip('_')
+def _serialize_datetime(value):
+    return value.isoformat() if value else None
 
 
-def _resolve_brand(brand_input: str):
-    if not brand_input:
-        return None
-    normalized = _normalize_brand_key(brand_input)
-    raw = (brand_input or '').strip().lower()
-    for brand in Brand.query.all():
-        candidates = {
-            (brand.name or '').lower(),
-            (brand.display_name or '').lower(),
-            _normalize_brand_key(brand.name or ''),
-            _normalize_brand_key(brand.display_name or ''),
-        }
-        if raw in candidates or normalized in candidates:
-            return brand
-    return None
+def _serialize_pillar(pillar):
+    return {
+        'id': pillar.id,
+        'name': pillar.name,
+        'description': pillar.description,
+        'examples': pillar.examples,
+        'brand_name': pillar.brand_name,
+        'is_active': pillar.is_active,
+        'created_at': _serialize_datetime(pillar.created_at),
+        'updated_at': _serialize_datetime(pillar.updated_at),
+    }
 
 
-def _resolve_brand_name(brand_input: str) -> str:
-    brand = _resolve_brand(brand_input)
-    return brand.name if brand else ''
+def _serialize_idea(idea):
+    return {
+        'id': idea.id,
+        'campaign_id': idea.campaign_id,
+        'title': idea.title,
+        'pillar_id': idea.pillar_id,
+        'audience': idea.audience,
+        'message': idea.message,
+        'cta': idea.cta,
+        'source_notes': idea.source_notes,
+        'status': idea.status,
+        'owner': idea.owner,
+        'due_date': _serialize_datetime(idea.due_date),
+        'created_at': _serialize_datetime(idea.created_at),
+        'updated_at': _serialize_datetime(idea.updated_at),
+    }
+
+
+def _serialize_draft(draft):
+    return {
+        'id': draft.id,
+        'content_idea_id': draft.content_idea_id,
+        'platform': draft.platform,
+        'post_format': draft.post_format,
+        'caption_body': draft.caption_body,
+        'hashtags': draft.hashtags,
+        'cta': draft.cta,
+        'link': draft.link,
+        'media_asset': draft.media_asset,
+        'status': draft.status,
+        'scheduled_datetime': _serialize_datetime(draft.scheduled_datetime),
+        'external_scheduler_name': draft.external_scheduler_name,
+        'external_scheduler_url': draft.external_scheduler_url,
+        'posted_url': draft.posted_url,
+        'notes': draft.notes,
+        'draft_origin': draft.draft_origin,
+        'created_at': _serialize_datetime(draft.created_at),
+        'updated_at': _serialize_datetime(draft.updated_at),
+    }
+
+
+def _serialize_manual_task(task):
+    return {
+        'id': task.id,
+        'title': task.title,
+        'description': task.description,
+        'related_brand_name': task.related_brand_name,
+        'related_campaign_id': task.related_campaign_id,
+        'related_content_idea_id': task.related_content_idea_id,
+        'related_social_post_id': task.related_social_post_id,
+        'platform': task.platform,
+        'task_type': task.task_type,
+        'checklist_steps': task.checklist_steps,
+        'owner': task.owner,
+        'status': task.status,
+        'due_date': _serialize_datetime(task.due_date),
+        'completed_date': _serialize_datetime(task.completed_date),
+        'notes': task.notes,
+        'reference_url': task.reference_url,
+        'created_at': _serialize_datetime(task.created_at),
+        'updated_at': _serialize_datetime(task.updated_at),
+    }
+
+
+def _serialize_asset(asset):
+    return {
+        'id': asset.id,
+        'name': asset.name,
+        'asset_type': asset.asset_type,
+        'file_or_url': asset.file_or_url,
+        'brand_name': asset.brand_name,
+        'usage_notes': asset.usage_notes,
+        'alt_text': asset.alt_text,
+        'platform_suitability': asset.platform_suitability,
+        'status': asset.status,
+        'created_at': _serialize_datetime(asset.created_at),
+        'updated_at': _serialize_datetime(asset.updated_at),
+    }
+
+
+def _serialize_snapshot(snapshot):
+    return {
+        'id': snapshot.id,
+        'platform': snapshot.platform,
+        'related_social_post_id': snapshot.related_social_post_id,
+        'post_url': snapshot.post_url,
+        'date_checked': _serialize_datetime(snapshot.date_checked),
+        'impressions_views': snapshot.impressions_views,
+        'likes': snapshot.likes,
+        'comments': snapshot.comments,
+        'shares_reposts': snapshot.shares_reposts,
+        'saves': snapshot.saves,
+        'clicks': snapshot.clicks,
+        'follows_subscribers': snapshot.follows_subscribers,
+        'notes': snapshot.notes,
+        'created_at': _serialize_datetime(snapshot.created_at),
+        'updated_at': _serialize_datetime(snapshot.updated_at),
+    }
 
 
 # ============ CAMPAIGNS ============
@@ -50,8 +141,7 @@ def get_campaigns():
     
     query = MarketingCalendar.query
     if brand:
-        resolved_brand_name = _resolve_brand_name(brand) or brand
-        query = query.filter_by(brand_name=resolved_brand_name)
+        query = query.filter_by(brand_name=brand)
     
     campaigns = query.all()
     
@@ -88,13 +178,13 @@ def create_campaign():
         return jsonify({'success': False, 'error': 'Missing required fields'}), 400
     
     # Verify brand exists
-    brand = _resolve_brand(data['brand_name'])
+    brand = Brand.query.filter_by(name=data['brand_name']).first()
     if not brand:
         return jsonify({'success': False, 'error': 'Brand not found'}), 404
     
     try:
         campaign = MarketingCalendar(
-            brand_name=brand.name,
+            brand_name=data['brand_name'],
             campaign_name=data['campaign_name'],
             campaign_slug=data.get('campaign_slug', data['campaign_name'].lower().replace(' ', '-')),
             description=data.get('description'),
@@ -107,7 +197,7 @@ def create_campaign():
             status=data.get('status', 'draft'),
             owner=data.get('owner'),
             notes=data.get('notes'),
-            metadata=data.get('metadata', {})
+            meta_data=data.get('metadata', {})
         )
         
         db.session.add(campaign)
@@ -217,8 +307,7 @@ def get_tasks():
     query = MarketingTask.query
     
     if brand:
-        resolved_brand_name = _resolve_brand_name(brand) or brand
-        query = query.filter_by(brand_name=resolved_brand_name)
+        query = query.filter_by(brand_name=brand)
     if status:
         query = query.filter_by(status=TaskStatus[status.upper()])
     if platform:
@@ -255,15 +344,11 @@ def create_task():
     required = ['brand_name', 'calendar_id', 'task_name', 'platform', 'scheduled_date']
     if not all(field in data for field in required):
         return jsonify({'success': False, 'error': 'Missing required fields'}), 400
-
-    brand = _resolve_brand(data.get('brand_name'))
-    if not brand:
-        return jsonify({'success': False, 'error': 'Brand not found'}), 404
     
     try:
         task = MarketingTask(
             calendar_id=data['calendar_id'],
-            brand_name=brand.name,
+            brand_name=data['brand_name'],
             task_name=data['task_name'],
             task_slug=data.get('task_slug', data['task_name'].lower().replace(' ', '-')),
             description=data.get('description'),
@@ -278,7 +363,7 @@ def create_task():
             is_automated=data.get('is_automated', False),
             title=data.get('title'),
             body=data.get('body'),
-            metadata=data.get('metadata', {})
+            meta_data=data.get('metadata', {})
         )
         
         db.session.add(task)
@@ -399,8 +484,7 @@ def get_templates():
     query = ContentTemplate.query
     
     if brand:
-        resolved_brand_name = _resolve_brand_name(brand) or brand
-        query = query.filter_by(brand_name=resolved_brand_name)
+        query = query.filter_by(brand_name=brand)
     if platform:
         query = query.filter_by(platform=PlatformType[platform.upper()])
     if category:
@@ -417,8 +501,14 @@ def get_templates():
             'task_type': t.task_type.value,
             'category': t.category,
             'title_template': t.title_template,
+            'body_template': t.body_template,
+            'prompt_instructions': t.prompt_instructions,
+            'example_output': t.example_output,
+            'required_assets': t.required_assets,
             'usage_count': t.usage_count,
-            'description': t.description
+            'description': t.description,
+            'suggested_cta': t.suggested_cta,
+            'suggested_hashtags': t.suggested_hashtags
         } for t in templates]
     })
 
@@ -431,14 +521,10 @@ def create_template():
     required = ['brand_name', 'template_name', 'platform', 'task_type']
     if not all(field in data for field in required):
         return jsonify({'success': False, 'error': 'Missing required fields'}), 400
-
-    brand = _resolve_brand(data.get('brand_name'))
-    if not brand:
-        return jsonify({'success': False, 'error': 'Brand not found'}), 404
     
     try:
         template = ContentTemplate(
-            brand_name=brand.name,
+            brand_name=data['brand_name'],
             template_name=data['template_name'],
             template_slug=data.get('template_slug', data['template_name'].lower().replace(' ', '-')),
             category=data.get('category'),
@@ -446,8 +532,13 @@ def create_template():
             task_type=TaskType[data['task_type'].upper()],
             title_template=data.get('title_template'),
             body_template=data.get('body_template'),
+            prompt_instructions=data.get('prompt_instructions'),
+            example_output=data.get('example_output'),
+            required_assets=data.get('required_assets', []),
             cta=data.get('cta'),
             hashtags=data.get('hashtags'),
+            suggested_cta=data.get('suggested_cta'),
+            suggested_hashtags=data.get('suggested_hashtags'),
             variables=data.get('variables', {}),
             description=data.get('description')
         )
@@ -477,8 +568,7 @@ def get_weekly_reports():
     query = MarketingWeekly.query
     
     if brand:
-        resolved_brand_name = _resolve_brand_name(brand) or brand
-        query = query.filter_by(brand_name=resolved_brand_name)
+        query = query.filter_by(brand_name=brand)
     if calendar_id:
         query = query.filter_by(calendar_id=int(calendar_id))
     
@@ -509,14 +599,10 @@ def create_weekly_report():
     required = ['brand_name', 'week_start', 'week_end']
     if not all(field in data for field in required):
         return jsonify({'success': False, 'error': 'Missing required fields'}), 400
-
-    brand = _resolve_brand(data.get('brand_name'))
-    if not brand:
-        return jsonify({'success': False, 'error': 'Brand not found'}), 404
     
     try:
         report = MarketingWeekly(
-            brand_name=brand.name,
+            brand_name=data['brand_name'],
             calendar_id=data.get('calendar_id'),
             week_start=datetime.fromisoformat(data['week_start']),
             week_end=datetime.fromisoformat(data['week_end']),
@@ -557,8 +643,7 @@ def get_calendar_view():
     query = MarketingTask.query
     
     if brand:
-        resolved_brand_name = _resolve_brand_name(brand) or brand
-        query = query.filter_by(brand_name=resolved_brand_name)
+        query = query.filter_by(brand_name=brand)
     
     if start_date:
         start = datetime.fromisoformat(start_date)
@@ -609,6 +694,572 @@ def delete_task(task_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+# ============ CONTENT PILLARS ============
+
+@marketing_calendar_bp.route('/pillars', methods=['GET'])
+def get_content_pillars():
+    brand = request.args.get('brand')
+    active_only = request.args.get('active_only', 'true').lower() != 'false'
+
+    query = ContentPillar.query
+    if brand:
+        query = query.filter_by(brand_name=brand)
+    if active_only:
+        query = query.filter_by(is_active=True)
+
+    pillars = query.order_by(ContentPillar.name).all()
+    return jsonify({'success': True, 'data': [_serialize_pillar(p) for p in pillars]})
+
+
+@marketing_calendar_bp.route('/pillars', methods=['POST'])
+def create_content_pillar():
+    data = request.get_json() or {}
+    if not data.get('name'):
+        return jsonify({'success': False, 'error': 'name is required'}), 400
+
+    brand_name = data.get('brand_name')
+    if brand_name:
+        brand = Brand.query.filter_by(name=brand_name).first()
+        if not brand:
+            return jsonify({'success': False, 'error': 'Brand not found'}), 404
+
+    pillar = ContentPillar(
+        name=data['name'],
+        description=data.get('description'),
+        examples=data.get('examples'),
+        brand_name=brand_name,
+        is_active=data.get('is_active', True),
+    )
+    try:
+        db.session.add(pillar)
+        db.session.commit()
+        return jsonify({'success': True, 'data': _serialize_pillar(pillar)}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@marketing_calendar_bp.route('/pillars/<int:pillar_id>', methods=['GET'])
+def get_content_pillar(pillar_id):
+    pillar = ContentPillar.query.get(pillar_id)
+    if not pillar:
+        return jsonify({'success': False, 'error': 'Content pillar not found'}), 404
+    return jsonify({'success': True, 'data': _serialize_pillar(pillar)})
+
+
+@marketing_calendar_bp.route('/pillars/<int:pillar_id>', methods=['PUT'])
+def update_content_pillar(pillar_id):
+    pillar = ContentPillar.query.get(pillar_id)
+    if not pillar:
+        return jsonify({'success': False, 'error': 'Content pillar not found'}), 404
+
+    data = request.get_json() or {}
+    for field in ['name', 'description', 'examples', 'brand_name', 'is_active']:
+        if field in data:
+            setattr(pillar, field, data[field])
+
+    try:
+        db.session.commit()
+        return jsonify({'success': True, 'data': _serialize_pillar(pillar)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@marketing_calendar_bp.route('/pillars/<int:pillar_id>', methods=['DELETE'])
+def delete_content_pillar(pillar_id):
+    pillar = ContentPillar.query.get(pillar_id)
+    if not pillar:
+        return jsonify({'success': False, 'error': 'Content pillar not found'}), 404
+    try:
+        db.session.delete(pillar)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Content pillar deleted'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ============ CONTENT IDEAS ============
+
+@marketing_calendar_bp.route('/ideas', methods=['GET'])
+def get_content_ideas():
+    campaign_id = request.args.get('campaign_id')
+    status = request.args.get('status')
+    owner = request.args.get('owner')
+
+    query = ContentIdea.query
+    if campaign_id:
+        query = query.filter_by(campaign_id=int(campaign_id))
+    if status:
+        query = query.filter_by(status=status)
+    if owner:
+        query = query.filter_by(owner=owner)
+
+    ideas = query.order_by(ContentIdea.due_date.nullslast(), ContentIdea.created_at.desc()).all()
+    return jsonify({'success': True, 'data': [_serialize_idea(i) for i in ideas]})
+
+
+@marketing_calendar_bp.route('/ideas', methods=['POST'])
+def create_content_idea():
+    data = request.get_json() or {}
+    required = ['campaign_id', 'title']
+    if not all(data.get(field) for field in required):
+        return jsonify({'success': False, 'error': 'campaign_id and title are required'}), 400
+
+    campaign = MarketingCalendar.query.get(int(data['campaign_id']))
+    if not campaign:
+        return jsonify({'success': False, 'error': 'Campaign not found'}), 404
+
+    pillar_id = data.get('pillar_id')
+    if pillar_id:
+        pillar = ContentPillar.query.get(int(pillar_id))
+        if not pillar:
+            return jsonify({'success': False, 'error': 'Content pillar not found'}), 404
+
+    idea = ContentIdea(
+        campaign_id=int(data['campaign_id']),
+        title=data['title'],
+        pillar_id=int(pillar_id) if pillar_id else None,
+        audience=data.get('audience'),
+        message=data.get('message'),
+        cta=data.get('cta'),
+        source_notes=data.get('source_notes'),
+        status=data.get('status', 'idea'),
+        owner=data.get('owner'),
+        due_date=datetime.fromisoformat(data['due_date']) if data.get('due_date') else None,
+    )
+
+    try:
+        db.session.add(idea)
+        db.session.commit()
+        return jsonify({'success': True, 'data': _serialize_idea(idea)}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@marketing_calendar_bp.route('/ideas/<int:idea_id>', methods=['GET'])
+def get_content_idea(idea_id):
+    idea = ContentIdea.query.get(idea_id)
+    if not idea:
+        return jsonify({'success': False, 'error': 'Content idea not found'}), 404
+    return jsonify({'success': True, 'data': _serialize_idea(idea)})
+
+
+@marketing_calendar_bp.route('/ideas/<int:idea_id>', methods=['PUT'])
+def update_content_idea(idea_id):
+    idea = ContentIdea.query.get(idea_id)
+    if not idea:
+        return jsonify({'success': False, 'error': 'Content idea not found'}), 404
+
+    data = request.get_json() or {}
+    for field in ['title', 'pillar_id', 'audience', 'message', 'cta', 'source_notes', 'status', 'owner']:
+        if field in data:
+            setattr(idea, field, data[field])
+    if 'due_date' in data:
+        idea.due_date = datetime.fromisoformat(data['due_date']) if data['due_date'] else None
+
+    try:
+        db.session.commit()
+        return jsonify({'success': True, 'data': _serialize_idea(idea)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@marketing_calendar_bp.route('/ideas/<int:idea_id>', methods=['DELETE'])
+def delete_content_idea(idea_id):
+    idea = ContentIdea.query.get(idea_id)
+    if not idea:
+        return jsonify({'success': False, 'error': 'Content idea not found'}), 404
+    try:
+        db.session.delete(idea)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Content idea deleted'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ============ SOCIAL POST DRAFTS ============
+
+@marketing_calendar_bp.route('/drafts', methods=['GET'])
+def get_social_post_drafts():
+    idea_id = request.args.get('content_idea_id')
+    platform = request.args.get('platform')
+    status = request.args.get('status')
+
+    query = SocialPostDraft.query
+    if idea_id:
+        query = query.filter_by(content_idea_id=int(idea_id))
+    if platform:
+        query = query.filter_by(platform=platform)
+    if status:
+        query = query.filter_by(status=status)
+
+    drafts = query.order_by(SocialPostDraft.scheduled_datetime.nullslast(), SocialPostDraft.created_at.desc()).all()
+    return jsonify({'success': True, 'data': [_serialize_draft(d) for d in drafts]})
+
+
+@marketing_calendar_bp.route('/drafts', methods=['POST'])
+def create_social_post_draft():
+    data = request.get_json() or {}
+    required = ['content_idea_id', 'platform', 'post_format']
+    if not all(data.get(field) for field in required):
+        return jsonify({'success': False, 'error': 'content_idea_id, platform, and post_format are required'}), 400
+
+    idea = ContentIdea.query.get(int(data['content_idea_id']))
+    if not idea:
+        return jsonify({'success': False, 'error': 'Content idea not found'}), 404
+
+    draft = SocialPostDraft(
+        content_idea_id=int(data['content_idea_id']),
+        platform=data['platform'],
+        post_format=data['post_format'],
+        caption_body=data.get('caption_body'),
+        hashtags=data.get('hashtags'),
+        cta=data.get('cta'),
+        link=data.get('link'),
+        media_asset=data.get('media_asset'),
+        status=data.get('status', 'draft'),
+        scheduled_datetime=datetime.fromisoformat(data['scheduled_datetime']) if data.get('scheduled_datetime') else None,
+        external_scheduler_name=data.get('external_scheduler_name'),
+        external_scheduler_url=data.get('external_scheduler_url'),
+        posted_url=data.get('posted_url'),
+        notes=data.get('notes'),
+        draft_origin=data.get('draft_origin', 'human'),
+    )
+
+    try:
+        db.session.add(draft)
+        db.session.commit()
+        return jsonify({'success': True, 'data': _serialize_draft(draft)}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@marketing_calendar_bp.route('/drafts/<int:draft_id>', methods=['GET'])
+def get_social_post_draft(draft_id):
+    draft = SocialPostDraft.query.get(draft_id)
+    if not draft:
+        return jsonify({'success': False, 'error': 'Social post draft not found'}), 404
+    return jsonify({'success': True, 'data': _serialize_draft(draft)})
+
+
+@marketing_calendar_bp.route('/drafts/<int:draft_id>', methods=['PUT'])
+def update_social_post_draft(draft_id):
+    draft = SocialPostDraft.query.get(draft_id)
+    if not draft:
+        return jsonify({'success': False, 'error': 'Social post draft not found'}), 404
+
+    data = request.get_json() or {}
+    for field in ['content_idea_id', 'platform', 'post_format', 'caption_body', 'hashtags', 'cta', 'link', 'media_asset', 'status', 'external_scheduler_name', 'external_scheduler_url', 'posted_url', 'notes', 'draft_origin']:
+        if field in data:
+            setattr(draft, field, data[field])
+    if 'scheduled_datetime' in data:
+        draft.scheduled_datetime = datetime.fromisoformat(data['scheduled_datetime']) if data['scheduled_datetime'] else None
+
+    try:
+        db.session.commit()
+        return jsonify({'success': True, 'data': _serialize_draft(draft)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@marketing_calendar_bp.route('/drafts/<int:draft_id>', methods=['DELETE'])
+def delete_social_post_draft(draft_id):
+    draft = SocialPostDraft.query.get(draft_id)
+    if not draft:
+        return jsonify({'success': False, 'error': 'Social post draft not found'}), 404
+    try:
+        db.session.delete(draft)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Social post draft deleted'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ============ MANUAL TASKS ============
+
+@marketing_calendar_bp.route('/manual-tasks', methods=['GET'])
+def get_manual_tasks():
+    brand = request.args.get('brand')
+    status = request.args.get('status')
+    task_type = request.args.get('task_type')
+
+    query = ManualTask.query
+    if brand:
+        query = query.filter_by(related_brand_name=brand)
+    if status:
+        query = query.filter_by(status=status)
+    if task_type:
+        query = query.filter_by(task_type=task_type)
+
+    tasks = query.order_by(ManualTask.due_date.nullslast(), ManualTask.created_at.desc()).all()
+    return jsonify({'success': True, 'data': [_serialize_manual_task(t) for t in tasks]})
+
+
+@marketing_calendar_bp.route('/manual-tasks', methods=['POST'])
+def create_manual_task():
+    data = request.get_json() or {}
+    if not data.get('title'):
+        return jsonify({'success': False, 'error': 'title is required'}), 400
+
+    task = ManualTask(
+        title=data['title'],
+        description=data.get('description'),
+        related_brand_name=data.get('related_brand_name'),
+        related_campaign_id=data.get('related_campaign_id'),
+        related_content_idea_id=data.get('related_content_idea_id'),
+        related_social_post_id=data.get('related_social_post_id'),
+        platform=data.get('platform'),
+        task_type=data.get('task_type', 'manual_posting'),
+        checklist_steps=data.get('checklist_steps', []),
+        owner=data.get('owner'),
+        status=data.get('status', 'not_started'),
+        due_date=datetime.fromisoformat(data['due_date']) if data.get('due_date') else None,
+        completed_date=datetime.fromisoformat(data['completed_date']) if data.get('completed_date') else None,
+        notes=data.get('notes'),
+        reference_url=data.get('reference_url'),
+    )
+
+    try:
+        db.session.add(task)
+        db.session.commit()
+        return jsonify({'success': True, 'data': _serialize_manual_task(task)}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@marketing_calendar_bp.route('/manual-tasks/<int:task_id>', methods=['GET'])
+def get_manual_task(task_id):
+    task = ManualTask.query.get(task_id)
+    if not task:
+        return jsonify({'success': False, 'error': 'Manual task not found'}), 404
+    return jsonify({'success': True, 'data': _serialize_manual_task(task)})
+
+
+@marketing_calendar_bp.route('/manual-tasks/<int:task_id>', methods=['PUT'])
+def update_manual_task(task_id):
+    task = ManualTask.query.get(task_id)
+    if not task:
+        return jsonify({'success': False, 'error': 'Manual task not found'}), 404
+
+    data = request.get_json() or {}
+    for field in ['title', 'description', 'related_brand_name', 'related_campaign_id', 'related_content_idea_id', 'related_social_post_id', 'platform', 'task_type', 'checklist_steps', 'owner', 'status', 'notes', 'reference_url']:
+        if field in data:
+            setattr(task, field, data[field])
+    if 'due_date' in data:
+        task.due_date = datetime.fromisoformat(data['due_date']) if data['due_date'] else None
+    if 'completed_date' in data:
+        task.completed_date = datetime.fromisoformat(data['completed_date']) if data['completed_date'] else None
+
+    try:
+        db.session.commit()
+        return jsonify({'success': True, 'data': _serialize_manual_task(task)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@marketing_calendar_bp.route('/manual-tasks/<int:task_id>', methods=['DELETE'])
+def delete_manual_task(task_id):
+    task = ManualTask.query.get(task_id)
+    if not task:
+        return jsonify({'success': False, 'error': 'Manual task not found'}), 404
+    try:
+        db.session.delete(task)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Manual task deleted'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ============ ASSETS ============
+
+@marketing_calendar_bp.route('/assets', methods=['GET'])
+def get_assets():
+    brand = request.args.get('brand')
+    asset_type = request.args.get('asset_type')
+    status = request.args.get('status')
+
+    query = Asset.query
+    if brand:
+        query = query.filter_by(brand_name=brand)
+    if asset_type:
+        query = query.filter_by(asset_type=asset_type)
+    if status:
+        query = query.filter_by(status=status)
+
+    assets = query.order_by(Asset.created_at.desc()).all()
+    return jsonify({'success': True, 'data': [_serialize_asset(a) for a in assets]})
+
+
+@marketing_calendar_bp.route('/assets', methods=['POST'])
+def create_asset():
+    data = request.get_json() or {}
+    required = ['name', 'asset_type', 'file_or_url']
+    if not all(data.get(field) for field in required):
+        return jsonify({'success': False, 'error': 'name, asset_type, and file_or_url are required'}), 400
+
+    asset = Asset(
+        name=data['name'],
+        asset_type=data['asset_type'],
+        file_or_url=data['file_or_url'],
+        brand_name=data.get('brand_name'),
+        usage_notes=data.get('usage_notes'),
+        alt_text=data.get('alt_text'),
+        platform_suitability=data.get('platform_suitability', []),
+        status=data.get('status', 'draft'),
+    )
+
+    try:
+        db.session.add(asset)
+        db.session.commit()
+        return jsonify({'success': True, 'data': _serialize_asset(asset)}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@marketing_calendar_bp.route('/assets/<int:asset_id>', methods=['GET'])
+def get_asset(asset_id):
+    asset = Asset.query.get(asset_id)
+    if not asset:
+        return jsonify({'success': False, 'error': 'Asset not found'}), 404
+    return jsonify({'success': True, 'data': _serialize_asset(asset)})
+
+
+@marketing_calendar_bp.route('/assets/<int:asset_id>', methods=['PUT'])
+def update_asset(asset_id):
+    asset = Asset.query.get(asset_id)
+    if not asset:
+        return jsonify({'success': False, 'error': 'Asset not found'}), 404
+
+    data = request.get_json() or {}
+    for field in ['name', 'asset_type', 'file_or_url', 'brand_name', 'usage_notes', 'alt_text', 'platform_suitability', 'status']:
+        if field in data:
+            setattr(asset, field, data[field])
+
+    try:
+        db.session.commit()
+        return jsonify({'success': True, 'data': _serialize_asset(asset)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@marketing_calendar_bp.route('/assets/<int:asset_id>', methods=['DELETE'])
+def delete_asset(asset_id):
+    asset = Asset.query.get(asset_id)
+    if not asset:
+        return jsonify({'success': False, 'error': 'Asset not found'}), 404
+    try:
+        db.session.delete(asset)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Asset deleted'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+# ============ PERFORMANCE SNAPSHOTS ============
+
+@marketing_calendar_bp.route('/performance-snapshots', methods=['GET'])
+def get_performance_snapshots():
+    platform = request.args.get('platform')
+    related_social_post_id = request.args.get('related_social_post_id')
+
+    query = PerformanceSnapshot.query
+    if platform:
+        query = query.filter_by(platform=platform)
+    if related_social_post_id:
+        query = query.filter_by(related_social_post_id=int(related_social_post_id))
+
+    snapshots = query.order_by(PerformanceSnapshot.date_checked.desc()).all()
+    return jsonify({'success': True, 'data': [_serialize_snapshot(s) for s in snapshots]})
+
+
+@marketing_calendar_bp.route('/performance-snapshots', methods=['POST'])
+def create_performance_snapshot():
+    data = request.get_json() or {}
+    required = ['platform', 'post_url', 'date_checked']
+    if not all(data.get(field) for field in required):
+        return jsonify({'success': False, 'error': 'platform, post_url, and date_checked are required'}), 400
+
+    snapshot = PerformanceSnapshot(
+        platform=data['platform'],
+        related_social_post_id=data.get('related_social_post_id'),
+        post_url=data['post_url'],
+        date_checked=datetime.fromisoformat(data['date_checked']),
+        impressions_views=data.get('impressions_views', 0),
+        likes=data.get('likes', 0),
+        comments=data.get('comments', 0),
+        shares_reposts=data.get('shares_reposts', 0),
+        saves=data.get('saves', 0),
+        clicks=data.get('clicks', 0),
+        follows_subscribers=data.get('follows_subscribers', 0),
+        notes=data.get('notes'),
+    )
+
+    try:
+        db.session.add(snapshot)
+        db.session.commit()
+        return jsonify({'success': True, 'data': _serialize_snapshot(snapshot)}), 201
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@marketing_calendar_bp.route('/performance-snapshots/<int:snapshot_id>', methods=['GET'])
+def get_performance_snapshot(snapshot_id):
+    snapshot = PerformanceSnapshot.query.get(snapshot_id)
+    if not snapshot:
+        return jsonify({'success': False, 'error': 'Performance snapshot not found'}), 404
+    return jsonify({'success': True, 'data': _serialize_snapshot(snapshot)})
+
+
+@marketing_calendar_bp.route('/performance-snapshots/<int:snapshot_id>', methods=['PUT'])
+def update_performance_snapshot(snapshot_id):
+    snapshot = PerformanceSnapshot.query.get(snapshot_id)
+    if not snapshot:
+        return jsonify({'success': False, 'error': 'Performance snapshot not found'}), 404
+
+    data = request.get_json() or {}
+    for field in ['platform', 'related_social_post_id', 'post_url', 'impressions_views', 'likes', 'comments', 'shares_reposts', 'saves', 'clicks', 'follows_subscribers', 'notes']:
+        if field in data:
+            setattr(snapshot, field, data[field])
+    if 'date_checked' in data:
+        snapshot.date_checked = datetime.fromisoformat(data['date_checked']) if data['date_checked'] else snapshot.date_checked
+
+    try:
+        db.session.commit()
+        return jsonify({'success': True, 'data': _serialize_snapshot(snapshot)})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@marketing_calendar_bp.route('/performance-snapshots/<int:snapshot_id>', methods=['DELETE'])
+def delete_performance_snapshot(snapshot_id):
+    snapshot = PerformanceSnapshot.query.get(snapshot_id)
+    if not snapshot:
+        return jsonify({'success': False, 'error': 'Performance snapshot not found'}), 404
+    try:
+        db.session.delete(snapshot)
+        db.session.commit()
+        return jsonify({'success': True, 'message': 'Performance snapshot deleted'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 # ============ AI CONTENT GENERATION ============
 
 @marketing_calendar_bp.route('/generate-content', methods=['POST'])
@@ -625,7 +1276,7 @@ def generate_content():
     if not brand_name:
         return jsonify({'success': False, 'error': 'brand_name is required'}), 400
 
-    brand = _resolve_brand(brand_name)
+    brand = Brand.query.filter_by(name=brand_name).first()
     if not brand:
         return jsonify({'success': False, 'error': 'Brand not found'}), 404
 

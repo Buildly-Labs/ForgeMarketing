@@ -10,17 +10,17 @@
                     <i class="fas fa-cogs mr-2 text-blue-600"></i>
                     Admin Panel
                 </h1>
-                <p class="text-gray-600 mt-1">Manage system configuration, API keys, and platform connections</p>
+                <p class="text-gray-600 mt-1">Manage API credentials, system configuration, and platform connections</p>
             </div>
             <div class="flex space-x-3">
-                <button @click="testAllConnections()"
+                <button @click="testAllConnections()" 
                         :disabled="testing"
                         class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors">
                     <i class="fas fa-check-circle mr-2" :class="{'fa-spin': testing}"></i>
                     <span x-show="!testing">Test All</span>
                     <span x-show="testing">Testing...</span>
                 </button>
-                <button @click="saveAll()"
+                <button @click="saveCredentials()" 
                         :disabled="saving"
                         class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
                     <i class="fas fa-save mr-2"></i>
@@ -43,6 +43,7 @@
                 <i class="fas fa-robot text-2xl" :class="connectionStatus.ai ? 'text-green-500' : 'text-gray-400'"></i>
             </div>
         </div>
+
         <div class="bg-white rounded-lg p-6 card-shadow">
             <div class="flex items-center justify-between">
                 <div>
@@ -53,6 +54,7 @@
                 <i class="fas fa-envelope text-2xl" :class="connectionStatus.email ? 'text-green-500' : 'text-gray-400'"></i>
             </div>
         </div>
+
         <div class="bg-white rounded-lg p-6 card-shadow">
             <div class="flex items-center justify-between">
                 <div>
@@ -63,6 +65,7 @@
                 <i class="fab fa-twitter text-2xl" :class="connectionStatus.twitter ? 'text-green-500' : 'text-gray-400'"></i>
             </div>
         </div>
+
         <div class="bg-white rounded-lg p-6 card-shadow">
             <div class="flex items-center justify-between">
                 <div>
@@ -73,6 +76,7 @@
                 <i class="fas fa-cloud text-2xl" :class="connectionStatus.bluesky ? 'text-green-500' : 'text-gray-400'"></i>
             </div>
         </div>
+
         <div class="bg-white rounded-lg p-6 card-shadow">
             <div class="flex items-center justify-between">
                 <div>
@@ -85,87 +89,275 @@
         </div>
     </div>
 
-    <!-- Config Wizard Tabs -->
+    <!-- Platform Configuration Tabs -->
     <div class="bg-white rounded-lg p-6 card-shadow">
-        <div x-show="loading" class="text-center py-8 text-gray-500">
-            <i class="fas fa-spinner fa-spin mr-2"></i> Loading configuration&hellip;
+        <div class="flex flex-wrap gap-2 mb-6">
+            <button @click="activeTab = 'ai'" :class="activeTab === 'ai' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'"
+                    class="px-4 py-2 rounded-lg font-medium transition-colors">
+                <i class="fas fa-robot mr-2"></i>AI Service
+            </button>
+            <button @click="activeTab = 'email'" :class="activeTab === 'email' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'"
+                    class="px-4 py-2 rounded-lg font-medium transition-colors">
+                <i class="fas fa-envelope mr-2"></i>Email Services
+            </button>
+            <button @click="activeTab = 'twitter'" :class="activeTab === 'twitter' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'"
+                    class="px-4 py-2 rounded-lg font-medium transition-colors">
+                <i class="fab fa-twitter mr-2"></i>Twitter/X
+            </button>
+            <button @click="activeTab = 'bluesky'" :class="activeTab === 'bluesky' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'"
+                    class="px-4 py-2 rounded-lg font-medium transition-colors">
+                <i class="fas fa-cloud mr-2"></i>BlueSky
+            </button>
+            <button @click="activeTab = 'linkedin'" :class="activeTab === 'linkedin' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'"
+                    class="px-4 py-2 rounded-lg font-medium transition-colors">
+                <i class="fab fa-linkedin mr-2"></i>LinkedIn
+            </button>
         </div>
 
-        <template x-if="!loading">
-            <div>
-                <!-- Category tabs -->
-                <div class="flex flex-wrap gap-2 mb-6">
-                    <template x-for="(cat, catKey) in schema" :key="catKey">
-                        <button @click="activeTab = catKey"
-                                :class="activeTab === catKey ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'"
-                                class="px-4 py-2 rounded-lg font-medium transition-colors text-sm">
-                            <span x-text="cat.label"></span>
-                        </button>
-                    </template>
-                </div>
-
-                <!-- Dynamic field panels -->
-                <template x-for="(cat, catKey) in schema" :key="'panel-'+catKey">
-                    <div x-show="activeTab === catKey" class="space-y-4">
-                        <h3 class="text-lg font-semibold text-gray-800" x-text="cat.label + ' Settings'"></h3>
-                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                            <template x-for="field in cat.fields" :key="field.key">
-                                <div>
-                                    <label class="block text-sm font-medium text-gray-700 mb-1" x-text="field.label"></label>
-                                    <div class="relative">
-                                        <!-- Select dropdown for enum fields -->
-                                        <template x-if="field.type === 'select'">
-                                            <select x-model="values[field.key]"
-                                                    @change="dirty = true"
-                                                    class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
-                                                <template x-for="opt in field.options" :key="opt">
-                                                    <option :value="opt" x-text="opt"></option>
-                                                </template>
-                                            </select>
-                                        </template>
-                                        <!-- Text / password input for everything else -->
-                                        <template x-if="field.type !== 'select'">
-                                            <div class="relative">
-                                                <input :type="field.secret && !showSecrets[field.key] ? 'password' : 'text'"
-                                                       x-model="values[field.key]"
-                                                       @input="dirty = true"
-                                                       :placeholder="field.default || ''"
-                                                       class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 pr-10">
-                                                <button x-show="field.secret" @click="showSecrets[field.key] = !showSecrets[field.key]"
-                                                        type="button"
-                                                        class="absolute inset-y-0 right-0 px-3 text-gray-400 hover:text-gray-600">
-                                                    <i :class="showSecrets[field.key] ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
-                                                </button>
-                                            </div>
-                                        </template>
-                                    </div>
-                                    <p x-show="values[field.key] === '***'" class="text-xs text-amber-600 mt-1">
-                                        Value is stored. Enter a new value to replace it, or leave unchanged.
-                                    </p>
-                                </div>
-                            </template>
-                        </div>
-
-                        <div class="flex items-center space-x-3 pt-4 border-t">
-                            <button @click="saveCategory(catKey)"
-                                    :disabled="saving"
-                                    class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors text-sm">
-                                <i class="fas fa-save mr-1"></i> Save <span x-text="cat.label"></span>
-                            </button>
-                            <button @click="testConnection(catKey)" :disabled="testing"
-                                    x-show="['ai','email','social'].includes(catKey)"
-                                    class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors text-sm">
-                                <i class="fas fa-plug mr-1"></i> Test Connection
-                            </button>
+        <!-- AI Service Configuration -->
+        <div x-show="activeTab === 'ai'" class="space-y-6">
+            <div class="border-l-4 border-purple-500 bg-purple-50 p-4 rounded">
+                <div class="flex">
+                    <div class="ml-3">
+                        <h3 class="text-sm font-medium text-purple-800">AI Service Status</h3>
+                        <div class="mt-2 text-sm text-purple-700">
+                            <p x-show="aiConfig.configured">
+                                Stored provider: <span class="font-semibold" x-text="aiConfig.provider || 'ollama'"></span>
+                            </p>
+                            <p x-show="!aiConfig.configured">No AI provider has been saved yet.</p>
+                            <p x-show="connectionStatus.ai">✅ AI service is reachable</p>
+                            <p x-show="!connectionStatus.ai && aiConfig.configured">❌ Saved AI service is not reachable right now</p>
                         </div>
                     </div>
-                </template>
+                </div>
             </div>
-        </template>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="space-y-4">
+                    <h4 class="text-lg font-medium text-gray-900">Service Information</h4>
+                    <div class="bg-gray-50 p-4 rounded">
+                        <p class="text-sm text-gray-600">Provider: <span class="font-mono" x-text="aiConfig.provider || 'Not set'"></span></p>
+                        <p class="text-sm text-gray-600 mt-2">Base URL: <span class="font-mono" x-text="aiConfig.url || 'Not set'"></span></p>
+                        <p class="text-sm text-gray-600 mt-2">Default Model: <span class="font-mono" x-text="aiConfig.model || 'Not set'"></span></p>
+                        <p class="text-sm text-gray-600 mt-2">Status: <span :class="connectionStatus.ai ? 'text-green-600' : 'text-red-600'" class="font-medium" x-text="connectionStatus.ai ? 'Online' : 'Offline'"></span></p>
+                    </div>
+                </div>
+                <div class="space-y-4">
+                    <h4 class="text-lg font-medium text-gray-900">Test AI Service</h4>
+                    <button @click="testConnection('ai')" :disabled="testing" 
+                            class="w-full bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors">
+                        <i class="fas fa-robot mr-2"></i>
+                        <span x-show="!testing">Test AI Connection</span>
+                        <span x-show="testing">Testing...</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Email Configuration -->
+        <div x-show="activeTab === 'email'" class="space-y-6">
+            <div class="border-l-4 border-green-500 bg-green-50 p-4 rounded">
+                <div class="flex">
+                    <div class="ml-3">
+                        <h3 class="text-sm font-medium text-green-800">Email SMTP Configuration</h3>
+                        <div class="mt-2 text-sm text-green-700">
+                            <p x-show="emailConfigs.length > 0">Saved email providers are listed below.</p>
+                            <p x-show="emailConfigs.length === 0">No email provider has been saved yet.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="space-y-4">
+                    <h4 class="text-lg font-medium text-gray-900">SMTP Settings</h4>
+                    <div class="bg-gray-50 p-4 rounded">
+                        <template x-if="emailConfigs.length > 0">
+                            <div class="space-y-3">
+                                <template x-for="config in emailConfigs" :key="`${config.brand_name}-${config.provider}`">
+                                    <div class="border border-gray-200 rounded-lg p-3 bg-white">
+                                        <p class="text-sm text-gray-800 font-medium" x-text="`${config.brand_name} - ${config.provider}`"></p>
+                                        <p class="text-sm text-gray-600 mt-1" x-text="config.from_email"></p>
+                                        <p class="text-sm text-gray-600 mt-1" x-text="config.from_name || 'No sender name set'"></p>
+                                        <p class="text-sm mt-1" :class="config.is_primary ? 'text-green-600' : 'text-gray-500'" x-text="config.is_primary ? 'Primary configuration' : 'Secondary configuration'"></p>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+                        <template x-if="emailConfigs.length === 0">
+                            <p class="text-sm text-gray-600">No stored email configurations found.</p>
+                        </template>
+                    </div>
+                </div>
+                <div class="space-y-4">
+                    <h4 class="text-lg font-medium text-gray-900">Test Email Service</h4>
+                    <button @click="testConnection('email')" :disabled="testing" 
+                            class="w-full bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors">
+                        <i class="fas fa-envelope mr-2"></i>
+                        <span x-show="!testing">Test Email Connection</span>
+                        <span x-show="testing">Testing...</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Twitter Configuration -->
+        <div x-show="activeTab === 'twitter'" class="space-y-6">
+            <div class="border-l-4 border-blue-500 bg-blue-50 p-4 rounded">
+                <div class="flex">
+                    <div class="ml-3">
+                        <h3 class="text-sm font-medium text-blue-800">Twitter/X API Setup</h3>
+                        <div class="mt-2 text-sm text-blue-700">
+                            <p>1. Apply for Twitter Developer Account at <a href="https://developer.twitter.com/" target="_blank" class="underline">developer.twitter.com</a></p>
+                            <p>2. Create a new App and generate API keys</p>
+                            <p>3. Enable "Read and Write" permissions for posting</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Associated Brand</label>
+                <select x-model="credentials.twitter.brand" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                    <option value="">Select Brand</option>
+                    <template x-for="b in brands" :key="'tw-'+b">
+                        <option :value="b" x-text="b"></option>
+                    </template>
+                </select>
+            </div>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">API Key</label>
+                        <input type="password" x-model="credentials.twitter.api_key" 
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                               placeholder="Enter Twitter API Key">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">API Secret</label>
+                        <input type="password" x-model="credentials.twitter.api_secret" 
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                               placeholder="Enter Twitter API Secret">
+                    </div>
+                </div>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Access Token</label>
+                        <input type="password" x-model="credentials.twitter.access_token" 
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                               placeholder="Enter Access Token">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Access Token Secret</label>
+                        <input type="password" x-model="credentials.twitter.access_token_secret" 
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                               placeholder="Enter Access Token Secret">
+                    </div>
+                </div>
+            </div>
+            
+            <button @click="testConnection('twitter')" :disabled="testing" 
+                    class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors">
+                <i class="fab fa-twitter mr-2"></i>Test Twitter Connection
+            </button>
+        </div>
+
+        <!-- BlueSky Configuration -->
+        <div x-show="activeTab === 'bluesky'" class="space-y-6">
+            <div class="border-l-4 border-sky-500 bg-sky-50 p-4 rounded">
+                <div class="flex">
+                    <div class="ml-3">
+                        <h3 class="text-sm font-medium text-sky-800">BlueSky Setup</h3>
+                        <div class="mt-2 text-sm text-sky-700">
+                            <p>1. Go to BlueSky Settings → App Passwords</p>
+                            <p>2. Generate a new App Password (not your login password)</p>
+                            <p>3. Use your handle and the app password below</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Associated Brand</label>
+                <select x-model="credentials.bluesky.brand" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-500">
+                    <option value="">Select Brand</option>
+                    <template x-for="b in brands" :key="'bs-'+b">
+                        <option :value="b" x-text="b"></option>
+                    </template>
+                </select>
+            </div>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Username/Handle</label>
+                    <input type="text" x-model="credentials.bluesky.username" 
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-500"
+                           placeholder="@yourusername.bsky.social">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">App Password</label>
+                    <input type="password" x-model="credentials.bluesky.app_password" 
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-500"
+                           placeholder="Enter App Password">
+                </div>
+            </div>
+            
+            <button @click="testConnection('bluesky')" :disabled="testing" 
+                    class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-md border border-blue-700">
+                <i class="fas fa-cloud mr-2"></i>Test BlueSky Connection
+            </button>
+        </div>
+
+        <!-- LinkedIn Configuration -->
+        <div x-show="activeTab === 'linkedin'" class="space-y-6">
+            <div class="border-l-4 border-blue-700 bg-blue-50 p-4 rounded">
+                <div class="flex">
+                    <div class="ml-3">
+                        <h3 class="text-sm font-medium text-blue-900">LinkedIn API Setup</h3>
+                        <div class="mt-2 text-sm text-blue-800">
+                            <p>1. Create LinkedIn Developer App at <a href="https://www.linkedin.com/developers/" target="_blank" class="underline">linkedin.com/developers</a></p>
+                            <p>2. Request marketing API access for posting capabilities</p>
+                            <p>3. Generate OAuth 2.0 credentials</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="mb-6">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Associated Brand</label>
+                <select x-model="credentials.linkedin.brand" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                    <option value="">Select Brand</option>
+                    <template x-for="b in brands" :key="'li-'+b">
+                        <option :value="b" x-text="b"></option>
+                    </template>
+                </select>
+            </div>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Client ID</label>
+                    <input type="password" x-model="credentials.linkedin.client_id" 
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                           placeholder="Enter LinkedIn Client ID">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Client Secret</label>
+                    <input type="password" x-model="credentials.linkedin.client_secret" 
+                           class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                           placeholder="Enter LinkedIn Client Secret">
+                </div>
+            </div>
+            
+            <button @click="testConnection('linkedin')" :disabled="testing" 
+                    class="bg-blue-700 text-white px-4 py-2 rounded-lg hover:bg-blue-800 disabled:opacity-50 transition-colors">
+                <i class="fab fa-linkedin mr-2"></i>Test LinkedIn Connection
+            </button>
+        </div>
     </div>
 
     <!-- Results/Messages -->
-    <div x-show="message" class="bg-white rounded-lg p-6 card-shadow"
+    <div x-show="message" class="bg-white rounded-lg p-6 card-shadow" 
          :class="messageType === 'success' ? 'border-l-4 border-green-500' : 'border-l-4 border-red-500'">
         <div class="flex items-center">
             <i :class="messageType === 'success' ? 'fas fa-check-circle text-green-500' : 'fas fa-exclamation-circle text-red-500'" class="mr-3"></i>
@@ -177,192 +369,204 @@
 <script>
 function adminPanel() {
     return {
-        activeTab: '',
-        loading: true,
+        activeTab: 'ai',
         testing: false,
         saving: false,
-        dirty: false,
         message: '',
         messageType: 'success',
-        schema: {},       // from /api/admin/config/schema
-        values: {},       // key -> current value
-        showSecrets: {},  // key -> bool (toggle visibility)
         connectionStatus: {
-            ai: false, email: false, twitter: false, bluesky: false, linkedin: false
+            ai: false,
+            email: false,
+            twitter: false,
+            bluesky: false,
+            linkedin: false
         },
-
-        async init() {
-            await this.loadSchema();
-            await this.loadValues();
+        brands: [],
+        aiConfig: {
+            provider: '',
+            url: '',
+            model: '',
+            configured: false
+        },
+        emailConfigs: [],
+        credentials: {
+            ai: {
+                provider: '',
+                url: '',
+                model: ''
+            },
+            twitter: {
+                brand: '',
+                api_key: '',
+                api_secret: '',
+                access_token: '',
+                access_token_secret: ''
+            },
+            bluesky: {
+                brand: '',
+                username: '',
+                app_password: ''
+            },
+            linkedin: {
+                brand: '',
+                client_id: '',
+                client_secret: ''
+            }
+        },
+        
+        init() {
             this.checkAllConnections();
-            this.loading = false;
+            this.loadBrands();
+            this.loadStoredCredentials();
         },
 
-        async loadSchema() {
+        async loadStoredCredentials() {
             try {
-                const res = await fetch(SCRIPT_ROOT + '/api/admin/config/schema');
-                const data = await res.json();
-                if (data.success) {
-                    this.schema = data.schema;
-                    // default to first tab
-                    const keys = Object.keys(this.schema);
-                    if (keys.length) this.activeTab = keys[0];
-                    // init showSecrets map
-                    for (const cat of Object.values(this.schema)) {
-                        for (const f of cat.fields) {
-                            this.showSecrets[f.key] = false;
-                        }
-                    }
-                }
-            } catch (e) {
-                console.error('Failed to load config schema', e);
-            }
-        },
-
-        async loadValues() {
-            try {
-                const res = await fetch(SCRIPT_ROOT + '/api/admin/config');
-                const data = await res.json();
-                if (data.success) {
-                    const map = {};
-                    // Pre-populate every schema field key so x-model binds correctly
-                    for (const cat of Object.values(this.schema)) {
-                        for (const f of cat.fields) {
-                            map[f.key] = f.default || '';
-                        }
-                    }
-                    // Overlay stored values
-                    for (const c of data.configs) {
-                        map[c.key] = c.value;
-                    }
-                    this.values = map;
-                }
-            } catch (e) {
-                console.error('Failed to load config values', e);
-            }
-        },
-
-        categoryItems(catKey) {
-            const cat = this.schema[catKey];
-            if (!cat) return [];
-            return cat.fields.map(f => ({
-                key: f.key,
-                value: this.values[f.key] || '',
-                category: catKey,
-                is_secret: !!f.secret,
-            })).filter(i => i.value && i.value !== '***');
-        },
-
-        async saveCategory(catKey) {
-            this.saving = true;
-            try {
-                const items = this.categoryItems(catKey);
-                if (!items.length) {
-                    this.showMessage('No values to save in this category.', 'error');
+                const response = await fetch('/api/admin/credentials');
+                if (!response.ok) {
                     return;
                 }
-                const res = await fetch(SCRIPT_ROOT + '/api/admin/config', {
-                    method: 'PUT',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({items}),
-                });
-                const data = await res.json();
-                if (data.success) {
-                    this.showMessage(`Saved ${data.saved.length} setting(s).`, 'success');
-                    this.dirty = false;
-                } else {
-                    this.showMessage('Save failed: ' + data.error, 'error');
+
+                const data = await response.json();
+                const credentials = data.credentials || {};
+
+                this.aiConfig = credentials.ai || this.aiConfig;
+                this.emailConfigs = credentials.email?.configs || [];
+                this.credentials.ai = {
+                    provider: this.aiConfig.provider || '',
+                    url: this.aiConfig.url || '',
+                    model: this.aiConfig.model || ''
+                };
+
+                if (Array.isArray(credentials.brands) && credentials.brands.length > 0) {
+                    this.brands = credentials.brands;
                 }
-            } catch (e) {
-                this.showMessage('Save error: ' + e.message, 'error');
-            } finally {
-                this.saving = false;
+            } catch (error) {
+                console.error('Could not load stored credentials', error);
             }
         },
 
-        async saveAll() {
-            this.saving = true;
+        async loadBrands() {
             try {
-                const items = [];
-                for (const catKey of Object.keys(this.schema)) {
-                    items.push(...this.categoryItems(catKey));
-                }
-                if (!items.length) {
-                    this.showMessage('No values to save.', 'error');
-                    this.saving = false;
-                    return;
-                }
-                const res = await fetch(SCRIPT_ROOT + '/api/admin/config', {
-                    method: 'PUT',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({items}),
-                });
-                const data = await res.json();
-                if (data.success) {
-                    this.showMessage(`Saved ${data.saved.length} setting(s).`, 'success');
-                    this.dirty = false;
-                } else {
-                    this.showMessage('Save failed: ' + data.error, 'error');
+                const res = await fetch('/api/admin/brands');
+                if (res.ok) {
+                    const data = await res.json();
+                    this.brands = (data.brands || []).map(b => b.name || b);
                 }
             } catch (e) {
-                this.showMessage('Save error: ' + e.message, 'error');
-            } finally {
-                this.saving = false;
+                console.error('Could not load brands', e);
             }
         },
-
+        
         async checkAllConnections() {
             try {
-                const res = await fetch(SCRIPT_ROOT + '/api/admin/test-connections');
-                const data = await res.json();
+                const response = await fetch('/api/admin/test-connections');
+                const data = await response.json();
+                
                 if (data.success) {
                     this.connectionStatus = {
                         ai: data.results.ai || false,
                         email: data.results.email || false,
                         twitter: data.results.twitter || false,
                         bluesky: data.results.bluesky || false,
-                        linkedin: data.results.linkedin || false,
+                        linkedin: data.results.linkedin || false
                     };
                 }
-            } catch (e) {
-                console.error('Connection check error', e);
+            } catch (error) {
+                console.error('Error checking connections:', error);
             }
         },
-
+        
         async testConnection(platform) {
             this.testing = true;
+            this.message = '';
+            
             try {
-                const res = await fetch(`${SCRIPT_ROOT}/api/admin/test-connection/${platform}`, {
+                const response = await fetch(`/api/admin/test-connection/${platform}`, {
                     method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({}),
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(this.credentials[platform] || {})
                 });
-                const data = await res.json();
+                
+                const data = await response.json();
+                
                 if (data.success) {
                     this.connectionStatus[platform] = true;
-                    this.showMessage(`${platform} connection successful!`, 'success');
+                    this.showMessage(`✅ ${platform} connection successful!`, 'success');
                 } else {
                     this.connectionStatus[platform] = false;
-                    this.showMessage(`${platform} connection failed: ${data.error}`, 'error');
+                    this.showMessage(`❌ ${platform} connection failed: ${data.error}`, 'error');
                 }
-            } catch (e) {
-                this.showMessage(`Test error: ${e.message}`, 'error');
+            } catch (error) {
+                this.connectionStatus[platform] = false;
+                this.showMessage(`❌ Error testing ${platform}: ${error.message}`, 'error');
             } finally {
                 this.testing = false;
             }
         },
-
+        
         async testAllConnections() {
             this.testing = true;
-            const platforms = ['ai', 'email', 'social'];
-            for (const p of platforms) { await this.testConnection(p); }
+            this.message = '';
+            
+            const platforms = ['ai', 'email', 'twitter', 'bluesky', 'linkedin'];
+            let successCount = 0;
+            
+            for (const platform of platforms) {
+                try {
+                    await this.testConnection(platform);
+                    if (this.connectionStatus[platform]) {
+                        successCount++;
+                    }
+                } catch (error) {
+                    console.error(`Error testing ${platform}:`, error);
+                }
+            }
+            
+            this.showMessage(`Connection test complete: ${successCount}/${platforms.length} services connected`, 
+                           successCount === platforms.length ? 'success' : 'error');
+            
             this.testing = false;
         },
-
+        
+        async saveCredentials() {
+            this.saving = true;
+            this.message = '';
+            
+            try {
+                const response = await fetch('/api/admin/credentials', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(this.credentials)
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    this.showMessage('✅ Credentials saved successfully!', 'success');
+                    await this.loadStoredCredentials();
+                    await this.checkAllConnections();
+                } else {
+                    this.showMessage(`❌ Failed to save credentials: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                this.showMessage(`❌ Error saving credentials: ${error.message}`, 'error');
+            } finally {
+                this.saving = false;
+            }
+        },
+        
         showMessage(text, type) {
             this.message = text;
             this.messageType = type;
-            setTimeout(() => { this.message = ''; }, 5000);
+            
+            setTimeout(() => {
+                this.message = '';
+            }, 5000);
         }
     };
 }

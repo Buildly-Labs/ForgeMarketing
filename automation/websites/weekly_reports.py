@@ -13,8 +13,11 @@ import json
 import yaml
 
 # Setup paths and logging
-project_root = Path(__file__).parent.parent
+project_root = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(project_root))
+
+from config.brand_loader import get_all_brands
+
 logs_dir = project_root / 'logs'
 reports_dir = project_root / 'reports'
 logs_dir.mkdir(exist_ok=True)
@@ -31,6 +34,14 @@ logging.basicConfig(
 )
 logger = logging.getLogger('WeeklyReports')
 
+
+def _get_active_brands():
+    """Load active brands from database, with a conservative fallback set."""
+    brands = get_all_brands(active_only=True)
+    if brands:
+        return brands
+    return ['open_build', 'radical_therapy']
+
 def generate_weekly_report():
     """Generate weekly marketing report for all brands"""
     logger.info("📊 Generating weekly marketing report")
@@ -41,7 +52,7 @@ def generate_weekly_report():
         with open(config_file, 'r') as f:
             config = yaml.safe_load(f)
         
-        brands = ['buildly', 'foundry', 'open_build', 'radical_therapy']
+        brands = _get_active_brands()
         
         # Create report data structure
         report_date = datetime.now(timezone.utc)
@@ -103,7 +114,7 @@ def generate_weekly_report():
                 top_brand = brand
         
         # Complete summary calculations
-        report['summary']['avg_engagement_rate'] = round(total_engagement / len(brands), 1)
+        report['summary']['avg_engagement_rate'] = round(total_engagement / len(brands), 1) if brands else 0
         report['summary']['top_performing_brand'] = top_brand
         
         # Generate insights

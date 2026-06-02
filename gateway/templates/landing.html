@@ -111,22 +111,6 @@
                 </a>
 
             </div>
-
-            {% if user.is_admin %}
-            <div class="mt-10 w-full max-w-2xl rounded-xl border border-white/10 bg-white/[.04] p-4">
-                <div class="text-sm font-semibold text-buildly-100 mb-3">Admin Tools</div>
-                <div class="flex flex-wrap gap-3 text-sm">
-                    <a href="/marketing/admin/users" class="inline-flex items-center gap-2 rounded-lg bg-buildly-600/60 hover:bg-buildly-600 px-3 py-2 transition">
-                        <i class="fas fa-users-cog"></i>
-                        Marketing Users
-                    </a>
-                    <a href="/producer/ledger/users/?tab=invitations" class="inline-flex items-center gap-2 rounded-lg bg-buildly-700/60 hover:bg-buildly-700 px-3 py-2 transition">
-                        <i class="fas fa-envelope-open-text"></i>
-                        Producer Invites
-                    </a>
-                </div>
-            </div>
-            {% endif %}
         </main>
 
         <!-- Footer -->

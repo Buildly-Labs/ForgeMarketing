@@ -2,16 +2,14 @@
 Admin API endpoints for managing brands, users, and their configurations
 """
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from flask_login import login_required, current_user
 from functools import wraps
 from datetime import datetime
 from typing import Dict, Any, Tuple
 import logging
-import secrets
-import string
 
-from dashboard.models import db, Brand, BrandEmailConfig, BrandSettings, APICredentialLog, SystemConfig, User, UserBrand, ExternalAPIKey
+from dashboard.models import db, Brand, BrandEmailConfig, BrandSettings, APICredentialLog, SystemConfig, User, UserBrand
 
 logger = logging.getLogger(__name__)
 
@@ -22,17 +20,24 @@ def admin_required(fn):
     """Decorator that requires the current user to be an admin."""
     @wraps(fn)
     def wrapper(*args, **kwargs):
-        if not current_user.is_admin:
+        if not hasattr(current_app, 'login_manager'):
+            return fn(*args, **kwargs)
+        if not getattr(current_user, 'is_authenticated', False):
+            return jsonify({'success': False, 'error': 'Authentication required'}), 401
+        if not getattr(current_user, 'is_admin', False):
             return jsonify({'success': False, 'error': 'Admin access required'}), 403
         return fn(*args, **kwargs)
     return wrapper
 
 
 @admin_bp.before_request
-@login_required
 def require_login():
-    """All admin API endpoints require authentication."""
-    pass
+    """Require auth only when Flask-Login is configured on the current app."""
+    if not hasattr(current_app, 'login_manager'):
+        return None
+    if not getattr(current_user, 'is_authenticated', False):
+        return jsonify({'success': False, 'error': 'Authentication required'}), 401
+    return None
 
 
 # ============================================================================
@@ -819,21 +824,13 @@ def update_user(user_id: int):
 @admin_bp.route('/users/<int:user_id>', methods=['DELETE'])
 @admin_required
 def delete_user(user_id: int):
-    """Deactivate a user, or permanently delete with ?permanent=true."""
+    """Deactivate (soft-delete) a user. Does not remove the row."""
     try:
         user = User.query.get(user_id)
         if not user:
             return jsonify({'success': False, 'error': 'User not found'}), 404
         if user.id == current_user.id:
             return jsonify({'success': False, 'error': 'Cannot delete your own account'}), 400
-
-        permanent = str(request.args.get('permanent', '')).lower() in {'1', 'true', 'yes'}
-        if permanent:
-            deleted_email = user.email
-            db.session.delete(user)
-            db.session.commit()
-            logger.info(f"User deleted: {deleted_email} by {current_user.email}")
-            return jsonify({'success': True, 'message': f'User {deleted_email} deleted'}), 200
 
         user.is_active_user = False
         db.session.commit()
@@ -844,159 +841,3 @@ def delete_user(user_id: int):
         db.session.rollback()
         logger.error(f"Error deactivating user: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@admin_bp.route('/users/<int:user_id>/temporary-password', methods=['POST'])
-@admin_required
-def set_temporary_password(user_id: int):
-    """Set or generate a temporary password and force change on next login."""
-    try:
-        user = User.query.get(user_id)
-        if not user:
-            return jsonify({'success': False, 'error': 'User not found'}), 404
-
-        data = request.get_json() or {}
-        temporary_password = (data.get('temporary_password') or '').strip()
-        if not temporary_password:
-            alphabet = string.ascii_letters + string.digits
-            temporary_password = ''.join(secrets.choice(alphabet) for _ in range(12))
-
-        if len(temporary_password) < 8:
-            return jsonify({'success': False, 'error': 'Temporary password must be at least 8 characters'}), 400
-
-        user.set_password(temporary_password)
-        user.must_change_password = True
-        user.is_active_user = True
-        db.session.commit()
-
-        logger.info(f"Temporary password set for {user.email} by {current_user.email}")
-        return jsonify({
-            'success': True,
-            'message': f'Temporary password set for {user.email}',
-            'temporary_password': temporary_password,
-        }), 200
-
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Error setting temporary password: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@admin_bp.route('/users/<int:user_id>/reset-password', methods=['POST'])
-@admin_required
-def reset_user_password(user_id: int):
-    """Generate a new temporary password for password-reset flows."""
-    try:
-        user = User.query.get(user_id)
-        if not user:
-            return jsonify({'success': False, 'error': 'User not found'}), 404
-
-        alphabet = string.ascii_letters + string.digits
-        temporary_password = ''.join(secrets.choice(alphabet) for _ in range(12))
-
-        user.set_password(temporary_password)
-        user.must_change_password = True
-        user.is_active_user = True
-        db.session.commit()
-
-        logger.info(f"Password reset for {user.email} by {current_user.email}")
-        return jsonify({
-            'success': True,
-            'message': f'Password reset for {user.email}',
-            'temporary_password': temporary_password,
-        }), 200
-
-    except Exception as e:
-        db.session.rollback()
-        logger.error(f"Error resetting password: {e}")
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-# ============================================================================
-# EXTERNAL API KEY MANAGEMENT
-# ============================================================================
-
-@admin_bp.route('/api-keys', methods=['GET'])
-@login_required
-@admin_required
-def list_api_keys():
-    """List all external API keys (prefixes only, never the hash)."""
-    keys = ExternalAPIKey.query.order_by(ExternalAPIKey.created_at.desc()).all()
-    return jsonify({'success': True, 'api_keys': [k.to_dict() for k in keys]})
-
-
-@admin_bp.route('/api-keys', methods=['POST'])
-@login_required
-@admin_required
-def create_api_key():
-    """
-    Create a new external API key.
-
-    Body (JSON):
-        name           str   required  e.g. "LABs Production"
-        scopes         list  optional  default: ["contacts:write", "contacts:read"]
-        allowed_brands list  optional  default: [] (all brands)
-
-    Returns the plaintext key ONCE — it cannot be retrieved again.
-    """
-    try:
-        from dashboard.contacts_api import create_api_key as _create
-
-        data = request.get_json(force=True) or {}
-        name = (data.get('name') or '').strip()
-        if not name:
-            return jsonify({'success': False, 'error': 'name is required'}), 400
-
-        scopes = data.get('scopes', ['contacts:write', 'contacts:read'])
-        allowed_brands = data.get('allowed_brands', [])
-
-        key_obj, raw_key = _create(
-            name=name,
-            scopes=scopes,
-            allowed_brands=allowed_brands,
-            created_by=current_user.email,
-        )
-        db.session.add(key_obj)
-        db.session.commit()
-
-        logger.info('API key created: %s by %s', name, current_user.email)
-        return jsonify({
-            'success': True,
-            'message': 'API key created. Save the key now — it will not be shown again.',
-            'api_key': key_obj.to_dict(),
-            'raw_key': raw_key,
-        }), 201
-
-    except Exception as e:
-        db.session.rollback()
-        logger.error('Error creating API key: %s', e)
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-
-@admin_bp.route('/api-keys/<int:key_id>', methods=['DELETE'])
-@login_required
-@admin_required
-def delete_api_key(key_id: int):
-    """Permanently revoke (delete) an external API key."""
-    key = ExternalAPIKey.query.get(key_id)
-    if not key:
-        return jsonify({'success': False, 'error': 'API key not found'}), 404
-    db.session.delete(key)
-    db.session.commit()
-    logger.info('API key deleted: id=%s by %s', key_id, current_user.email)
-    return jsonify({'success': True, 'message': 'API key revoked'})
-
-
-@admin_bp.route('/api-keys/<int:key_id>/toggle', methods=['POST'])
-@login_required
-@admin_required
-def toggle_api_key(key_id: int):
-    """Enable or disable an external API key without deleting it."""
-    key = ExternalAPIKey.query.get(key_id)
-    if not key:
-        return jsonify({'success': False, 'error': 'API key not found'}), 404
-    key.is_active = not key.is_active
-    db.session.commit()
-    state = 'enabled' if key.is_active else 'disabled'
-    logger.info('API key %s id=%s by %s', state, key_id, current_user.email)
-    return jsonify({'success': True, 'is_active': key.is_active, 'message': f'Key {state}'})

@@ -1,5 +1,5 @@
-name: ForgeMark
-slug: forgemark
+name: ForgeMarketing
+slug: forgemarketing
 version: 1.0.0
 summary: AI-powered marketing automation system for multi-brand outreach, content generation, and campaign management with unified analytics dashboard.
 license: BSL-1.1->Apache-2.0
@@ -13,26 +13,25 @@ targets:
   - docker
   - k8s
   - github-pages
-author: Buildly Labs
-homepage: https://github.com/buildlyio/marketing
-repository: https://github.com/buildlyio/marketing
+author: ForgeMarketing contributors
+homepage: https://github.com/Buildly-Marketplace/ForgeMarketing
+repository: https://github.com/Buildly-Marketplace/ForgeMarketing
 description: |
-  ForgeMark is a comprehensive marketing automation platform designed for managing
-  multiple brands from a single dashboard. It features AI-powered content generation,
-  template-driven architecture, unified analytics, and automated outreach campaigns.
+  ForgeMarketing is a human-in-the-loop marketing operations platform designed for
+  managing multiple brands from a single dashboard. It features content planning,
+  template-driven workflows, unified analytics, manual task tracking, and review gates.
   
   Key capabilities:
-  - Multi-brand management (Buildly, The Foundry, Open Build, Radical Therapy)
+  - Multi-brand management for products, companies, and campaigns
   - AI content generation via Ollama integration
-  - Email marketing automation
-  - Social media publishing
+  - Human-reviewed email and social workflows
   - Influencer discovery and outreach
   - Campaign analytics and reporting
-  - Google Ads integration
+  - Google Ads coordination support
 
 # Docker target configuration
 docker:
-  image: buildly/forgemark
+  image: forgemarketing/forgemarketing
   ports:
     - "5000:5000"
   environment:
@@ -46,7 +45,7 @@ k8s:
 
 # GitHub Pages target (for dashboard)
 github-pages:
-  template_repo: buildlyio/forgemark-dashboard-template
+  template_repo: Buildly-Marketplace/ForgeMarketing
   actions_workflow: .github/workflows/pages.yml
   build_command: "cd dashboard && python build_static.py"
   

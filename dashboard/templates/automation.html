@@ -338,138 +338,24 @@ function automationMonitor() {
         loadMockData() {
             // Mock automation data
             this.stats = {
-                activeCrons: 8,
-                contentSentToday: 12,
-                successRate: 85,
-                failedJobs: 2
+                activeCrons: 0,
+                contentSentToday: 0,
+                successRate: 0,
+                failedJobs: 0
             };
             
-            this.automations = [
-                {
-                    id: 1,
-                    name: 'Daily Social Media Posts',
-                    type: 'social',
-                    brand: 'Buildly',
-                    status: 'active',
-                    lastRun: '2h ago',
-                    nextRun: '22h',
-                    stats: { sent: 45, opens: 387, clicks: 23 },
-                    lastContent: 'Exciting news! Our new cloud-native features are now live. Check out how Buildly is revolutionizing development workflows. #CloudNative #DevOps',
-                    contentStats: 'Twitter: 280 chars, LinkedIn: 512 chars',
-                    logs: [
-                        { timestamp: '10:30', message: 'Successfully posted to Twitter' },
-                        { timestamp: '10:31', message: 'Successfully posted to LinkedIn' },
-                        { timestamp: '10:32', message: 'Automation completed successfully' }
-                    ],
-                    showDetails: false,
-                    executing: false
-                },
-                {
-                    id: 2,
-                    name: 'Weekly Newsletter',
-                    type: 'email',
-                    brand: 'Foundry',
-                    status: 'active',
-                    lastRun: '1d ago',
-                    nextRun: '6d',
-                    stats: { sent: 1250, opens: 425, clicks: 67 },
-                    lastContent: 'This week in automation: New workflow templates, performance improvements, and customer success stories from the Foundry community.',
-                    contentStats: 'Email sent to 1,250 subscribers',
-                    logs: [
-                        { timestamp: '08:00', message: 'Email campaign started' },
-                        { timestamp: '08:15', message: 'Sent to 1,250 recipients' },
-                        { timestamp: '08:16', message: 'Campaign completed successfully' }
-                    ],
-                    showDetails: false,
-                    executing: false
-                },
-                {
-                    id: 3,
-                    name: 'Daily Blog Generation',
-                    type: 'blog',
-                    brand: 'Open Build',
-                    status: 'active',
-                    lastRun: '3h ago',
-                    nextRun: '21h',
-                    stats: { sent: 7, opens: 245, clicks: 18 },
-                    lastContent: 'Day 4: Building Scalable APIs - Best practices for designing APIs that grow with your business needs.',
-                    contentStats: '847 words, 4 min read',
-                    logs: [
-                        { timestamp: '07:00', message: 'AI blog generation started' },
-                        { timestamp: '07:02', message: 'Blog post generated (847 words)' },
-                        { timestamp: '07:03', message: 'Published to website successfully' }
-                    ],
-                    showDetails: false,
-                    executing: false
-                },
-                {
-                    id: 4,
-                    name: 'Wellness Wednesday Posts',
-                    type: 'social',
-                    brand: 'Radical Therapy',
-                    status: 'scheduled',
-                    lastRun: '6d ago',
-                    nextRun: '1d',
-                    stats: { sent: 12, opens: 156, clicks: 34 },
-                    lastContent: 'Remember: Progress isn\'t always linear. It\'s okay to have setbacks - they\'re part of the journey to better mental health. 🌱',
-                    contentStats: 'Instagram: with image, Twitter: thread',
-                    logs: [
-                        { timestamp: 'Wed 09:00', message: 'Waiting for next scheduled run' }
-                    ],
-                    showDetails: false,
-                    executing: false
-                },
-                {
-                    id: 5,
-                    name: 'Monthly Analytics Report',
-                    type: 'email',
-                    brand: 'All Brands',
-                    status: 'failed',
-                    lastRun: '2h ago',
-                    nextRun: '29d',
-                    stats: { sent: 0, opens: 0, clicks: 0 },
-                    lastContent: 'Failed to generate analytics report due to missing API credentials.',
-                    contentStats: 'Error: Authentication failed',
-                    logs: [
-                        { timestamp: '08:30', message: 'Report generation started' },
-                        { timestamp: '08:31', message: 'Error: Missing email API credentials' },
-                        { timestamp: '08:31', message: 'Automation failed' }
-                    ],
-                    showDetails: false,
-                    executing: false
-                }
-            ];
+            this.automations = [];
             
             this.timeline = [
                 {
                     id: 1,
-                    title: 'Social Media Post Published',
-                    description: 'Daily Buildly social media content posted to Twitter and LinkedIn',
-                    type: 'social',
-                    brand: 'Buildly',
-                    status: 'success',
-                    timestamp: '2h ago',
-                    metric: '23 engagements'
-                },
-                {
-                    id: 2,
-                    title: 'Blog Post Generated',
-                    description: 'AI-generated blog post "Day 4: Building Scalable APIs" published',
-                    type: 'blog',
-                    brand: 'Open Build',
-                    status: 'success',
-                    timestamp: '3h ago',
-                    metric: '847 words'
-                },
-                {
-                    id: 3,
-                    title: 'Analytics Report Failed',
-                    description: 'Monthly analytics report generation failed due to missing credentials',
-                    type: 'email',
-                    brand: 'All Brands',
-                    status: 'failed',
-                    timestamp: '2h ago',
-                    metric: 'Auth error'
+                    title: 'System check',
+                    description: 'No recent automation activity recorded.',
+                    type: 'system',
+                    brand: 'System',
+                    status: 'info',
+                    timestamp: 'Now',
+                    metric: ''
                 }
             ];
         },

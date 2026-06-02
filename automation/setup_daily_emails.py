@@ -12,6 +12,8 @@ import subprocess
 from pathlib import Path
 import tempfile
 
+from config.brand_loader import get_all_brands
+
 def setup_daily_email_crons():
     """Set up cron jobs for daily analytics emails"""
     
@@ -84,9 +86,14 @@ def test_email_setup():
     
     # Test dry run
     try:
-        result = subprocess.run([
-            'python3', str(script_path), '--dry-run', '--brand', 'buildly'
-        ], cwd=project_root, capture_output=True, text=True)
+        active_brands = get_all_brands(active_only=True)
+        test_cmd = ['python3', str(script_path), '--dry-run']
+        if active_brands:
+            test_cmd.extend(['--brand', active_brands[0]])
+        else:
+            test_cmd.append('--summary-only')
+
+        result = subprocess.run(test_cmd, cwd=project_root, capture_output=True, text=True)
         
         if result.returncode == 0:
             print("✅ Email system test passed")
@@ -119,7 +126,7 @@ if __name__ == '__main__':
         # Default: show what would be set up
         print("📧 Daily Analytics Email Schedule")
         print("=" * 40)
-        print("🌅 9:00 AM  - Individual brand reports")
+        print("🌅 9:00 AM  - Brand analytics reports")
         print("🌆 5:00 PM  - Multi-brand summary")
         print("")
         print("To setup: python3 setup_daily_emails.py --setup-crons")

@@ -17,7 +17,17 @@
 
     <!-- Filters -->
     <div class="bg-white rounded-lg p-4 card-shadow">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Brand</label>
+                <select x-model="filters.brand" @change="loadCampaigns()" 
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                    <option value="">All Brands</option>
+                    <template x-for="brand in brandOptions" :key="brand">
+                        <option :value="brand" x-text="brand"></option>
+                    </template>
+                </select>
+            </div>
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-2">Status</label>
                 <select x-model="filters.status" @change="loadCampaigns()" 
@@ -210,8 +220,13 @@
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">Brand</label>
-                    <input type="text" :value="ACTIVE_BRAND" class="w-full px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-600" readonly>
-                    <input type="hidden" x-model="newCampaign.brand_name">
+                    <select x-model="newCampaign.brand_name" 
+                            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500" required>
+                        <option value="">Select Brand</option>
+                        <template x-for="brand in brandOptions" :key="`modal-${brand}`">
+                            <option :value="brand" x-text="brand"></option>
+                        </template>
+                    </select>
                 </div>
                 <div>
                     <label class="block text-sm font-medium text-gray-700 mb-2">Campaign Name</label>
@@ -266,14 +281,15 @@ function marketingCalendar() {
     return {
         campaigns: [],
         tasks: [],
-        filters: { brand: ACTIVE_BRAND, status: '' },
+        brandOptions: [],
+        filters: { brand: '', status: '' },
         viewMode: 'campaigns',
         loading: false,
         showNewCampaign: false,
         currentMonth: new Date(),
         calendarDays: [],
         newCampaign: {
-            brand_name: ACTIVE_BRAND,
+            brand_name: '',
             campaign_name: '',
             description: '',
             start_date: '',
@@ -289,6 +305,8 @@ function marketingCalendar() {
                 const data = await response.json();
                 if (data.success) {
                     this.campaigns = data.data;
+                    const discovered = [...new Set(this.campaigns.map(c => c.brand_name).filter(Boolean))];
+                    this.brandOptions = discovered.sort();
                     await this.loadAllTasks();
                 }
             } catch (error) {
@@ -322,7 +340,7 @@ function marketingCalendar() {
                 if (data.success) {
                     alert('Campaign created successfully!');
                     this.showNewCampaign = false;
-                    this.newCampaign = { brand_name: ACTIVE_BRAND, campaign_name: '', description: '', start_date: '', end_date: '', budget: 0 };
+                    this.newCampaign = { brand_name: '', campaign_name: '', description: '', start_date: '', end_date: '', budget: 0 };
                     await this.loadCampaigns();
                 }
             } catch (error) {
@@ -349,8 +367,11 @@ function marketingCalendar() {
         },
 
         getBrandColor(brand) {
-            const colors = {};
-            return colors[brand] || 'border-gray-500';
+            const colors = ['border-blue-500', 'border-green-500', 'border-orange-500', 'border-pink-500', 'border-indigo-500', 'border-teal-500'];
+            const normalized = (brand || '').toLowerCase();
+            if (!normalized) return 'border-gray-500';
+            const hash = normalized.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+            return colors[hash % colors.length];
         },
 
         getStatusBadge(status) {

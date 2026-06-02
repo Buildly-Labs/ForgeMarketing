@@ -1,0 +1,54 @@
+{
+  "templates": [
+    {
+      "name": "Product Feature Post",
+      "platform": "instagram",
+      "format": "carousel",
+      "prompt_instructions": "Write a concise post using: Hook, Problem, Feature, Benefit, CTA.",
+      "example_output": "Still spending too much time planning meals? Washoku helps you log one real meal in seconds. Track patterns without guilt. Try it today.",
+      "required_assets": ["screenshot", "feature visual"],
+      "suggested_cta": "Try it now",
+      "suggested_hashtags": ["#ProductUpdate", "#BuildInPublic"]
+    },
+    {
+      "name": "Founder Story Post",
+      "platform": "linkedin",
+      "format": "long_text",
+      "prompt_instructions": "Use: personal context, problem observed, why we built this, what we learned, CTA.",
+      "example_output": "We noticed many people quit habit apps when they miss a day. We built Washoku to support consistency over perfection...",
+      "required_assets": ["founder photo optional"],
+      "suggested_cta": "Share your experience",
+      "suggested_hashtags": ["#FounderStory", "#StartupJourney"]
+    },
+    {
+      "name": "Lifestyle Tip Post",
+      "platform": "x",
+      "format": "short_text",
+      "prompt_instructions": "Use: gentle tip, why it helps, one small action, CTA.",
+      "example_output": "Try a 10-minute walk after dinner tonight. It helps digestion and gives your day a clean finish. Small actions count.",
+      "required_assets": [],
+      "suggested_cta": "Try this tonight",
+      "suggested_hashtags": ["#LifestyleTip", "#HealthyHabits"]
+    },
+    {
+      "name": "Launch Announcement",
+      "platform": "bluesky",
+      "format": "short_text",
+      "prompt_instructions": "Use: what launched, who it helps, why it matters, CTA link.",
+      "example_output": "Washoku v1.2 is live. Better habit logging, clearer trend snapshots, and a calmer daily flow.",
+      "required_assets": ["launch graphic"],
+      "suggested_cta": "Read more and join",
+      "suggested_hashtags": ["#Launch", "#ProductNews"]
+    },
+    {
+      "name": "Short Video Script",
+      "platform": "tiktok",
+      "format": "short_video",
+      "prompt_instructions": "Use: opening hook, 3 quick points, visual notes, on-screen text, CTA.",
+      "example_output": "Hook: You do not need perfect meals to make progress...",
+      "required_assets": ["b-roll", "on-screen text plan"],
+      "suggested_cta": "Follow for practical tips",
+      "suggested_hashtags": ["#TikTokTips", "#HealthyRoutine"]
+    }
+  ]
+}

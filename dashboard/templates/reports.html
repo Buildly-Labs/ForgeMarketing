@@ -26,15 +26,29 @@
         </div>
     </div>
     
-    <!-- Time Range Filter -->
+    <!-- Brand Filter -->
     <div class="bg-white rounded-lg p-6 card-shadow">
-        <div class="flex items-center justify-between">
-            <h3 class="text-lg font-semibold">Time Range</h3>
+        <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-semibold">Filter by Brand</h3>
             <select x-model="selectedTimeRange" @change="loadData()" class="px-3 py-2 border border-gray-300 rounded-lg">
                 <option value="7d">Last 7 days</option>
                 <option value="30d">Last 30 days</option>
                 <option value="90d">Last 90 days</option>
             </select>
+        </div>
+        <div class="flex flex-wrap gap-2">
+            <button @click="selectedBrand = 'all'" :class="selectedBrand === 'all' ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'"
+                    class="px-4 py-2 rounded-lg font-medium">
+                All Brands
+            </button>
+            <template x-for="brand in brands" :key="brand.key">
+                <button @click="selectedBrand = brand.key" 
+                        :class="selectedBrand === brand.key ? 'bg-blue-600 text-white' : 'bg-gray-200 text-gray-700'"
+                        class="px-4 py-2 rounded-lg font-medium">
+                    <i :class="brand.icon" class="mr-2"></i>
+                    <span x-text="brand.name"></span>
+                </button>
+            </template>
         </div>
     </div>
 
@@ -354,7 +368,7 @@
 <script>
     function reportsManager() {
         return {
-            selectedBrand: ACTIVE_BRAND,
+            selectedBrand: 'all',
             timeRange: '30d',
             totalEmailsSent: 0,
             totalTargets: 0,
@@ -397,19 +411,32 @@
                     const data = await response.json();
                     
                     if (data.success) {
-                        const brandKeys = {{ user_brands | map(attribute='name') | list | tojson }};
-                        const brandDisplayNames = {{ user_brands | map(attribute='display_name') | list | tojson }};
-                        this.brands = brandKeys.map((key, i) => ({
-                            key: key,
-                            name: brandDisplayNames[i] || key,
-                            icon: 'fas fa-briefcase',
-                            color: 'bg-blue-500',
-                            targets: data.data[key]?.total_targets || 0,
-                            emailsSent: data.data[key]?.total_outreach || 0,
-                            responseRate: 0,
-                            lastActivity: new Date().toISOString(),
-                            status: (data.data[key]?.total_targets || 0) > 0 ? 'active' : 'pending'
-                        }));
+                        const palette = ['bg-purple-500', 'bg-blue-500', 'bg-green-500', 'bg-red-500', 'bg-orange-500', 'bg-indigo-500'];
+                        const icons = ['fas fa-bullseye', 'fas fa-chart-line', 'fas fa-envelope', 'fas fa-users', 'fas fa-rocket', 'fas fa-compass'];
+
+                        const rawBrands = data.data || data.brands || {};
+                        const entries = Array.isArray(rawBrands)
+                            ? rawBrands.map((item, idx) => [item.key || item.name || `brand_${idx + 1}`, item])
+                            : Object.entries(rawBrands);
+
+                        this.brands = entries.map(([key, brandData], idx) => {
+                            const targets = brandData?.total_targets || brandData?.targets || 0;
+                            const emailsSent = brandData?.total_outreach || brandData?.total_emails_sent || brandData?.emails_sent || 0;
+                            const responses = brandData?.total_responses || brandData?.responses || 0;
+                            const responseRate = emailsSent > 0 ? Math.round((responses / emailsSent) * 100) : 0;
+
+                            return {
+                                key,
+                                name: (key || '').replace(/[_-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+                                icon: icons[idx % icons.length],
+                                color: palette[idx % palette.length],
+                                targets,
+                                emailsSent,
+                                responseRate,
+                                lastActivity: new Date().toISOString(),
+                                status: emailsSent > 0 ? 'active' : 'pending'
+                            };
+                        });
                     }
                 } catch (error) {
                     console.error('Error loading brand data:', error);
@@ -717,9 +744,9 @@ function initializeCharts() {
     responseRateChart = new Chart(responseCtx, {
         type: 'doughnut',
         data: {
-            labels: {{ user_brands | map(attribute='display_name') | list | tojson }},
+            labels: ['Brand 1', 'Brand 2', 'Brand 3', 'Brand 4', 'Brand 5'],
             datasets: [{
-                data: [{% for brand in user_brands %}0{% if not loop.last %}, {% endif %}{% endfor %}],
+                data: [25, 15, 30, 20, 10],
                 backgroundColor: [
                     'rgb(255, 99, 132)',
                     'rgb(54, 162, 235)',

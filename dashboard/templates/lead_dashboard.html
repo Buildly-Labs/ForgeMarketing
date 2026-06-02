@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6">
+  <div class="bg-white rounded-lg shadow p-6">
+    <h1 class="text-2xl font-bold">Regional Lead Dashboard</h1>
+    <p class="text-sm text-gray-600">Weekly pipeline metrics by region, owner, status, and priority.</p>
+  </div>
+
+  <div class="bg-white rounded-lg shadow p-4">
+    <input id="brand_name" placeholder="brand_name" class="border rounded p-2" />
+    <button onclick="loadSummary()" class="bg-gray-900 text-white rounded px-3 py-2">Refresh</button>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div class="bg-white rounded-lg shadow p-4"><h2 class="font-semibold">By Region</h2><pre id="by_region" class="text-xs"></pre></div>
+    <div class="bg-white rounded-lg shadow p-4"><h2 class="font-semibold">By Status</h2><pre id="by_status" class="text-xs"></pre></div>
+    <div class="bg-white rounded-lg shadow p-4"><h2 class="font-semibold">By Owner</h2><pre id="by_owner" class="text-xs"></pre></div>
+    <div class="bg-white rounded-lg shadow p-4"><h2 class="font-semibold">By Priority</h2><pre id="by_priority" class="text-xs"></pre></div>
+  </div>
+
+  <div class="bg-white rounded-lg shadow p-4"><h2 class="font-semibold">Topline</h2><pre id="topline" class="text-xs"></pre></div>
+</div>
+
+<script>
+async function loadSummary() {
+  const brand = document.getElementById('brand_name').value.trim();
+  const url = '/api/leads/dashboard-summary' + (brand ? ('?brand_name=' + encodeURIComponent(brand)) : '');
+  const res = await fetch(url);
+  const json = await res.json();
+  const d = json.data || {};
+  document.getElementById('by_region').textContent = JSON.stringify(d.counts_by_region || {}, null, 2);
+  document.getElementById('by_status').textContent = JSON.stringify(d.counts_by_status || {}, null, 2);
+  document.getElementById('by_owner').textContent = JSON.stringify(d.counts_by_owner || {}, null, 2);
+  document.getElementById('by_priority').textContent = JSON.stringify(d.counts_by_priority || {}, null, 2);
+  document.getElementById('topline').textContent = JSON.stringify({
+    calls_booked: d.calls_booked || 0,
+    proposals_sent: d.proposals_sent || 0,
+    won: d.won || 0,
+    lost: d.lost || 0,
+    next_actions_due_this_week: d.next_actions_due_this_week || 0,
+    candidates_awaiting_review: d.candidates_awaiting_review || 0
+  }, null, 2);
+}
+loadSummary();
+</script>
+{% endblock %}

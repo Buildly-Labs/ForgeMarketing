@@ -128,14 +128,12 @@
                                     <p class="text-muted">Send a single test email to verify configuration</p>
                                     <div class="mb-3">
                                         <label class="form-label">Test Email Address</label>
-                                        <input type="email" class="form-control" id="testEmail" value="greg@buildly.io" placeholder="Enter email address">
+                                        <input type="email" class="form-control" id="testEmail" value="admin@example.com" placeholder="Enter email address">
                                     </div>
                                     <div class="mb-3">
                                         <label class="form-label">Brand</label>
                                         <select class="form-select" id="testBrand">
-                                            {% for brand in user_brands %}
-                                            <option value="{{ brand.name }}">{{ brand.display_name }}</option>
-                                            {% endfor %}
+                                            <option value="">No brands configured</option>
                                         </select>
                                     </div>
                                     <div class="mb-3">
@@ -157,11 +155,11 @@
                                     <p class="text-muted">Test all brands and campaign types (sends multiple emails)</p>
                                     <div class="mb-3">
                                         <label class="form-label">Test Email Address</label>
-                                        <input type="email" class="form-control" id="comprehensiveTestEmail" value="greg@buildly.io" placeholder="Enter email address">
+                                        <input type="email" class="form-control" id="comprehensiveTestEmail" value="admin@example.com" placeholder="Enter email address">
                                     </div>
                                     <div class="alert alert-warning">
                                         <i class="fas fa-info-circle me-2"></i>
-                                        This will send 6 test emails (3 brands × 2 campaign types)
+                                        This sends test emails across configured brands and key campaign types.
                                     </div>
                                     <button class="btn btn-warning" onclick="runComprehensiveTest()">
                                         <i class="fas fa-rocket me-2"></i>Run Comprehensive Test
@@ -256,18 +254,11 @@
                             <div class="mb-3">
                                 <label for="ga-api-key" class="form-label">API Key</label>
                                 <input type="password" class="form-control" id="ga-api-key" value="<your-google-analytics-api-key>" readonly>
-                                <small class="form-text text-muted">Google Analytics configuration</small>
+                                <small class="form-text text-muted">Using the current shared configuration</small>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label">Property IDs by Brand</label>
-                                <div id="property-ids-container">
-                                    {% for brand in user_brands %}
-                                    <div class="input-group mb-2">
-                                        <span class="input-group-text">{{ brand.display_name }}</span>
-                                        <input type="text" class="form-control" value="" placeholder="GA4 Property ID">
-                                    </div>
-                                    {% endfor %}
-                                </div>
+                                <div id="property-ids-container"></div>
                             </div>
                             <button type="button" class="btn btn-success" onclick="testAnalyticsConnection()">
                                 <i class="fas fa-chart-line"></i> Test Connection
@@ -371,11 +362,66 @@
 </div>
 
 <script>
+let configuredBrands = [];
+
 document.addEventListener('DOMContentLoaded', function() {
     loadOverviewData();
+    loadConfiguredBrands();
     loadAutomationRules();
     loadCronJobs();
 });
+
+function loadConfiguredBrands() {
+    fetch('/api/admin/brands')
+        .then(response => response.json())
+        .then(data => {
+            const brands = (data.brands || []).map(b => (typeof b === 'string' ? b : b.name)).filter(Boolean);
+            configuredBrands = brands;
+            renderBrandSelectors(brands);
+            renderAnalyticsPropertyRows(brands);
+        })
+        .catch(error => {
+            console.error('Error loading configured brands:', error);
+            configuredBrands = [];
+            renderBrandSelectors([]);
+            renderAnalyticsPropertyRows([]);
+        });
+}
+
+function renderBrandSelectors(brands) {
+    const brandSelect = document.getElementById('testBrand');
+    if (!brandSelect) return;
+    brandSelect.innerHTML = '';
+
+    if (!brands.length) {
+        brandSelect.innerHTML = '<option value="">No brands configured</option>';
+        return;
+    }
+
+    brands.forEach(brand => {
+        const option = document.createElement('option');
+        option.value = brand;
+        option.textContent = brand.replace(/[_-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        brandSelect.appendChild(option);
+    });
+}
+
+function renderAnalyticsPropertyRows(brands) {
+    const container = document.getElementById('property-ids-container');
+    if (!container) return;
+
+    if (!brands.length) {
+        container.innerHTML = '<div class="text-muted">No brands configured yet.</div>';
+        return;
+    }
+
+    container.innerHTML = brands.map(brand => `
+        <div class="input-group mb-2">
+            <span class="input-group-text">${brand.replace(/[_-]/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</span>
+            <input type="text" class="form-control" placeholder="GA4 Property ID for ${brand}">
+        </div>
+    `).join('');
+}
 
 function loadOverviewData() {
     Promise.all([
@@ -387,8 +433,8 @@ function loadOverviewData() {
         if (outreachData.success) {
             document.getElementById('db-records').textContent = 318; // Known from unified DB
             document.getElementById('total-emails').textContent = outreachData.overview?.total_emails_sent || 179;
-            document.getElementById('active-brands').textContent = outreachData.total_brands || 5;
-            document.getElementById('active-crons').textContent = (outreachData.total_brands || 5) * 2; // Estimate 2 crons per brand
+            document.getElementById('active-brands').textContent = outreachData.total_brands || 0;
+            document.getElementById('active-crons').textContent = (outreachData.total_brands || 0) * 2; // Estimate 2 crons per brand
             
             // Update system status
             const statusContainer = document.getElementById('system-status-container');
@@ -433,8 +479,8 @@ function loadOverviewData() {
         // Fallback data
         document.getElementById('db-records').textContent = '318';
         document.getElementById('total-emails').textContent = '179';
-        document.getElementById('active-brands').textContent = '5';
-        document.getElementById('active-crons').textContent = '10';
+        document.getElementById('active-brands').textContent = '0';
+        document.getElementById('active-crons').textContent = '0';
     });
 }
 
@@ -444,25 +490,25 @@ function loadAutomationRules() {
         const rulesTable = document.getElementById('automation-rules-table');
         rulesTable.innerHTML = `
             <tr>
-                <td>Daily Outreach - Foundry</td>
+                <td>Daily Outreach</td>
                 <td>Daily @ 09:00</td>
                 <td>Send outreach emails</td>
                 <td><span class="badge bg-success">Active</span></td>
                 <td>2h ago</td>
                 <td>
-                    <button class="btn btn-sm btn-outline-primary" onclick="editRule('foundry-daily')">
+                    <button class="btn btn-sm btn-outline-primary" onclick="editRule('daily-outreach')">
                         <i class="fas fa-edit"></i>
                     </button>
                 </td>
             </tr>
             <tr>
-                <td>Target Discovery - OpenBuild</td>
+                <td>Target Discovery</td>
                 <td>Weekly @ 08:00</td>
                 <td>Find new targets</td>
                 <td><span class="badge bg-success">Active</span></td>
                 <td>1d ago</td>
                 <td>
-                    <button class="btn btn-sm btn-outline-primary" onclick="editRule('openbuild-discovery')">
+                    <button class="btn btn-sm btn-outline-primary" onclick="editRule('target-discovery')">
                         <i class="fas fa-edit"></i>
                     </button>
                 </td>
@@ -491,11 +537,11 @@ function loadCronJobs() {
                 <div class="col-md-6 mb-3">
                     <div class="card border-success">
                         <div class="card-header bg-success text-white">
-                            <h6 class="mb-0">Daily Outreach - Foundry</h6>
+                            <h6 class="mb-0">Daily Outreach</h6>
                         </div>
                         <div class="card-body">
                             <p class="mb-1"><strong>Schedule:</strong> 0 9 * * * (Daily at 9 AM)</p>
-                            <p class="mb-1"><strong>Command:</strong> python automation/run_foundry_outreach.py</p>
+                            <p class="mb-1"><strong>Command:</strong> python automation/run_outreach.py</p>
                             <p class="mb-1"><strong>Last Run:</strong> Today 09:00 AM</p>
                             <p class="mb-0"><strong>Status:</strong> <span class="badge bg-success">Success</span></p>
                         </div>
@@ -504,11 +550,11 @@ function loadCronJobs() {
                 <div class="col-md-6 mb-3">
                     <div class="card border-info">
                         <div class="card-header bg-info text-white">
-                            <h6 class="mb-0">Target Discovery - OpenBuild</h6>
+                            <h6 class="mb-0">Target Discovery</h6>
                         </div>
                         <div class="card-body">
                             <p class="mb-1"><strong>Schedule:</strong> 0 8 * * 1 (Monday at 8 AM)</p>
-                            <p class="mb-1"><strong>Command:</strong> python automation/discover_openbuild_targets.py</p>
+                            <p class="mb-1"><strong>Command:</strong> python automation/discover_targets.py</p>
                             <p class="mb-1"><strong>Last Run:</strong> Monday 08:00 AM</p>
                             <p class="mb-0"><strong>Status:</strong> <span class="badge bg-success">Success</span></p>
                         </div>
@@ -620,6 +666,11 @@ async function sendTestEmail() {
         showNotification('Please enter a test email address', 'error');
         return;
     }
+
+    if (!brand) {
+        showNotification('Please configure at least one brand first', 'error');
+        return;
+    }
     
     const resultsDiv = document.getElementById('email-test-results');
     resultsDiv.innerHTML = '<div class="spinner-border spinner-border-sm me-2"></div>Sending test email...';
@@ -671,6 +722,11 @@ async function runComprehensiveTest() {
     
     if (!testEmail) {
         showNotification('Please enter a test email address', 'error');
+        return;
+    }
+
+    if (!configuredBrands.length) {
+        showNotification('No configured brands found for comprehensive test', 'error');
         return;
     }
     

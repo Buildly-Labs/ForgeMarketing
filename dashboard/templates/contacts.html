@@ -78,7 +78,13 @@
     <!-- Filters -->
     <div class="bg-white rounded-lg p-6 card-shadow">
         <h3 class="text-lg font-semibold mb-4">Filters</h3>
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Brand</label>
+                <select id="brandFilter" onchange="loadContacts()" class="w-full border rounded-lg px-3 py-2">
+                    <option value="">All Brands</option>
+                </select>
+            </div>
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Type</label>
                 <select id="typeFilter" onchange="loadContacts()" class="w-full border rounded-lg px-3 py-2">
@@ -416,6 +422,7 @@ function debounceLoadContacts() {
 }
 
 function clearFilters() {
+    document.getElementById('brandFilter').value = '';
     document.getElementById('typeFilter').value = '';
     document.getElementById('statusFilter').value = '';
     document.getElementById('searchFilter').value = '';
@@ -453,7 +460,7 @@ async function loadContacts() {
         const params = new URLSearchParams();
         
         // Get filter values
-        const brand = ACTIVE_BRAND;
+        const brand = document.getElementById('brandFilter').value;
         const type = document.getElementById('typeFilter').value;
         const status = document.getElementById('statusFilter').value;
         const search = document.getElementById('searchFilter').value;

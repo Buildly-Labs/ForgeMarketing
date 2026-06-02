@@ -24,17 +24,17 @@ def create_tweet(text):
 
 # Define the ad variations
 ads = [
-    "Elevate Your Software Development with #Buildly Insights & Our Partner Marketplace 🚀 Join our private beta today! https://insights.buildly.io",
-    "Transform your development journey with #Buildly - AI-driven project management & expert development community. Discover more https://insights.buildly.io",
-    "#BuildlyMarketplace connects you to expert agencies for efficient software solutions. Explore our Bounty Hunter feature! https://insights.buildly.io",
-    "Streamline your software projects with #Buildly Insights and access quick fixes through our Partner Marketplace. Join now! https://insights.buildly.io",
-    "Innovate with #Buildly's AI-Based Idea Translation & Product Roadmaps. Connect with experts on our marketplace. https://insights.buildly.io",
+    "Plan content, approvals, and scheduling in one place. A calm workflow keeps marketing moving. https://example.com/forgemarketing",
+    "Turn campaign ideas into drafts, review notes, and next steps without losing track of the work. https://example.com/forgemarketing",
+    "Use simple checklists for manual posting, account setup, and weekly performance review. https://example.com/forgemarketing",
+    "Keep brand voice, assets, and platform drafts together so your team can move faster. https://example.com/forgemarketing",
+    "Human-in-the-loop marketing works better than automation when approval matters. https://example.com/forgemarketing",
     # Additional ad variations go here
-    "Discover how #Buildly's cloud-based solutions can accelerate your startup's growth. Explore our features today! https://insights.buildly.io",
-    "Maximize productivity with #Buildly Insights. AI-powered project management for modern teams. Learn more https://insights.buildly.io",
-    "Join the #Buildly revolution! Seamless project management and a vibrant expert community await. https://insights.buildly.io",
-    "Revolutionize your software development with #Buildly. Cutting-edge tools for startups and enterprises. https://insights.buildly.io",
-    "Efficiency meets innovation with #Buildly. Dive into our AI-driven platform and marketplace today! https://insights.buildly.io"
+    "Track what is drafted, approved, scheduled, posted, and ready for performance checks. https://example.com/forgemarketing",
+    "A marketing command center for interns and founder-led teams. https://example.com/forgemarketing",
+    "Create platform-specific drafts, attach assets, and keep humans responsible for publishing. https://example.com/forgemarketing",
+    "Manage campaigns with clear owners, due dates, and notes for every manual task. https://example.com/forgemarketing",
+    "Keep content organized across platforms without risky automation. https://example.com/forgemarketing"
 ]
 
 # Function to post tweets

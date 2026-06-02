@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6">
+  <div class="bg-white rounded-lg shadow p-6">
+    <h1 class="text-2xl font-bold">Lead Radar Settings</h1>
+    <p class="text-sm text-gray-600">Configure brand-level settings for lead workflow and safety.</p>
+  </div>
+
+  <div class="bg-white rounded-lg shadow p-4 grid grid-cols-1 md:grid-cols-3 gap-2">
+    <input id="brand_name" placeholder="brand_name" class="border rounded p-2" />
+    <input id="module_name" placeholder="module_name" class="border rounded p-2" value="Lead Radar" />
+    <input id="safety_warning" placeholder="safety warning text" class="border rounded p-2" value="ForgeMarketing creates research notes and draft outreach only." />
+    <button onclick="loadSettings()" class="bg-blue-600 text-white rounded p-2">Load</button>
+    <button onclick="saveSettings()" class="bg-gray-900 text-white rounded p-2">Save</button>
+  </div>
+
+  <div class="bg-white rounded-lg shadow p-4">
+    <pre id="settings_view" class="text-xs whitespace-pre-wrap"></pre>
+  </div>
+</div>
+
+<script>
+async function loadSettings() {
+  const brand = document.getElementById('brand_name').value.trim();
+  if (!brand) { alert('brand_name is required'); return; }
+  const res = await fetch('/api/lead-radar/settings?brand_name=' + encodeURIComponent(brand));
+  const json = await res.json();
+  document.getElementById('settings_view').textContent = JSON.stringify(json, null, 2);
+}
+
+async function saveSettings() {
+  const payload = {
+    brand_name: document.getElementById('brand_name').value.trim(),
+    settings_json: {
+      module_name: document.getElementById('module_name').value.trim(),
+      safety_warning: document.getElementById('safety_warning').value.trim(),
+      allow_auto_outreach: false,
+      require_human_review: true
+    }
+  };
+  const res = await fetch('/api/lead-radar/settings', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)});
+  const json = await res.json();
+  document.getElementById('settings_view').textContent = JSON.stringify(json, null, 2);
+}
+</script>
+{% endblock %}

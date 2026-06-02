@@ -38,66 +38,65 @@ general:
 # Brand-specific platform configurations
 # API keys should be set via environment variables (see .env.example)
 brand_platforms:
-  buildly:
+  washoku:
     active_platforms:
       - twitter
       - linkedin
       - mastodon
       - bluesky
     content_themes:
-      - low-code automation
-      - developer productivity
-      - microservices architecture
-      - API-first development
+      - healthy habits
+      - gentle wellness
+      - balance and calm
+      - daily rituals
 
-  foundry:
+  northstar:
     active_platforms:
       - twitter
       - linkedin
     content_themes:
-      - startup accelerator
-      - entrepreneur resources
-      - MVP development
-      - startup funding
+      - focus and clarity
+      - productive routines
+      - goal setting
+      - progress tracking
 
-  openbuild:
+  sunnyside:
     active_platforms:
       - twitter
       - linkedin
       - mastodon
       - bluesky
     content_themes:
-      - open source development
-      - developer training
-      - community building
-      - technical education
+      - simple daily habits
+      - small wins
+      - encouraging reminders
+      - wellness education
 
-  radical:
+  craftkit:
     active_platforms:
       - twitter
       - instagram
     content_themes:
-      - digital therapy
-      - mental wellness technology
-      - therapeutic innovation
+      - creator tips
+      - templates and workflows
+      - design systems
+      - content planning
 
-  oregonsoftware:
+  trailhead:
     active_platforms:
       - twitter
       - linkedin
     content_themes:
-      - software development
-      - Portland tech scene
-      - consulting services
+      - outdoor routines
+      - travel planning
+      - movement and recovery
+      - weekend projects
 
 # Mastodon account mappings
 mastodon_accounts:
-  BUILDLY:
-    instance_env: MASTODON_BUILDLY_INSTANCE
-    token_env: MASTODON_BUILDLY_TOKEN
-  CLOUDNATIVE:
-    instance_env: MASTODON_CLOUDNATIVE_INSTANCE
-    token_env: MASTODON_CLOUDNATIVE_TOKEN
-  OPENBUILD:
-    instance_env: MASTODON_OPENBUILD_INSTANCE
-    token_env: MASTODON_OPENBUILD_TOKEN
+  BRAND1:
+    instance_env: MASTODON_BRAND1_INSTANCE
+    token_env: MASTODON_BRAND1_TOKEN
+  BRAND2:
+    instance_env: MASTODON_BRAND2_INSTANCE
+    token_env: MASTODON_BRAND2_TOKEN

@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6">
+  <div class="bg-white rounded-lg shadow p-6">
+    <h1 class="text-2xl font-bold">CSV Lead Import</h1>
+    <p class="text-sm text-gray-600 mt-2">Required CSV columns: company_name and at least one of name/linkedin/email/company_url.</p>
+    <p class="text-sm text-amber-700 mt-2">No outreach is sent automatically from imports.</p>
+  </div>
+
+  <form id="importForm" class="bg-white rounded-lg shadow p-4 space-y-3">
+    <input name="brand_name" placeholder="brand_name" class="border rounded p-2 w-full" required />
+    <input type="file" name="file" accept=".csv" class="border rounded p-2 w-full" required />
+    <button class="bg-gray-900 text-white rounded px-3 py-2" type="submit">Import</button>
+  </form>
+
+  <div class="bg-white rounded-lg shadow p-4">
+    <pre id="result" class="text-xs whitespace-pre-wrap"></pre>
+  </div>
+</div>
+
+<script>
+document.getElementById('importForm').addEventListener('submit', async function (e) {
+  e.preventDefault();
+  const form = e.target;
+  const fd = new FormData(form);
+  const res = await fetch('/api/leads/import-csv', { method: 'POST', body: fd });
+  const json = await res.json();
+  document.getElementById('result').textContent = JSON.stringify(json, null, 2);
+});
+</script>
+{% endblock %}

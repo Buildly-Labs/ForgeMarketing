@@ -1,258 +1,108 @@
-# ForgeMark - AI-Powered Marketing Automation
+# ForgeMarketing
 
-**One-command setup and deployment for multi-brand marketing automation.**
+ForgeMarketing is a human-in-the-loop marketing operations tool for small teams.
+
+It helps teams plan campaigns, draft content, organize assets, track manual tasks, and record performance across platforms without risky automation.
 
 [![License: BSL-1.1→Apache-2.0](https://img.shields.io/badge/License-BSL%201.1-blue.svg)](LICENSE.md)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
-[![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](ops/Dockerfile)
 
-## 📚 Documentation
+## What ForgeMarketing Does
 
-**Multi-Tenant Architecture**: See [`devdocs/`](devdocs/README.md) for complete guides
-- [Getting Started](devdocs/00_START_HERE.md)
-- [Database Architecture](devdocs/01_DATABASE_ARCHITECTURE.md)
-- [Multi-Tenant Guide](devdocs/02_MULTI_TENANT_GUIDE.md)
-- [Admin Panel API](devdocs/03_ADMIN_PANEL_API.md)
-- [Implementation Checklist](devdocs/04_IMPLEMENTATION_CHECKLIST.md)
+- Organizes work by brand/product and campaign.
+- Tracks content from idea to draft, review, approval, scheduling, and posted state.
+- Represents manual platform setup and posting steps as checklist tasks.
+- Supports optional AI drafting assistance, always requiring human review.
+- Tracks posted URLs and follow-up performance checks.
+- Includes Lead Radar (Regional Lead Intelligence Engine) for configurable lead research, scoring, candidate review, draft outreach, and manual follow-up workflows.
 
-## ⚡ Quick Start (30 seconds)
+## What ForgeMarketing Does Not Automate
+
+- Social account creation.
+- Platform verification.
+- Mass following, auto-commenting, or DM spam.
+- Any workflow that bypasses platform terms.
+- Auto-publishing unapproved AI output.
+
+## Human Approval Philosophy
+
+ForgeMarketing helps teams plan and manage marketing content. It does not automatically create accounts, bypass platform rules, or post content without human approval. Account creation, platform verification, and final publishing should be completed by authorized humans following each platform's terms and policies.
+
+## Quick Start
 
 ```bash
-# Clone (include submodules like Producer)
-git clone --recurse-submodules https://github.com/Buildly-Marketplace/ForgeMarketing.git
+# Clone and navigate
+git clone https://github.com/<your-org>/ForgeMarketing.git
 cd ForgeMarketing
 
-# Setup (one-time)
-./ops/startup.sh setup
-
-# Start server
-./ops/startup.sh start
-```
-
-The script will:
-1. ✓ Verify Python 3.8+
-2. ✓ Create/activate virtual environment
-3. ✓ Install dependencies
-4. ✓ Configure environment variables
-5. ✓ Run smoke tests
-6. ✓ Start server on **http://localhost:8002**
-
-## 🎯 Key Features
-
-- **🤖 AI Content Generation** — Ollama-powered content for all channels
-- **📧 Email Marketing** — Brevo integration with tracking and automation
-- **🌐 Social Publishing** — Multi-platform posting (Twitter, Mastodon, Bluesky)
-- **🔍 Influencer Discovery** — Automated outreach and relationship management
-- **📊 Analytics Dashboard** — Real-time metrics, campaign ROI, cross-brand reporting
-- **🎨 Multi-Brand Management** — Unified control for Buildly, The Foundry, Open Build, Radical Therapy
-- **🐳 Enterprise Ready** — Docker, Kubernetes (Helm), and GitHub Pages support
-
-## 📋 Setup Options
-
-### Option 1: Local Development (Recommended for first-time)
-```bash
+# Setup and start
 ./ops/startup.sh setup
 ./ops/startup.sh start
 ```
 
-### Option 2: Custom Port
+App URL: http://localhost:8002
+
+## Core Workflow
+
+1. Select or create a brand/product.
+2. Select or create a campaign.
+3. Add content ideas.
+4. Create platform-specific drafts.
+5. Attach assets.
+6. Move drafts through review and approval.
+7. Schedule externally or create manual posting tasks.
+8. Save posted URLs.
+9. Record performance snapshots.
+10. Run weekly review and plan next actions.
+
+## Intern-Friendly Docs
+
+- [docs/intern-workflow.md](docs/intern-workflow.md)
+- [docs/platform-account-setup.md](docs/platform-account-setup.md)
+- [docs/content-calendar.md](docs/content-calendar.md)
+- [docs/brand-voice.md](docs/brand-voice.md)
+- [docs/forge-marketing-v1-2-plan.md](docs/forge-marketing-v1-2-plan.md)
+- [docs/lead-radar.md](docs/lead-radar.md)
+- [docs/regional-lead-engine.md](docs/regional-lead-engine.md)
+
+Technical docs remain in [devdocs/README.md](devdocs/README.md).
+
+## Setup Options
+
 ```bash
+# Local
+./ops/startup.sh setup
+./ops/startup.sh start
+
+# Custom port
 ./ops/startup.sh start --port 9000
+
+# Docker
+docker-compose -f ops/docker-compose.yml up -d
 ```
 
-### Option 3: Fresh Installation
+## Testing
+
 ```bash
-./ops/startup.sh setup --clean
-./ops/startup.sh start
-```
-
-### Option 4: Docker
-```bash
-# Initialise submodules and build the image
-./build.sh
-
-# Start services
-docker compose up -d
-```
-
-### Option 5: Kubernetes/Helm
-```bash
-helm install forgemark ops/helm/forgemark/ -n forgemark --create-namespace
-```
-
-## 🧪 Testing
-
-### Smoke Tests (No pytest needed)
-```bash
+# Smoke tests
 python tests/smoke_check.py
-```
 
-### pytest Tests
-```bash
-pip install pytest
+# Pytest
 pytest tests/smoke/ tests/crud/ -v
 ```
 
-## 🛠️ File Organization
+## Project Structure (High Level)
 
-```
-ForgeMarketing/
-├── build.sh                     Submodule init + Docker build
-├── Producer/                    Git submodule — Podcast Studio (Django)
-├── ops/                         ✓ Deployment & setup
-│   ├── startup.sh               Main setup/start/stop/restart script ⭐
-│   ├── Dockerfile               Docker image
-│   ├── docker-compose.yml       Multi-service stack
-│   └── helm/forgemark/          Kubernetes charts
-├── devdocs/                     ✓ Complete documentation
-│   ├── SETUP.md                 Installation guide
-│   ├── OPERATIONS.md            Deployment guide
-│   ├── REFERENCE.md             API reference
-│   └── ...
-├── tests/                       ✓ All tests organized here
-│   ├── smoke_check.py           Standalone smoke tests
-│   ├── smoke/                   Pytest smoke tests
-│   ├── crud/                    CRUD tests
-│   └── [35+ utilities/setup/debug scripts]
-├── automation/                  Core automation engines
-├── config/                      Configuration files
-├── dashboard/                   Web dashboard
-├── templates/                   Email templates
-├── data/                        Generated data
-├── BUILDLY.yaml                 Marketplace metadata
-├── LICENSE.md                   BSL-1.1 → Apache-2.0
-├── SUPPORT.md                   Support scope
-└── README.md                    This file
-```
+- [dashboard/](dashboard/) web UI and API endpoints
+- [automation/](automation/) background and helper workflows
+- [config/](config/) brand and system configuration
+- [docs/](docs/) user-facing operational docs
+- [devdocs/](devdocs/) technical architecture docs
+- [tests/](tests/) smoke and unit tests
 
-## 🔧 Environment Setup
+## License
 
-The setup script handles this automatically, but manually:
-
-```bash
-cp .env.example .env
-```
-
-**Key variables:**
-- `FLASK_ENV` - development or production
-- `OLLAMA_HOST` - localhost:11434 (or remote)
-- `DATABASE_URL` - PostgreSQL/MySQL (optional)
-- `BREVO_API_KEY` - Email service
-- `GOOGLE_ADS_CLIENT_ID` - Google Ads
-
-## 📦 Requirements
-
-- **Python 3.8+** (check: `python3 --version`)
-- **Ollama** (for AI content generation) — optional but recommended
-- **Docker** (optional, for containerized deployment)
-- **Git** (for version control)
-
-## 🚀 Common Commands
-
-```bash
-# Setup (one-time)
-./ops/startup.sh setup
-
-# Start server (default port 8002)
-./ops/startup.sh start
-
-# Start with custom port
-./ops/startup.sh start --port 9000
-
-# Stop server
-./ops/startup.sh stop
-
-# Restart server
-./ops/startup.sh restart
-
-# Fresh installation
-./ops/startup.sh setup --clean
-
-# Run smoke tests
-python tests/smoke_check.py
-
-# Start with Docker
-docker-compose -f ops/docker-compose.yml up -d
-
-# View deployment options
-cat ops/README.md
-```
-
-## 🗄️ Database Migrations (Marketing Dashboard)
-
-The Flask marketing dashboard now uses Alembic via Flask-Migrate.
-
-Migrations run automatically in:
-- `./ops/startup.sh setup`
-- `./ops/startup.sh start`
-- Docker/supervisor startup for the `marketing` service
-
-```bash
-# Create a migration from model changes
-SKIP_STARTUP_DB_INIT=1 flask --app dashboard.app:app db migrate -m "describe change"
-
-# Apply migrations
-SKIP_STARTUP_DB_INIT=1 flask --app dashboard.app:app db upgrade
-
-# Mark an existing pre-migration database as current baseline
-SKIP_STARTUP_DB_INIT=1 flask --app dashboard.app:app db stamp head
-```
-
-Use `db stamp head` once for already-populated legacy databases before switching to `db upgrade`.
-
-## 🐛 Troubleshooting
-
-**Port already in use:**
-```bash
-./ops/startup.sh start --port 9000
-```
-
-**Python not found:**
-Install Python 3.8+: https://python.org
-
-**Ollama not responding:**
-```bash
-# In another terminal:
-ollama serve
-
-# Optional: Pull a model
-ollama pull mistral
-```
-
-**Virtual environment issues:**
-```bash
-./ops/startup.sh setup --clean
-```
-
-**View server logs:**
-```bash
-tail -f ops/server.log
-```
-
-See **[SUPPORT.md](SUPPORT.md)** for more help.
-
-## 📄 License
-
-- **Until Nov 14, 2026:** Business Source License 1.1 (BSL-1.1)
-- **After Nov 14, 2026:** Apache License 2.0
+- Until Nov 14, 2026: Business Source License 1.1 (BSL-1.1)
+- After Nov 14, 2026: Apache License 2.0
 
 See [LICENSE.md](LICENSE.md) for details.
-
-## 🤝 Support
-
-- **Community:** [GitHub Issues](https://github.com/Buildly-Marketplace/ForgeMarketing/issues)
-- **Discord:** [Buildly Community](https://discord.gg/buildly)
-- **Documentation:** See [SUPPORT.md](SUPPORT.md)
-
-## 🎓 Next Steps
-
-1. **Run setup:** `./ops/startup.sh setup`
-2. **Start server:** `./ops/startup.sh start`
-3. **Access dashboard:** Open http://localhost:8002
-4. **Read docs:** Start with [devdocs/SETUP.md](devdocs/SETUP.md)
-4. **Run tests:** `python tests/smoke_check.py`
-5. **Deploy:** See [devdocs/OPERATIONS.md](devdocs/OPERATIONS.md)
-
----
-
-**Ready to scale multi-brand marketing with AI?** Let's go! 🚀

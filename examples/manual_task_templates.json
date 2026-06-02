@@ -1,0 +1,66 @@
+{
+  "templates": [
+    {
+      "title": "Create TikTok account manually",
+      "task_type": "account_setup",
+      "platform": "TikTok",
+      "checklist_steps": [
+        "Create account with approved brand email",
+        "Add profile image and bio",
+        "Add website link if available",
+        "Enable 2FA",
+        "Store ownership notes securely outside app",
+        "Add account URL to brand profile"
+      ]
+    },
+    {
+      "title": "Create YouTube channel manually",
+      "task_type": "account_setup",
+      "platform": "YouTube",
+      "checklist_steps": [
+        "Create or connect brand channel",
+        "Add profile image and banner",
+        "Add description and links",
+        "Verify account if needed",
+        "Add admins and permissions",
+        "Add channel URL to brand profile"
+      ]
+    },
+    {
+      "title": "Schedule approved posts externally",
+      "task_type": "scheduling",
+      "platform": "Multi-platform",
+      "checklist_steps": [
+        "Confirm draft status is approved",
+        "Copy captions and attach assets",
+        "Schedule in Buffer, Metricool, Later, Hootsuite, or manual plan",
+        "Save scheduler reference URL or note",
+        "Set status to scheduled"
+      ]
+    },
+    {
+      "title": "Manual posting checklist",
+      "task_type": "manual_posting",
+      "platform": "Multi-platform",
+      "checklist_steps": [
+        "Open official brand account",
+        "Paste final approved copy",
+        "Upload approved media assets",
+        "Publish post manually",
+        "Save posted URL in ForgeMarketing"
+      ]
+    },
+    {
+      "title": "Performance check after publishing",
+      "task_type": "analytics_check",
+      "platform": "Multi-platform",
+      "checklist_steps": [
+        "Check metrics at 24 hours",
+        "Check metrics at 7 days",
+        "Record impressions, engagement, clicks, follows",
+        "Add quick notes on what worked",
+        "Flag top post for weekly review"
+      ]
+    }
+  ]
+}

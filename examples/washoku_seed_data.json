@@ -1,0 +1,64 @@
+{
+  "brand": {
+    "name": "washoku",
+    "display_name": "Washoku",
+    "short_description": "A peaceful lifestyle companion for healthier meals, movement, sleep, and mindfulness habits.",
+    "website_url": "https://example.com/washoku",
+    "target_audience": "People who want to improve health habits without shame and understand lifestyle patterns.",
+    "brand_voice_notes": "Calm, supportive, clean, peaceful, encouraging, non-judgmental, lightly playful.",
+    "primary_cta": "Try Washoku and log one real meal today.",
+    "default_hashtags": [
+      "#Washoku",
+      "#HealthyHabits",
+      "#MindfulEating",
+      "#LifestyleBalance"
+    ],
+    "visual_style_notes": "Soft natural colors, clean whitespace, simple food and habit visuals.",
+    "active": true
+  },
+  "content_pillars": [
+    "Peaceful meal habits",
+    "Sprout check-ins",
+    "Balance Garden progress",
+    "Healthy lifestyle experiments",
+    "Sleep, steps, and calm",
+    "Real meals count",
+    "Founder/building in public",
+    "Recipe and plating ideas",
+    "Cultural respect and global food balance"
+  ],
+  "campaign": {
+    "campaign_name": "Washoku v1.2 Awareness Campaign",
+    "objective": "Increase awareness and early trial signups",
+    "status": "planning",
+    "target_platforms": [
+      "instagram",
+      "tiktok",
+      "youtube",
+      "x",
+      "bluesky",
+      "linkedin"
+    ]
+  },
+  "content_ideas": [
+    "Real meals count too.",
+    "Why honest logging works better than perfection.",
+    "Meet Sprout, your gentle lifestyle companion.",
+    "A calm way to recover after an off-plan meal.",
+    "Walk after dinner: a tiny habit that helps rhythm.",
+    "How sleep affects cravings.",
+    "Your Balance Garden grows through small choices.",
+    "Why Washoku is not a diet app.",
+    "One sentence meal logging.",
+    "Building healthy habits without shame."
+  ],
+  "manual_tasks": [
+    "Create Washoku TikTok account",
+    "Create Washoku YouTube channel",
+    "Create Washoku Instagram account",
+    "Create Washoku Bluesky account",
+    "Create first 10 post drafts",
+    "Export approved posts to scheduler",
+    "Check analytics after first week"
+  ]
+}
