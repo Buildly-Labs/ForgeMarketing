@@ -15,6 +15,10 @@ from pathlib import Path
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 import sys
+import logging
+from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
+
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 try:
@@ -59,8 +63,13 @@ except ImportError as e:
 try:
     from automation.activity_tracker import ActivityTracker
     ACTIVITY_TRACKER_AVAILABLE = True
-    activity_tracker = ActivityTracker()
-    print("✅ Activity tracker loaded successfully")
+    try:
+        activity_tracker = ActivityTracker()
+        print("✅ Activity tracker loaded successfully")
+    except Exception as e:
+        ACTIVITY_TRACKER_AVAILABLE = False
+        activity_tracker = None
+        print(f"⚠️  Activity tracker initialization failed; continuing without tracker: {e}")
 except ImportError as e:
     ACTIVITY_TRACKER_AVAILABLE = False
     activity_tracker = None
@@ -154,6 +163,33 @@ except ImportError as e:
 app = Flask(__name__)
 app.secret_key = os.getenv('DASHBOARD_SECRET_KEY', 'marketing-automation-dashboard-2025')
 
+
+def _sanitize_database_url(database_url: str) -> str:
+    """Normalize DB URL query params for SQLAlchemy/mysqlclient compatibility."""
+    try:
+        parts = urlsplit(database_url)
+        scheme = (parts.scheme or '').lower()
+
+        if not (scheme.startswith('mysql') or scheme.startswith('mariadb')):
+            return database_url
+
+        query_items = parse_qsl(parts.query, keep_blank_values=True)
+        filtered = [
+            (k, v)
+            for (k, v) in query_items
+            if k.lower() not in {'ssl-mode', 'ssl_mode'}
+        ]
+
+        return urlunsplit((
+            parts.scheme,
+            parts.netloc,
+            parts.path,
+            urlencode(filtered, doseq=True),
+            parts.fragment,
+        ))
+    except Exception:
+        return database_url
+
 # Database configuration
 # Supports DATABASE_URL env var for PostgreSQL/MySQL, falls back to local SQLite
 _database_url = os.getenv('DATABASE_URL')
@@ -161,6 +197,7 @@ if _database_url:
     # Fix Heroku-style postgres:// -> postgresql://
     if _database_url.startswith('postgres://'):
         _database_url = _database_url.replace('postgres://', 'postgresql://', 1)
+    _database_url = _sanitize_database_url(_database_url)
     app.config['SQLALCHEMY_DATABASE_URI'] = _database_url
     # Connection pool settings for remote databases
     app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {

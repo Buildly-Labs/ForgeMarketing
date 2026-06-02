@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, List, Any, Optional
 import logging
+from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
 
 from sqlalchemy import (create_engine, text, MetaData, Table, Column, Index,
                         Integer, String, Float, Boolean, Text, DateTime)
@@ -38,6 +39,8 @@ class ActivityTracker:
             # Fix Heroku-style postgres:// -> postgresql://
             if self.database_url.startswith('postgres://'):
                 self.database_url = self.database_url.replace('postgres://', 'postgresql://', 1)
+            # mysqlclient does not accept hyphenated `ssl-mode` connect kwargs.
+            self.database_url = self._sanitize_database_url(self.database_url)
         else:
             db_path = str(Path(__file__).parent.parent / 'data' / 'activity_tracker.db')
             Path(db_path).parent.mkdir(parents=True, exist_ok=True)
@@ -48,6 +51,33 @@ class ActivityTracker:
         self.logger = self._setup_logging()
         self._define_tables()
         self._initialize_database()
+
+    def _sanitize_database_url(self, database_url: str) -> str:
+        """Normalize DB URL query parameters for SQLAlchemy/driver compatibility."""
+        try:
+            parts = urlsplit(database_url)
+            scheme = (parts.scheme or '').lower()
+
+            if not (scheme.startswith('mysql') or scheme.startswith('mariadb')):
+                return database_url
+
+            query_items = parse_qsl(parts.query, keep_blank_values=True)
+            filtered = [
+                (k, v)
+                for (k, v) in query_items
+                if k.lower() not in {'ssl-mode', 'ssl_mode'}
+            ]
+
+            return urlunsplit((
+                parts.scheme,
+                parts.netloc,
+                parts.path,
+                urlencode(filtered, doseq=True),
+                parts.fragment,
+            ))
+        except Exception:
+            # Never block startup if URL parsing fails.
+            return database_url
     
     def _setup_logging(self) -> logging.Logger:
         """Setup logging for activity tracker"""
