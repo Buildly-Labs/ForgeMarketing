@@ -19,17 +19,24 @@ COPY requirements.txt /app/requirements-forge.txt
 RUN pip install --no-cache-dir --upgrade pip \
     && pip install --no-cache-dir -r /app/requirements-forge.txt bcrypt
 
-# ── Producer deps ────────────────────────────────────────────
-COPY Producer/requirements.txt /app/requirements-producer.txt
-RUN pip install --no-cache-dir -r /app/requirements-producer.txt
-
 # ── Copy application code ────────────────────────────────────
 COPY . /app
 
+# ── Producer deps (optional) ─────────────────────────────────
+RUN if [ -f /app/Producer/requirements.txt ]; then \
+        pip install --no-cache-dir -r /app/Producer/requirements.txt; \
+    else \
+        echo "Producer not present in build context; skipping Producer pip install."; \
+    fi
+
 # ── Collect Django static files ──────────────────────────────
-RUN DJANGO_SETTINGS_MODULE=logic_service.settings.docker \
-    RUNNING_IN_DOCKER=1 \
-    python /app/Producer/manage.py collectstatic --no-input 2>/dev/null || true
+RUN if [ -f /app/Producer/manage.py ]; then \
+        DJANGO_SETTINGS_MODULE=logic_service.settings.docker \
+        RUNNING_IN_DOCKER=1 \
+        python /app/Producer/manage.py collectstatic --no-input 2>/dev/null || true; \
+    else \
+        echo "Producer not present in build context; skipping Producer collectstatic."; \
+    fi
 
 # ── Nginx config ─────────────────────────────────────────────
 COPY deploy/nginx.conf /etc/nginx/sites-available/default

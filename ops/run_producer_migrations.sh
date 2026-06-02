@@ -3,6 +3,12 @@
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+if [[ ! -d "$PROJECT_ROOT/Producer" ]] || [[ ! -f "$PROJECT_ROOT/Producer/manage.py" ]]; then
+    echo "Producer app not present; skipping producer migrations."
+    exit 0
+fi
+
 cd "$PROJECT_ROOT/Producer"
 
 # Ensure deployment runs against the correct settings without manual exports.
