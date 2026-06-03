@@ -214,6 +214,9 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 from dashboard.models import db
 db.init_app(app)
 
+from flask_migrate import Migrate
+Migrate(app, db)
+
 # Initialize admin API blueprint
 from dashboard.admin_api import admin_bp
 from dashboard.marketing_calendar_api import marketing_calendar_bp
