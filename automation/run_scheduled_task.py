@@ -98,6 +98,15 @@ def _build_command(task: Dict[str, object]) -> List[str]:
     if task_type == 'report':
         return [python_bin, str(project_root / 'automation' / 'weekly_analytics_report.py')]
 
+    if task_type == 'lead_radar_research':
+        command = [python_bin, str(project_root / 'automation' / 'run_lead_radar_research.py')]
+        if brand_name and brand_name != 'all':
+            command.extend(['--brand', brand_name])
+        command.extend(['--limit', str(params.get('limit', 25))])
+        if params.get('source_id'):
+            command.extend(['--source-id', str(params.get('source_id'))])
+        return command
+
     raise ValueError(f'Unsupported task type: {task_type}')
 
 

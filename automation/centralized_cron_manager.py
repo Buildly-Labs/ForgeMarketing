@@ -98,6 +98,14 @@ class CentralizedCronManager:
                 'schedule': '0 7 * * 1,4',  # Mondays & Thursdays at 7 AM
                 'description': 'Enrich influencer profiles with content, contacts, and updated metrics',
                 'args': ['--all', '--max', '50']
+            },
+            'lead_radar_research_daily': {
+                'name': 'Lead Radar Research (Daily)',
+                'brand': 'All Brands',
+                'script_path': str(project_root / 'automation' / 'run_lead_radar_research.py'),
+                'schedule': '0 6 * * *',  # Daily at 6 AM
+                'description': 'Run due Lead Radar source discovery jobs and queue candidates for review',
+                'args': ['--limit', '25']
             }
         }
     

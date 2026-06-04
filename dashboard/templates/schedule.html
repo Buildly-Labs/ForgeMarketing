@@ -57,6 +57,7 @@
             <option value="social">Social Media</option>
             <option value="report">Report</option>
             <option value="press">Press Discovery</option>
+            <option value="lead_radar_research">Lead Radar Research</option>
         </select>
         <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
             <input type="checkbox" x-model="showDisabled" @change="loadTasks()"> Show disabled
@@ -192,6 +193,7 @@
                             <option value="social">Social Media Post</option>
                             <option value="report">Weekly Report</option>
                             <option value="press">Press Contact Discovery</option>
+                            <option value="lead_radar_research">Lead Radar Research</option>
                         </select>
                     </div>
                     <div>
@@ -271,6 +273,7 @@ function scheduleManager() {
             { id: 'monthly_report', name: 'Monthly Brand Report', description: 'Full brand performance report on the 1st', task_type: 'report', cron_expression: '0 6 1 * *', schedule_label: '1st of every month' },
             { id: 'bi_weekly_enrichment', name: 'Influencer Enrichment', description: 'Enrich influencer profiles with fresh data', task_type: 'enrichment', cron_expression: '0 7 * * 1,4', schedule_label: 'Mon & Thu at 7 AM' },
             { id: 'weekly_press', name: 'Press Contact Discovery', description: 'Discover fresh press contacts for the selected brand', task_type: 'press', cron_expression: '0 8 * * 2', schedule_label: 'Every Tuesday at 8 AM' },
+            { id: 'daily_lead_radar', name: 'Lead Radar Research', description: 'Run due lead source discovery jobs and queue fresh candidates', task_type: 'lead_radar_research', cron_expression: '0 6 * * *', schedule_label: 'Daily at 6 AM' },
         ],
 
         get filteredTasks() {

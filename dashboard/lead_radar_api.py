@@ -31,6 +31,8 @@ from dashboard.lead_radar_service import (
     get_dashboard_summary,
     parse_csv_to_leads,
     run_manual_research_job,
+    run_source_research_job,
+    run_due_source_research_jobs,
     seed_buildly_defaults_if_present,
     update_source_performance,
     upsert_followup_task,
@@ -603,6 +605,7 @@ def create_source():
     if source_type not in ALLOWED_SOURCE_TYPES:
         return jsonify({"success": False, "error": "invalid source_type"}), 400
 
+    run_frequency = data.get("run_frequency", "manual")
     source = LeadSource(
         brand_name=brand_name,
         region_id=data.get("region_id"),
@@ -613,7 +616,8 @@ def create_source():
         negative_keywords=data.get("negative_keywords") or [],
         region_filters=data.get("region_filters") or [],
         segment_filters=data.get("segment_filters") or [],
-        run_frequency=data.get("run_frequency", "manual"),
+        run_frequency=run_frequency,
+        next_run_at=datetime.utcnow() if run_frequency in {"daily", "weekly", "monthly"} else None,
         is_active=bool(data.get("is_active", True)),
         owner=data.get("owner", ""),
         notes=data.get("notes", ""),
@@ -634,6 +638,15 @@ def update_source(source_id):
     ]:
         if field in data:
             setattr(source, field, data[field])
+
+    if source.run_frequency in {"daily", "weekly", "monthly"} and not source.next_run_at:
+        source.next_run_at = datetime.utcnow()
+    if source.run_frequency == "manual":
+        source.next_run_at = None
+
+    if bool(data.get("queue_now", False)):
+        source.next_run_at = datetime.utcnow()
+
     db.session.commit()
     return jsonify({"success": True, "data": _source_to_dict(source)})
 
@@ -647,9 +660,15 @@ def run_research_job():
 
     source = LeadSource.query.get_or_404(int(source_id))
     manual_items = data.get("manual_items") or []
-    job = run_manual_research_job(source, manual_items)
+    if manual_items:
+        job = run_manual_research_job(source, manual_items)
+        mode = "manual"
+    else:
+        job = run_source_research_job(source, payload=data)
+        mode = "automatic"
     return jsonify({
         "success": True,
+        "mode": mode,
         "data": {
             "id": job.id,
             "lead_source_id": job.lead_source_id,
@@ -659,6 +678,42 @@ def run_research_job():
             "run_log": job.run_log,
             "started_at": _dt(job.started_at),
             "completed_at": _dt(job.completed_at),
+        },
+    })
+
+
+@lead_api_bp.route("/api/lead-radar/research-jobs/run-due", methods=["POST"])
+def run_due_research_jobs():
+    data = request.get_json(silent=True) or {}
+    summary = run_due_source_research_jobs(
+        brand_name=data.get("brand_name"),
+        source_id=data.get("lead_source_id"),
+        limit=int(data.get("limit", 25) or 25),
+    )
+
+    return jsonify({
+        "success": True,
+        "data": {
+            "run_at": summary["run_at"],
+            "sources_considered": summary["sources_considered"],
+            "jobs_completed": summary["jobs_completed"],
+            "jobs_failed": summary["jobs_failed"],
+            "total_items_processed": summary["total_items_processed"],
+            "total_candidates_created": summary["total_candidates_created"],
+            "jobs": [
+                {
+                    "id": j.id,
+                    "lead_source_id": j.lead_source_id,
+                    "status": j.status,
+                    "results_count": j.results_count,
+                    "candidates_created": j.candidates_created,
+                    "run_log": j.run_log,
+                    "error_message": j.error_message,
+                    "started_at": _dt(j.started_at),
+                    "completed_at": _dt(j.completed_at),
+                }
+                for j in summary["jobs"]
+            ],
         },
     })
 

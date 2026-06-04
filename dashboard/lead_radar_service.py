@@ -27,6 +27,7 @@ from dashboard.lead_radar_models import (
     ScoringRule,
     SourcePerformance,
 )
+from dashboard.lead_radar_adapters import get_adapter
 
 
 ALLOWED_SOURCE_TYPES = {
@@ -480,40 +481,101 @@ def create_candidate_from_manual(lead_source, item, research_job_id=None):
     return candidate
 
 
-def run_manual_research_job(lead_source, manual_items):
+def _set_next_run_at(lead_source, now=None):
+    now = now or datetime.utcnow()
+    if lead_source.run_frequency == "daily":
+        lead_source.next_run_at = now + timedelta(days=1)
+    elif lead_source.run_frequency == "weekly":
+        lead_source.next_run_at = now + timedelta(days=7)
+    elif lead_source.run_frequency == "monthly":
+        lead_source.next_run_at = now + timedelta(days=30)
+    else:
+        lead_source.next_run_at = None
+
+
+def run_source_research_job(lead_source, payload=None):
+    payload = payload or {}
+    adapter = get_adapter(lead_source.source_type)
     job = ResearchJob(
         lead_source_id=lead_source.id,
         status="running",
         started_at=datetime.utcnow(),
-        run_log="Manual-assisted run started",
+        run_log=f"Source run started via adapter={adapter.source_type}",
     )
     db.session.add(job)
     db.session.flush()
 
+    warnings = adapter.validate_config(lead_source)
+    if warnings:
+        job.run_log = f"{job.run_log}. Config warnings: {'; '.join(warnings)}"
+
+    try:
+        fetched_items = adapter.fetch_candidates(lead_source, payload=payload) or []
+    except Exception as exc:
+        fetched_items = []
+        job.status = "failed"
+        job.completed_at = datetime.utcnow()
+        job.error_message = str(exc)
+        job.run_log = f"{job.run_log}. Adapter error: {exc}"
+        db.session.commit()
+        return job
+
+    normalized_items = [adapter.normalize_candidate(item) for item in fetched_items]
     created = 0
-    for item in manual_items:
+    for item in normalized_items:
         c = create_candidate_from_manual(lead_source, item, research_job_id=job.id)
         if c:
             created += 1
 
     lead_source.last_run_at = datetime.utcnow()
-    if lead_source.run_frequency == "daily":
-        lead_source.next_run_at = datetime.utcnow() + timedelta(days=1)
-    elif lead_source.run_frequency == "weekly":
-        lead_source.next_run_at = datetime.utcnow() + timedelta(days=7)
-    elif lead_source.run_frequency == "monthly":
-        lead_source.next_run_at = datetime.utcnow() + timedelta(days=30)
+    _set_next_run_at(lead_source, now=lead_source.last_run_at)
 
     job.status = "completed"
     job.completed_at = datetime.utcnow()
-    job.results_count = len(manual_items)
+    job.results_count = len(normalized_items)
     job.candidates_created = created
-    job.run_log = f"Processed {len(manual_items)} item(s). Created {created} candidate(s)."
+    job.run_log = f"Processed {len(normalized_items)} item(s). Created {created} candidate(s)."
 
     update_source_performance(lead_source.id, lead_source.brand_name, lead_source.region_id)
 
     db.session.commit()
     return job
+
+
+def run_manual_research_job(lead_source, manual_items):
+    return run_source_research_job(lead_source, payload={"manual_items": manual_items})
+
+
+def run_due_source_research_jobs(brand_name=None, source_id=None, limit=25):
+    now = datetime.utcnow()
+    q = LeadSource.query.filter(LeadSource.is_active.is_(True))
+
+    if brand_name:
+        q = q.filter(LeadSource.brand_name == brand_name)
+    if source_id:
+        q = q.filter(LeadSource.id == int(source_id))
+    else:
+        q = q.filter(LeadSource.run_frequency.in_(["daily", "weekly", "monthly"]))
+        q = q.filter(
+            (LeadSource.next_run_at.is_(None))
+            | (LeadSource.next_run_at <= now)
+        )
+
+    sources = q.order_by(LeadSource.next_run_at.asc().nullsfirst(), LeadSource.updated_at.desc()).limit(limit).all()
+
+    jobs = []
+    for source in sources:
+        jobs.append(run_source_research_job(source, payload={}))
+
+    return {
+        "run_at": now.isoformat(),
+        "sources_considered": len(sources),
+        "jobs_completed": len([j for j in jobs if j.status == "completed"]),
+        "jobs_failed": len([j for j in jobs if j.status == "failed"]),
+        "total_items_processed": sum((j.results_count or 0) for j in jobs),
+        "total_candidates_created": sum((j.candidates_created or 0) for j in jobs),
+        "jobs": jobs,
+    }
 
 
 def convert_candidate_to_lead(candidate, owner="", create_tasks=True):
