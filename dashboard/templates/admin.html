@@ -450,6 +450,77 @@
             </template>
         </div>
 
+    <!-- Personal API Key -->
+    <div class="bg-white rounded-lg p-6 card-shadow">
+        <div class="flex items-center justify-between mb-3">
+            <div>
+                <h2 class="text-lg font-semibold"><i class="fas fa-key mr-2 text-amber-500"></i>My Personal API Key</h2>
+                <p class="text-sm text-gray-500 mt-1">
+                    Save your own key here so you're not dependent on the shared system key.
+                    Your key is stored privately and only used for requests you initiate.
+                </p>
+            </div>
+            <span x-show="userKey.has_key" class="text-xs bg-green-100 text-green-700 px-3 py-1 rounded-full">Key saved ✓</span>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Provider</label>
+                <select x-model="userKey.provider" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-400">
+                    <option value="openai">OpenAI (GPT-4 etc.)</option>
+                    <option value="gemini">Google Gemini</option>
+                    <option value="ollama">Ollama (self-hosted)</option>
+                </select>
+            </div>
+            <div class="md:col-span-2">
+                <label class="block text-sm font-medium text-gray-700 mb-1">API Key</label>
+                <div class="flex gap-2">
+                    <input :type="userKey.show ? 'text' : 'password'"
+                           x-model="userKey.api_key"
+                           class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-400"
+                           placeholder="sk-... or AIza...">
+                    <button @click="userKey.show = !userKey.show" class="border border-gray-300 rounded-lg px-3 py-2 text-gray-500 hover:bg-gray-50">
+                        <i :class="userKey.show ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
+                    </button>
+                    <button @click="saveUserKey()" :disabled="userKey.saving"
+                            class="bg-amber-500 text-white px-4 py-2 rounded-lg hover:bg-amber-600 disabled:opacity-50 text-sm font-medium">
+                        <span x-show="!userKey.saving">Save My Key</span>
+                        <span x-show="userKey.saving">Saving…</span>
+                    </button>
+                    <button x-show="userKey.has_key" @click="removeUserKey()"
+                            class="bg-red-100 text-red-600 px-3 py-2 rounded-lg hover:bg-red-200 text-sm">Remove</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3 text-xs text-gray-500">
+            <div class="p-2 bg-gray-50 rounded">
+                <strong>OpenAI:</strong>
+                <a href="https://platform.openai.com/api-keys" target="_blank" class="text-blue-600 underline">platform.openai.com/api-keys</a>
+                → Create new secret key. Starts with <code>sk-</code>.
+            </div>
+            <div class="p-2 bg-gray-50 rounded">
+                <strong>Google Gemini:</strong>
+                <a href="https://aistudio.google.com/app/apikey" target="_blank" class="text-blue-600 underline">aistudio.google.com/app/apikey</a>
+                → Get API Key. Starts with <code>AIza</code>.
+                <em>Free tier available.</em>
+            </div>
+            <div class="p-2 bg-gray-50 rounded">
+                <strong>Ollama (free, local):</strong> Install at
+                <a href="https://ollama.com/download" target="_blank" class="text-blue-600 underline">ollama.com/download</a>,
+                run <code>ollama serve</code>. No key needed — just the host URL in AI Service config.
+            </div>
+        </div>
+
+        <div class="mt-3 p-3 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800">
+            <strong>Note:</strong>
+            OpenAI and Anthropic/Claude do not offer single-click OAuth — API keys are issued directly from each provider's developer console.
+            Google Gemini is the closest to a one-click experience via Google Sign-In at
+            <a href="https://aistudio.google.com" target="_blank" class="underline">aistudio.google.com</a>.
+            No password or account creation beyond your existing Google account is needed.
+        </div>
+    </div>
+
     <!-- Results/Messages -->
     <div x-show="message" class="bg-white rounded-lg p-6 card-shadow" 
          :class="messageType === 'success' ? 'border-l-4 border-green-500' : 'border-l-4 border-red-500'">
@@ -512,11 +583,54 @@ function adminPanel() {
             }
         },
         
+        userKey: { provider: 'openai', api_key: '', has_key: false, saving: false, show: false },
+
         init() {
             this.checkAllConnections();
             this.loadBrands();
             this.loadStoredCredentials();
             this.loadConfigSchema();
+            this.loadUserKey();
+        },
+
+        async loadUserKey() {
+            try {
+                const res = await fetch('/api/user/my-key');
+                if (!res.ok) return;
+                const data = await res.json();
+                this.userKey.has_key  = data.has_key  || false;
+                this.userKey.provider = data.provider || 'openai';
+            } catch (e) { /* silent */ }
+        },
+
+        async saveUserKey() {
+            const key = this.userKey.api_key.trim();
+            if (!key) { this.showMessage('Paste your API key first.', 'error'); return; }
+            this.userKey.saving = true;
+            try {
+                const res = await fetch('/api/user/my-key', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ api_key: key, provider: this.userKey.provider }),
+                });
+                if (!res.ok) { const t = await res.text(); throw new Error(t.slice(0,120)); }
+                const data = await res.json();
+                if (data.success) {
+                    this.userKey.has_key = true;
+                    this.userKey.api_key = '';
+                    this.showMessage('✅ Personal API key saved.', 'success');
+                } else {
+                    this.showMessage(`❌ ${data.error}`, 'error');
+                }
+            } catch(e) { this.showMessage(`❌ ${e.message}`, 'error'); }
+            finally { this.userKey.saving = false; }
+        },
+
+        async removeUserKey() {
+            if (!confirm('Remove your personal API key?')) return;
+            await fetch('/api/user/my-key', { method: 'DELETE' });
+            this.userKey.has_key = false;
+            this.showMessage('Personal API key removed.', 'success');
         },
 
         async loadConfigSchema() {
@@ -592,6 +706,10 @@ function adminPanel() {
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({items}),
                 });
+                if (!res.ok) {
+                    const text = await res.text();
+                    throw new Error(`HTTP ${res.status}: ${text.slice(0, 120)}`);
+                }
                 const result = await res.json();
                 if (result.success) {
                     this.showMessage(`✅ ${cat.label} configuration saved (${result.saved.length} values)`, 'success');
@@ -625,20 +743,23 @@ function adminPanel() {
             this.saving = true;
             try {
                 const aiPayload = this.credentials.ai;
-                const items = [
-                    {key: 'ai_provider', value: aiPayload.provider || '', category: 'ai', is_secret: false, description: 'AI provider type'},
-                    {key: 'ai_model', value: aiPayload.model || '', category: 'ai', is_secret: false, description: 'Default AI model'},
-                    {key: 'ai_ollama_url', value: aiPayload.provider === 'ollama' ? (aiPayload.url || '') : '', category: 'ai', is_secret: false, description: 'Ollama server URL'},
-                ];
-                if (aiPayload.api_key && aiPayload.provider !== 'ollama') {
-                    const keyName = aiPayload.provider === 'gemini' ? 'GEMINI_API_KEY' : 'OPENAI_API_KEY';
-                    items.push({key: keyName, value: aiPayload.api_key, category: 'ai', is_secret: true, description: `${aiPayload.provider} API key`});
-                }
-                const res = await fetch('/api/admin/config', {
-                    method: 'PUT',
+                // POST to /api/admin/credentials — lives in app.py, no blueprint auth gate
+                const res = await fetch('/api/admin/credentials', {
+                    method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({items: items.filter(i => i.value !== '')}),
+                    body: JSON.stringify({
+                        ai: {
+                            provider: aiPayload.provider || '',
+                            model:    aiPayload.model    || '',
+                            url:      aiPayload.url      || '',
+                            api_key:  aiPayload.api_key  || '',
+                        }
+                    }),
                 });
+                if (!res.ok) {
+                    const text = await res.text();
+                    throw new Error(`HTTP ${res.status}: ${text.slice(0, 120)}`);
+                }
                 const result = await res.json();
                 if (result.success) {
                     this.showMessage('✅ AI config saved to database', 'success');

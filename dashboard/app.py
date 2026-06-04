@@ -2064,17 +2064,23 @@ def api_admin_credentials():
             if ai_config.get('provider'):
                 from dashboard.models import SystemConfig, db
 
-                configs = [
-                    ('ai_provider', ai_config.get('provider', ''), 'ai', 'AI provider type'),
+                provider = ai_config.get('provider', '').strip().lower()
+                configs_to_save = [
+                    ('ai_provider', provider, 'ai', 'AI provider type'),
                     ('ai_model', ai_config.get('model', ''), 'ai', 'Default AI model'),
                 ]
-                if ai_config.get('provider') == 'ollama':
-                    configs.append(('ai_ollama_url', ai_config.get('url', ''), 'ai', 'Ollama server URL'))
+                if provider == 'ollama':
+                    configs_to_save.append(('ai_ollama_url', ai_config.get('url', ''), 'ai', 'Ollama server URL'))
+                if provider == 'openai' and ai_config.get('api_key', '').strip():
+                    configs_to_save.append(('ai_openai_key', ai_config['api_key'].strip(), 'ai', 'OpenAI API key'))
+                if provider == 'gemini' and ai_config.get('api_key', '').strip():
+                    configs_to_save.append(('GEMINI_API_KEY', ai_config['api_key'].strip(), 'ai', 'Google Gemini API key'))
 
-                for key, value, category, desc in configs:
+                for key, value, category, desc in configs_to_save:
                     existing = SystemConfig.query.filter_by(key=key).first()
                     if existing:
-                        existing.value = value
+                        if value:  # never blank-out an existing key
+                            existing.value = value
                         existing.category = category
                         existing.description = desc
                     else:
@@ -2100,6 +2106,63 @@ def api_admin_credentials():
                 'success': False,
                 'error': str(e)
             }), 500
+
+@app.route('/api/user/my-key', methods=['GET', 'POST', 'DELETE'])
+def api_user_my_key():
+    """Per-user personal AI API key — stored in SystemConfig namespaced by session user id/email."""
+    try:
+        from dashboard.models import SystemConfig, db
+        from flask_login import current_user
+        user_id = None
+        try:
+            if current_user.is_authenticated:
+                user_id = current_user.email
+        except Exception:
+            pass
+        if not user_id:
+            user_id = 'anonymous'
+        config_key = f'user_ai_key:{user_id}'
+
+        if request.method == 'GET':
+            cfg = SystemConfig.query.filter_by(key=config_key).first()
+            return jsonify({
+                'success': True,
+                'has_key': bool(cfg and cfg.value),
+                'provider': (cfg.description or '') if cfg else '',
+            })
+
+        if request.method == 'DELETE':
+            cfg = SystemConfig.query.filter_by(key=config_key).first()
+            if cfg:
+                db.session.delete(cfg)
+                db.session.commit()
+            return jsonify({'success': True})
+
+        data = request.get_json() or {}
+        api_key = (data.get('api_key') or '').strip()
+        provider = (data.get('provider') or 'openai').strip().lower()
+        if not api_key:
+            return jsonify({'success': False, 'error': 'api_key is required'}), 400
+
+        cfg = SystemConfig.query.filter_by(key=config_key).first()
+        if cfg:
+            cfg.value = api_key
+            cfg.description = provider
+        else:
+            cfg = SystemConfig(
+                key=config_key,
+                value=api_key,
+                category='user_keys',
+                description=provider,
+                is_secret=True,
+                updated_by=user_id,
+            )
+            db.session.add(cfg)
+        db.session.commit()
+        return jsonify({'success': True, 'provider': provider})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 
 @app.route('/api/admin/test-connections')
 def api_test_connections():
