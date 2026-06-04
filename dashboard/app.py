@@ -1200,26 +1200,58 @@ class MarketingDashboard:
     
     def get_credential_status(self):
         """Get sanitized credential status"""
-        # Return which platforms have credentials without exposing secrets
-        status = {}
-        
-        for platform in ['twitter', 'bluesky', 'instagram', 'linkedin', 'email']:
-            # Check environment variables
-            if platform == 'twitter':
-                has_creds = bool(os.getenv('TWITTER_API_KEY'))
-            elif platform == 'bluesky':
-                has_creds = bool(os.getenv('BLUESKY_USERNAME'))
-            elif platform == 'instagram':
-                has_creds = bool(os.getenv('INSTAGRAM_APP_ID'))
-            elif platform == 'linkedin':
-                has_creds = bool(os.getenv('LINKEDIN_CLIENT_ID'))
-            elif platform == 'email':
-                has_creds = bool(os.getenv('EMAIL_API_KEY'))
+        # Return which platforms have credentials without exposing secrets.
+        # Prefer DB-backed configs and fall back to environment values.
+        status = {
+            'ai': {'configured': False},
+            'email': {'configured': False},
+            'twitter': {'configured': False},
+            'bluesky': {'configured': False},
+            'instagram': {'configured': False},
+            'linkedin': {'configured': False},
+        }
+
+        try:
+            from dashboard.models import BrandAPICredential, BrandEmailConfig, SystemConfig
+
+            ai_config = {cfg.key: cfg.value for cfg in SystemConfig.query.filter(SystemConfig.key.like('ai_%')).all()}
+            ai_provider = (ai_config.get('ai_provider') or '').strip().lower()
+            has_db_ai = bool(ai_provider)
+            has_openai_key = bool(ai_config.get('ai_openai_key') or os.getenv('OPENAI_API_KEY'))
+            if ai_provider == 'openai':
+                status['ai']['configured'] = has_openai_key
+            elif ai_provider == 'ollama':
+                status['ai']['configured'] = bool(ai_config.get('ai_ollama_url') or os.getenv('OLLAMA_HOST') or has_db_ai)
             else:
-                has_creds = False
-                
-            status[platform] = {'configured': has_creds}
-        
+                status['ai']['configured'] = has_db_ai or has_openai_key
+
+            status['email']['configured'] = (
+                BrandEmailConfig.query.count() > 0
+                or bool(os.getenv('EMAIL_API_KEY'))
+                or bool(os.getenv('MAILERSEND_API_TOKEN'))
+                or bool(os.getenv('BREVO_SMTP_USER') and os.getenv('BREVO_SMTP_PASSWORD'))
+            )
+
+            def _has_service_creds(service_name: str) -> bool:
+                return BrandAPICredential.query.filter_by(service=service_name, is_active=True).count() > 0
+
+            status['twitter']['configured'] = _has_service_creds('twitter') or bool(os.getenv('TWITTER_API_KEY'))
+            status['bluesky']['configured'] = _has_service_creds('bluesky') or bool(os.getenv('BLUESKY_USERNAME'))
+            status['instagram']['configured'] = _has_service_creds('instagram') or bool(os.getenv('INSTAGRAM_APP_ID'))
+            status['linkedin']['configured'] = _has_service_creds('linkedin') or bool(os.getenv('LINKEDIN_CLIENT_ID'))
+
+        except Exception:
+            status['ai']['configured'] = bool(os.getenv('OPENAI_API_KEY') or os.getenv('OLLAMA_HOST'))
+            status['email']['configured'] = bool(
+                os.getenv('EMAIL_API_KEY')
+                or os.getenv('MAILERSEND_API_TOKEN')
+                or (os.getenv('BREVO_SMTP_USER') and os.getenv('BREVO_SMTP_PASSWORD'))
+            )
+            status['twitter']['configured'] = bool(os.getenv('TWITTER_API_KEY'))
+            status['bluesky']['configured'] = bool(os.getenv('BLUESKY_USERNAME'))
+            status['instagram']['configured'] = bool(os.getenv('INSTAGRAM_APP_ID'))
+            status['linkedin']['configured'] = bool(os.getenv('LINKEDIN_CLIENT_ID'))
+
         return status
     
     def save_credentials(self, credentials):
@@ -1257,38 +1289,37 @@ class MarketingDashboard:
     def test_all_connections(self):
         """Test all configured platform connections"""
         status = {}
-        
-        # Test AI connection first
-        status['ai'] = self.test_ai_connection()
+        credential_status = self.get_credential_status()
 
-        try:
-            from dashboard.models import BrandEmailConfig
-            status['email'] = BrandEmailConfig.query.count() > 0
-        except Exception:
-            status['email'] = False
+        # Consider AI connected when either reachable now or configured in DB/env.
+        status['ai'] = self.test_ai_connection() or credential_status.get('ai', {}).get('configured', False)
+        status['email'] = credential_status.get('email', {}).get('configured', False)
 
         for platform in ['twitter', 'bluesky', 'instagram', 'linkedin']:
-            try:
-                status[platform] = bool(
-                    os.getenv(f'{platform.upper()}_API_KEY') or
-                    os.getenv(f'{platform.upper()}_USERNAME') or
-                    os.getenv(f'{platform.upper()}_CLIENT_ID')
-                )
-            except Exception:
-                status[platform] = False
-        
+            status[platform] = credential_status.get(platform, {}).get('configured', False)
+
         return status
     
     def test_ai_connection(self):
         """Test AI service connection"""
         try:
             ai_url = os.getenv('OLLAMA_HOST', 'http://localhost:11434')
+            ai_provider = ''
+            ai_openai_key = os.getenv('OPENAI_API_KEY', '')
             try:
                 from dashboard.models import SystemConfig
                 cfg = {c.key: c.value for c in SystemConfig.query.filter(SystemConfig.key.like('ai_%')).all()}
+                ai_provider = (cfg.get('ai_provider') or '').strip().lower()
                 ai_url = cfg.get('ai_ollama_url', ai_url)
+                ai_openai_key = cfg.get('ai_openai_key', ai_openai_key)
             except Exception:
                 pass
+
+            if ai_provider == 'openai':
+                # For OpenAI, treat saved key presence as configured/connected from a panel perspective.
+                return bool(ai_openai_key)
+            if not ai_provider and ai_openai_key:
+                return True
 
             try:
                 with requests.Session() as session:
@@ -1421,8 +1452,8 @@ def brands():
     """Brand management page with real configuration status"""
     brand_stats = {}
     
-    # Check if AI is properly configured
-    ai_configured = ENVIRONMENT_CONFIG['ai']['openai_configured']
+    # Check if AI is properly configured (supports DB-stored provider settings).
+    ai_configured = dashboard.get_credential_status().get('ai', {}).get('configured', False)
     
     for brand in dashboard.brands:
         # Get basic brand info from AI generator if available
@@ -1587,37 +1618,68 @@ def contacts():
 @app.route('/api/status')
 def api_status():
     """API endpoint for system status with environment configuration"""
+    credential_status = dashboard.get_credential_status()
+    ai_available = dashboard.test_ai_connection() or credential_status.get('ai', {}).get('configured', False)
+    email_available = credential_status.get('email', {}).get('configured', False)
+    twitter_available = credential_status.get('twitter', {}).get('configured', False)
+    linkedin_available = credential_status.get('linkedin', {}).get('configured', False)
+
+    dynamic_env = {
+        'email': {
+            'mailersend_configured': bool(os.getenv('MAILERSEND_API_TOKEN')),
+            'brevo_configured': bool(os.getenv('BREVO_SMTP_USER') and os.getenv('BREVO_SMTP_PASSWORD')),
+            'db_configured': email_available,
+            'missing_vars': [] if email_available else ['No stored email provider configuration found'],
+        },
+        'ai': {
+            'openai_configured': bool(os.getenv('OPENAI_API_KEY')),
+            'db_configured': credential_status.get('ai', {}).get('configured', False),
+            'missing_vars': [] if credential_status.get('ai', {}).get('configured', False) else ['No stored AI provider configuration found'],
+        },
+        'social': {
+            'twitter_configured': twitter_available,
+            'linkedin_configured': linkedin_available,
+            'missing_vars': [] if (twitter_available or linkedin_available) else ['No stored social credentials found'],
+        },
+        'google_ads': {
+            'configured': bool(os.getenv('GOOGLE_ADS_DEVELOPER_TOKEN') and os.getenv('GOOGLE_ADS_CLIENT_ID')),
+            'missing_vars': [] if bool(os.getenv('GOOGLE_ADS_DEVELOPER_TOKEN') and os.getenv('GOOGLE_ADS_CLIENT_ID')) else ['GOOGLE_ADS_DEVELOPER_TOKEN', 'GOOGLE_ADS_CLIENT_ID'],
+        },
+    }
+
     status = {
         'timestamp': datetime.now().isoformat(),
         'brands_configured': len(dashboard.brands),
-        'ai_available': dashboard.ai_generator is not None and ENVIRONMENT_CONFIG['ai']['openai_configured'],
+        'ai_available': ai_available,
         'features': dashboard.config.get('features', {}),
         'brands': dashboard.brands,
-        'environment_config': ENVIRONMENT_CONFIG,
+        'environment_config': dynamic_env,
         'services': {
             'email': {
-                'available': ENVIRONMENT_CONFIG['email']['mailersend_configured'] or ENVIRONMENT_CONFIG['email']['brevo_configured'],
-                'mailersend': ENVIRONMENT_CONFIG['email']['mailersend_configured'],
-                'brevo': ENVIRONMENT_CONFIG['email']['brevo_configured']
+                'available': email_available,
+                'mailersend': dynamic_env['email']['mailersend_configured'],
+                'brevo': dynamic_env['email']['brevo_configured'],
+                'db': dynamic_env['email']['db_configured'],
             },
             'ai': {
-                'available': ENVIRONMENT_CONFIG['ai']['openai_configured'],
-                'openai': ENVIRONMENT_CONFIG['ai']['openai_configured']
+                'available': ai_available,
+                'openai': dynamic_env['ai']['openai_configured'],
+                'db': dynamic_env['ai']['db_configured'],
             },
             'social': {
-                'available': ENVIRONMENT_CONFIG['social']['twitter_configured'] or ENVIRONMENT_CONFIG['social']['linkedin_configured'],
-                'twitter': ENVIRONMENT_CONFIG['social']['twitter_configured'],
-                'linkedin': ENVIRONMENT_CONFIG['social']['linkedin_configured']
+                'available': twitter_available or linkedin_available,
+                'twitter': twitter_available,
+                'linkedin': linkedin_available,
             },
             'google_ads': {
-                'available': ENVIRONMENT_CONFIG['google_ads']['configured']
+                'available': dynamic_env['google_ads']['configured']
             }
         },
         'missing_configuration': {
-            'email': ENVIRONMENT_CONFIG['email']['missing_vars'],
-            'ai': ENVIRONMENT_CONFIG['ai']['missing_vars'],
-            'social': ENVIRONMENT_CONFIG['social']['missing_vars'],
-            'google_ads': ENVIRONMENT_CONFIG['google_ads']['missing_vars']
+            'email': dynamic_env['email']['missing_vars'],
+            'ai': dynamic_env['ai']['missing_vars'],
+            'social': dynamic_env['social']['missing_vars'],
+            'google_ads': dynamic_env['google_ads']['missing_vars']
         }
     }
     
