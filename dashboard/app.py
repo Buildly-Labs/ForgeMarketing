@@ -5504,6 +5504,61 @@ def api_import_contacts():
             'error': str(e)
         }), 500
 
+@app.route('/api/contacts/import-csv', methods=['POST'])
+def api_import_contacts_csv():
+    """CSV import with auto-field-mapping and social media enrichment.
+
+    Dry-run (preview + mapping detection):
+        POST {csv_text, brand, dry_run: true}
+
+    Full import:
+        POST {csv_text, brand, mapping, source_label, contact_type, dry_run: false}
+    """
+    if not CONTACTS_SYSTEM_AVAILABLE:
+        return jsonify({'error': 'Contacts system not available'}), 503
+
+    try:
+        import csv as _csv
+        import io as _io
+
+        data = request.get_json() or {}
+        csv_text = data.get('csv_text', '')
+        if not csv_text:
+            return jsonify({'success': False, 'error': 'csv_text is required'}), 400
+
+        reader = _csv.DictReader(_io.StringIO(csv_text))
+        headers = list(reader.fieldnames or [])
+        rows = list(reader)
+
+        auto_mapping = UnifiedContactsManager.auto_detect_mapping(headers)
+
+        if data.get('dry_run'):
+            preview = [{h: (r.get(h) or '') for h in headers} for r in rows[:5]]
+            return jsonify({
+                'success': True,
+                'headers': headers,
+                'auto_mapping': auto_mapping,
+                'preview_rows': preview,
+                'total_rows': len(rows),
+            })
+
+        # Full import
+        brand = (data.get('brand') or '').strip()
+        if not brand:
+            return jsonify({'success': False, 'error': 'brand is required'}), 400
+
+        mapping = data.get('mapping') or auto_mapping
+        source_label = (data.get('source_label') or 'csv_import').strip()
+        contact_type = data.get('contact_type', 'email')
+
+        manager = UnifiedContactsManager()
+        result = manager.import_from_csv(rows, mapping, source_label, contact_type, brand)
+        return jsonify({'success': True, **result})
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/contacts/<int:contact_id>/touches', methods=['POST'])
 def api_add_touch(contact_id):
     """Add touch/interaction to contact"""

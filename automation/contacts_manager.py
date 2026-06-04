@@ -19,6 +19,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 import json
+import re
 import sys
 
 # Add project root to path
@@ -116,7 +117,17 @@ class UnifiedContactsManager:
                         UPDATE contacts SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
                     END;
             """)
-    
+            # Idempotently add columns introduced after the initial schema
+            for col, defn in [
+                ('phone',          'TEXT DEFAULT ""'),
+                ('bluesky_handle', 'TEXT DEFAULT ""'),
+                ('tiktok_handle',  'TEXT DEFAULT ""'),
+            ]:
+                try:
+                    conn.execute(f'ALTER TABLE contacts ADD COLUMN {col} {defn}')
+                except Exception:
+                    pass  # Column already exists
+
     def import_existing_data(self):
         """Import existing outreach and influencer data"""
         print("🔄 Importing existing contact data...")
@@ -460,6 +471,167 @@ class UnifiedContactsManager:
                 'total_responses': touch_stats[2],
                 'response_rate': (touch_stats[2] / touch_stats[0] * 100) if touch_stats[0] > 0 else 0
             }
+
+    # ── CSV Import ─────────────────────────────────────────────────────────────
+
+    FIELD_SYNONYMS: dict = {
+        'name':             ['name', 'full name', 'fullname', 'contact name', 'contact_name', 'full_name', 'person'],
+        'email':            ['email', 'email address', 'email_address', 'e-mail', 'work email', 'personal email', 'mail'],
+        'company':          ['company', 'company name', 'company_name', 'organization', 'org', 'employer', 'firm'],
+        'title':            ['title', 'job title', 'job_title', 'position', 'role', 'job role', 'occupation'],
+        'linkedin_url':     ['linkedin', 'linkedin url', 'linkedin_url', 'linkedin profile', 'li url', 'li profile', 'linkedin link'],
+        'twitter_handle':   ['twitter', 'twitter handle', 'twitter_handle', 'x handle', 'x url', 'twitter url'],
+        'instagram_handle': ['instagram', 'instagram handle', 'instagram_handle', 'ig', 'ig handle'],
+        'youtube_channel':  ['youtube', 'youtube channel', 'youtube_channel', 'yt'],
+        'website_url':      ['website', 'website url', 'website_url', 'url', 'homepage', 'web', 'site'],
+        'followers_count':  ['followers', 'followers count', 'followers_count', 'subscriber count', 'subscribers'],
+        'phone':            ['phone', 'phone number', 'phone_number', 'mobile', 'telephone', 'cell'],
+        'notes':            ['notes', 'note', 'comments', 'description', 'bio', 'about'],
+        'tags':             ['tags', 'tag', 'labels', 'categories', 'category', 'industry'],
+        'bluesky_handle':   ['bluesky', 'bsky', 'bluesky handle', 'bluesky_handle'],
+        'tiktok_handle':    ['tiktok', 'tik tok', 'tiktok handle', 'tiktok_handle'],
+    }
+
+    @staticmethod
+    def auto_detect_mapping(headers: list) -> dict:
+        """Return best-guess {csv_header: db_field} mapping from CSV column names."""
+        synonyms = UnifiedContactsManager.FIELD_SYNONYMS
+        mapping: dict = {}
+        used_fields: set = set()
+        for header in headers:
+            h = header.lower().strip()
+            matched = False
+            for db_field, patterns in synonyms.items():
+                if db_field in used_fields:
+                    continue
+                if any(p == h or p in h or h in p for p in patterns):
+                    mapping[header] = db_field
+                    used_fields.add(db_field)
+                    matched = True
+                    break
+            if not matched:
+                mapping[header] = ''
+        return mapping
+
+    @staticmethod
+    def extract_social_from_text(text: str) -> dict:
+        """Scan any text value for social media URLs and handles."""
+        social: dict = {}
+        if not text:
+            return social
+        li = re.search(
+            r'https?://(?:www\.)?linkedin\.com/(?:in|company)/([^\s,;|"\' <>)\]]+)', text
+        )
+        if li:
+            slug = li.group(1).rstrip('/')
+            social['linkedin_url'] = f'https://www.linkedin.com/in/{slug}'
+        tw = re.search(r'https?://(?:www\.)?(?:twitter|x)\.com/([A-Za-z0-9_]{1,50})', text)
+        if tw:
+            social['twitter_handle'] = '@' + tw.group(1)
+        ig = re.search(r'https?://(?:www\.)?instagram\.com/([A-Za-z0-9._]{1,50})', text)
+        if ig:
+            social['instagram_handle'] = '@' + ig.group(1)
+        yt = re.search(
+            r'https?://(?:www\.)?youtube\.com/(?:channel/|@|c/|user/)?([^\s,;|"\' <>)\]]+)', text
+        )
+        if yt:
+            social['youtube_channel'] = 'https://www.youtube.com/' + yt.group(1).rstrip('/')
+        bsky = re.search(r'https?://bsky\.app/profile/([^\s,;|"\' <>)\]]+)', text)
+        if bsky:
+            social['bluesky_handle'] = bsky.group(1)
+        else:
+            bsky2 = re.search(r'([A-Za-z0-9._-]+\.bsky\.social)', text)
+            if bsky2:
+                social['bluesky_handle'] = bsky2.group(1)
+        tt = re.search(r'https?://(?:www\.)?tiktok\.com/@([A-Za-z0-9._]{1,50})', text)
+        if tt:
+            social['tiktok_handle'] = '@' + tt.group(1)
+        return social
+
+    @staticmethod
+    def normalize_linkedin_url(url: str) -> str:
+        """Normalise to https://www.linkedin.com/in/<slug> form."""
+        if not url:
+            return url
+        url = url.strip().rstrip('/')
+        if not url.startswith('http'):
+            url = 'https://' + url.lstrip('/')
+        if 'linkedin.com/' in url and '/in/' not in url and '/company/' not in url:
+            url = url.replace('linkedin.com/', 'linkedin.com/in/', 1)
+        return url
+
+    def import_from_csv(self, rows: list, mapping: dict,
+                        source_label: str = 'csv_import',
+                        contact_type: str = 'email',
+                        brand: str = '') -> dict:
+        """Import contact rows from CSV using a field mapping.
+
+        Args:
+            rows:         List of {csv_header: value} dicts.
+            mapping:      {csv_header: db_field | ''} — '' ignores the column.
+            source_label: Free-text label stored as ``source`` on every row
+                          (e.g. "LinkedIn Export June 2024").
+            contact_type: Default type applied to every imported row.
+            brand:        Brand slug to assign.
+
+        Returns:
+            {'imported': int, 'skipped': int, 'errors': list[str]}
+        """
+        imported = skipped = 0
+        errors: list = []
+        for i, row in enumerate(rows):
+            try:
+                contact: dict = {
+                    'contact_type': contact_type,
+                    'source':       source_label,
+                    'status':       'active',
+                    'brand':        brand,
+                }
+                # Apply explicit column mapping
+                for csv_col, db_field in mapping.items():
+                    if not db_field:
+                        continue
+                    val = (row.get(csv_col) or '').strip()
+                    if not val:
+                        continue
+                    if db_field == 'followers_count':
+                        try:
+                            contact[db_field] = int(val.replace(',', '').split('.')[0])
+                        except ValueError:
+                            pass
+                    elif db_field == 'engagement_rate':
+                        try:
+                            contact[db_field] = float(val.replace('%', '').strip())
+                        except ValueError:
+                            pass
+                    else:
+                        contact[db_field] = val
+
+                if not contact.get('name'):
+                    skipped += 1
+                    continue
+
+                # Auto-enrich: scan every cell for social media URLs
+                for cell_val in row.values():
+                    if not cell_val:
+                        continue
+                    extracted = UnifiedContactsManager.extract_social_from_text(str(cell_val))
+                    for k, v in extracted.items():
+                        if not contact.get(k):
+                            contact[k] = v
+
+                if contact.get('linkedin_url'):
+                    contact['linkedin_url'] = UnifiedContactsManager.normalize_linkedin_url(
+                        contact['linkedin_url']
+                    )
+
+                self.create_contact(contact)
+                imported += 1
+            except Exception as exc:
+                errors.append(f"Row {i + 2}: {exc}")
+
+        return {'imported': imported, 'skipped': skipped, 'errors': errors[:20]}
+
 
 def main():
     """CLI interface for contacts management"""

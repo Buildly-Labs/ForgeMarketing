@@ -176,7 +176,7 @@
 
 <!-- Add Contact Modal -->
 <div id="addContactModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50" style="display: none;">
-    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+    <div class="relative top-10 mx-auto p-5 border w-11/12 max-w-2xl shadow-lg rounded-md bg-white">
         <div class="flex items-center justify-between pb-3 border-b">
             <h3 class="text-lg font-semibold">Add New Contact</h3>
             <button onclick="closeAddContactModal()" class="text-gray-400 hover:text-gray-600 p-2">
@@ -185,13 +185,255 @@
         </div>
         
         <div class="mt-4">
-            <p class="text-gray-600 mb-4">Add Contact functionality coming soon!</p>
-            <p class="text-sm text-gray-500">This will allow you to create new contacts with social media profiles, company information, and contact details.</p>
+            <form id="contactForm" class="space-y-3">
+                <input type="hidden" id="editContactId" value="">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-xs font-medium text-gray-700">Name <span class="text-red-500">*</span></label>
+                        <input type="text" id="cf_name" required class="w-full border rounded px-2 py-1.5 text-sm" placeholder="Full Name">
+                    </div>
+                    <div>
+                        <label class="text-xs font-medium text-gray-700">Email</label>
+                        <input type="email" id="cf_email" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="email@company.com">
+                    </div>
+                    <div>
+                        <label class="text-xs font-medium text-gray-700">Company</label>
+                        <input type="text" id="cf_company" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="Company Inc">
+                    </div>
+                    <div>
+                        <label class="text-xs font-medium text-gray-700">Title / Role</label>
+                        <input type="text" id="cf_title" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="VP Marketing">
+                    </div>
+                    <div>
+                        <label class="text-xs font-medium text-gray-700">Brand <span class="text-red-500">*</span></label>
+                        <select id="cf_brand" required class="w-full border rounded px-2 py-1.5 text-sm">
+                            <option value="">— select brand —</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-xs font-medium text-gray-700">Lead / Contact Type</label>
+                        <select id="cf_contact_type" class="w-full border rounded px-2 py-1.5 text-sm">
+                            <option value="email">Email Lead</option>
+                            <option value="lead">Sales Lead</option>
+                            <option value="social">Social Contact</option>
+                            <option value="influencer">Influencer</option>
+                            <option value="press">Press Contact</option>
+                            <option value="partner">Partner</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-xs font-medium text-gray-700">Source Label</label>
+                        <input type="text" id="cf_source" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="e.g. LinkedIn, Conference, Referral">
+                    </div>
+                    <div>
+                        <label class="text-xs font-medium text-gray-700">Phone</label>
+                        <input type="text" id="cf_phone" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="+1 555-555-5555">
+                    </div>
+                </div>
+                <details class="border rounded p-2">
+                    <summary class="text-xs font-medium text-gray-700 cursor-pointer">Social Profiles</summary>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2">
+                        <div>
+                            <label class="text-xs text-gray-600"><i class="fab fa-linkedin text-blue-700 mr-1"></i>LinkedIn URL</label>
+                            <input type="text" id="cf_linkedin_url" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="https://linkedin.com/in/handle">
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-600"><i class="fab fa-twitter text-sky-500 mr-1"></i>Twitter / X</label>
+                            <input type="text" id="cf_twitter" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="@handle">
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-600"><i class="fab fa-instagram text-pink-600 mr-1"></i>Instagram</label>
+                            <input type="text" id="cf_instagram" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="@handle">
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-600"><i class="fab fa-youtube text-red-600 mr-1"></i>YouTube</label>
+                            <input type="text" id="cf_youtube" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="Channel URL">
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-600"><i class="fas fa-cloud text-blue-400 mr-1"></i>Bluesky</label>
+                            <input type="text" id="cf_bluesky" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="handle.bsky.social">
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-600"><i class="fab fa-tiktok mr-1"></i>TikTok</label>
+                            <input type="text" id="cf_tiktok" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="@handle">
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-600"><i class="fas fa-globe text-gray-500 mr-1"></i>Website</label>
+                            <input type="text" id="cf_website" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="https://example.com">
+                        </div>
+                        <div>
+                            <label class="text-xs text-gray-600">Followers Count</label>
+                            <input type="number" id="cf_followers" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="0">
+                        </div>
+                    </div>
+                </details>
+                <div>
+                    <label class="text-xs font-medium text-gray-700">Notes</label>
+                    <textarea id="cf_notes" rows="2" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="Additional notes..."></textarea>
+                </div>
+            </form>
         </div>
-        
-        <div class="flex justify-end space-x-3 mt-6 pt-4 border-t">
-            <button onclick="closeAddContactModal()" class="bg-gray-300 text-gray-700 px-4 py-2 rounded">
-                Close
+
+        <div class="flex justify-end space-x-3 mt-4 pt-4 border-t">
+            <button onclick="closeAddContactModal()" class="bg-gray-300 text-gray-700 px-4 py-2 rounded">Cancel</button>
+            <button onclick="saveContact()" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
+                <i class="fas fa-save mr-2"></i>Save Contact
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ── Import CSV Modal ────────────────────────────────────────────────────────── -->
+<div id="importModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50" style="display:none;">
+    <div class="relative top-10 mx-auto p-5 border w-11/12 max-w-3xl shadow-lg rounded-md bg-white">
+        <div class="flex items-center justify-between pb-3 border-b">
+            <h3 class="text-lg font-semibold"><i class="fas fa-file-csv mr-2 text-green-600"></i>Import Contacts from CSV</h3>
+            <button onclick="closeImportModal()" class="text-gray-400 hover:text-gray-600 p-2"><i class="fas fa-times"></i></button>
+        </div>
+        <div class="flex items-center gap-2 mt-4 mb-4">
+            <span id="imp_step1_ind" class="px-3 py-1 rounded-full bg-blue-600 text-white text-xs">1. Upload</span>
+            <span class="text-gray-400 text-xs">→</span>
+            <span id="imp_step2_ind" class="px-3 py-1 rounded-full bg-gray-200 text-gray-600 text-xs">2. Map Fields</span>
+            <span class="text-gray-400 text-xs">→</span>
+            <span id="imp_step3_ind" class="px-3 py-1 rounded-full bg-gray-200 text-gray-600 text-xs">3. Confirm</span>
+        </div>
+        <!-- Step 1: Upload -->
+        <div id="imp_step1">
+            <div class="space-y-3">
+                <div>
+                    <label class="text-sm font-medium text-gray-700 block mb-1">CSV File <span class="text-red-500">*</span></label>
+                    <input type="file" id="imp_csv_file" accept=".csv,.txt" class="w-full border rounded px-2 py-1.5 text-sm">
+                    <p class="text-xs text-gray-500 mt-1">First row must be column headers. UTF-8 encoding recommended.</p>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-sm font-medium text-gray-700 block mb-1">Brand <span class="text-red-500">*</span></label>
+                        <select id="imp_brand" class="w-full border rounded px-2 py-1.5 text-sm">
+                            <option value="">— select brand —</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-sm font-medium text-gray-700 block mb-1">Lead / Contact Type <span class="text-red-500">*</span></label>
+                        <select id="imp_contact_type" class="w-full border rounded px-2 py-1.5 text-sm">
+                            <option value="email">Email Lead</option>
+                            <option value="lead">Sales Lead</option>
+                            <option value="social">Social Contact</option>
+                            <option value="influencer">Influencer</option>
+                            <option value="press">Press Contact</option>
+                            <option value="partner">Partner</option>
+                        </select>
+                    </div>
+                </div>
+                <div>
+                    <label class="text-sm font-medium text-gray-700 block mb-1">Source Label <span class="text-red-500">*</span></label>
+                    <input type="text" id="imp_source_label" class="w-full border rounded px-2 py-1.5 text-sm"
+                           placeholder="e.g. LinkedIn Export June 2024, Conference Attendees, HubSpot Export">
+                    <p class="text-xs text-gray-500 mt-1">Stored on every imported contact so you can filter and trace the list later.</p>
+                </div>
+            </div>
+            <div class="flex justify-end mt-4">
+                <button onclick="importParseCSV()" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Next: Map Fields →</button>
+            </div>
+        </div>
+        <!-- Step 2: Field mapping -->
+        <div id="imp_step2" style="display:none;">
+            <p class="text-sm text-gray-600 mb-3">Column names were auto-detected. Adjust any mismatches; set to <em>(ignore)</em> to skip a column.</p>
+            <div class="border rounded overflow-hidden">
+                <div class="overflow-x-auto max-h-64 overflow-y-auto">
+                    <table class="min-w-full text-xs">
+                        <thead class="bg-gray-50 sticky top-0">
+                            <tr>
+                                <th class="px-3 py-2 text-left">CSV Column</th>
+                                <th class="px-3 py-2 text-left">Maps To</th>
+                                <th class="px-3 py-2 text-left">Sample Value</th>
+                            </tr>
+                        </thead>
+                        <tbody id="imp_mapping_rows"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="mt-2 p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800">
+                <i class="fab fa-linkedin mr-1"></i><strong>Auto-enrichment:</strong>
+                Every cell is scanned for LinkedIn, Twitter/X, Instagram, YouTube, Bluesky, and TikTok URLs—even columns not explicitly mapped.
+            </div>
+            <div class="flex justify-between mt-4">
+                <button onclick="importGoStep(1)" class="bg-gray-300 text-gray-700 px-4 py-2 rounded">← Back</button>
+                <button onclick="importPreviewData()" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Preview →</button>
+            </div>
+        </div>
+        <!-- Step 3: Confirm -->
+        <div id="imp_step3" style="display:none;">
+            <div id="imp_preview_summary" class="p-3 bg-gray-50 rounded mb-3 text-sm"></div>
+            <div class="border rounded overflow-hidden">
+                <div class="overflow-x-auto max-h-48 overflow-y-auto">
+                    <table class="min-w-full" id="imp_preview_table"></table>
+                </div>
+            </div>
+            <div class="flex justify-between mt-4">
+                <button onclick="importGoStep(2)" class="bg-gray-300 text-gray-700 px-4 py-2 rounded">← Back</button>
+                <button onclick="importConfirm()" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
+                    <i class="fas fa-file-import mr-2"></i>Import Contacts
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Add Touch Modal ──────────────────────────────────────────────────────────── -->
+<div id="touchModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50" style="display:none;">
+    <div class="relative top-20 mx-auto p-5 border w-11/12 max-w-sm shadow-lg rounded-md bg-white">
+        <div class="flex items-center justify-between pb-3 border-b">
+            <h3 class="text-lg font-semibold">Add Touch — <span id="touchContactName" class="text-blue-600"></span></h3>
+            <button onclick="closeTouchModal()" class="text-gray-400 hover:text-gray-600 p-2"><i class="fas fa-times"></i></button>
+        </div>
+        <input type="hidden" id="touchContactId">
+        <div class="mt-4 space-y-3">
+            <div class="grid grid-cols-2 gap-2">
+                <div>
+                    <label class="text-xs font-medium text-gray-700">Type</label>
+                    <select id="touch_type" class="w-full border rounded px-2 py-1.5 text-sm">
+                        <option value="email">Email</option>
+                        <option value="social_dm">Social DM</option>
+                        <option value="social_post">Social Post/Comment</option>
+                        <option value="call">Phone Call</option>
+                        <option value="meeting">Meeting</option>
+                        <option value="manual">Manual Note</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="text-xs font-medium text-gray-700">Direction</label>
+                    <select id="touch_direction" class="w-full border rounded px-2 py-1.5 text-sm">
+                        <option value="outbound">Outbound (we reached out)</option>
+                        <option value="inbound">Inbound (they contacted us)</option>
+                    </select>
+                </div>
+            </div>
+            <div>
+                <label class="text-xs font-medium text-gray-700">Subject / Summary</label>
+                <input type="text" id="touch_subject" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="Brief description">
+            </div>
+            <div>
+                <label class="text-xs font-medium text-gray-700">Platform</label>
+                <select id="touch_platform" class="w-full border rounded px-2 py-1.5 text-sm">
+                    <option value="email">Email</option>
+                    <option value="linkedin">LinkedIn</option>
+                    <option value="twitter">Twitter / X</option>
+                    <option value="instagram">Instagram</option>
+                    <option value="bluesky">Bluesky</option>
+                    <option value="phone">Phone</option>
+                    <option value="in_person">In Person</option>
+                    <option value="other">Other</option>
+                </select>
+            </div>
+            <div>
+                <label class="text-xs font-medium text-gray-700">Notes / Response</label>
+                <textarea id="touch_notes" rows="3" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="Notes or response details..."></textarea>
+            </div>
+        </div>
+        <div class="flex justify-end space-x-3 mt-4 pt-3 border-t">
+            <button onclick="closeTouchModal()" class="bg-gray-300 text-gray-700 px-4 py-2 rounded">Cancel</button>
+            <button onclick="saveTouch()" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                <i class="fas fa-save mr-2"></i>Save Touch
             </button>
         </div>
     </div>
@@ -204,7 +446,8 @@ let loadTimeout;
 
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', function() {
-    console.log('✅ CRM Contacts loaded with vanilla JavaScript');
+    console.log('\u2705 CRM Contacts loaded with vanilla JavaScript');
+    populateBrandSelects();
     loadStats();
     loadContacts();
 });
@@ -220,6 +463,7 @@ function closeContactModal() {
 }
 
 function showAddContactModal() {
+    resetContactForm();
     document.getElementById('addContactModal').style.display = 'block';
 }
 
@@ -229,27 +473,47 @@ function closeAddContactModal() {
 
 function populateContactModal() {
     if (!selectedContact) return;
-    
+    const c = selectedContact;
+    const socialHtml = [
+        c.linkedin_url  ? `<a href="${c.linkedin_url}" target="_blank" class="flex items-center gap-1 text-blue-700 hover:underline"><i class="fab fa-linkedin"></i> LinkedIn</a>` : '',
+        c.twitter_handle ? `<a href="https://twitter.com/${(c.twitter_handle||'').replace('@','')}" target="_blank" class="flex items-center gap-1 text-sky-500 hover:underline"><i class="fab fa-twitter"></i> ${c.twitter_handle}</a>` : '',
+        c.instagram_handle ? `<a href="https://instagram.com/${(c.instagram_handle||'').replace('@','')}" target="_blank" class="flex items-center gap-1 text-pink-600 hover:underline"><i class="fab fa-instagram"></i> ${c.instagram_handle}</a>` : '',
+        c.youtube_channel ? `<a href="${c.youtube_channel}" target="_blank" class="flex items-center gap-1 text-red-600 hover:underline"><i class="fab fa-youtube"></i> YouTube</a>` : '',
+        c.bluesky_handle  ? `<span class="text-blue-400"><i class="fas fa-cloud"></i> ${c.bluesky_handle}</span>` : '',
+        c.tiktok_handle   ? `<span><i class="fab fa-tiktok"></i> ${c.tiktok_handle}</span>` : '',
+        c.website_url     ? `<a href="${c.website_url}" target="_blank" class="text-gray-600 hover:underline"><i class="fas fa-globe"></i> Website</a>` : '',
+    ].filter(Boolean).join('\n');
+    const touches = c.touches || [];
+    const touchHtml = touches.length
+        ? touches.map(t => `
+            <div class="text-xs border-b py-1.5">
+                <div class="flex justify-between">
+                    <span class="font-medium capitalize">${t.touch_type || 'note'}</span>
+                    <span class="text-gray-400">${t.created_at ? new Date(t.created_at).toLocaleDateString() : ''}</span>
+                </div>
+                <div class="text-gray-600">${t.subject || ''}</div>
+                <div class="text-gray-500">${t.platform || ''} \u00b7 ${t.touch_direction || ''} \u00b7 ${t.status || ''}</div>
+            </div>`).join('')
+        : '<p class="text-gray-500 text-sm">No touch history yet.</p>';
     const content = document.getElementById('contactModalContent');
     content.innerHTML = `
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <!-- Contact Info -->
             <div>
                 <h4 class="font-semibold mb-3">Contact Information</h4>
-                <div class="space-y-2 text-sm">
-                    <div><strong>Name:</strong> ${selectedContact.name || 'N/A'}</div>
-                    <div><strong>Email:</strong> ${selectedContact.email || 'N/A'}</div>
-                    <div><strong>Company:</strong> ${selectedContact.company || 'N/A'}</div>
-                    <div><strong>Title:</strong> ${selectedContact.title || 'N/A'}</div>
-                    <div><strong>Brand:</strong> <span class="capitalize">${selectedContact.brand || 'N/A'}</span></div>
-                    <div><strong>Type:</strong> <span class="capitalize">${selectedContact.contact_type || 'N/A'}</span></div>
-                    <div><strong>Status:</strong> <span class="capitalize">${selectedContact.status || 'N/A'}</span></div>
+                <div class="space-y-1.5 text-sm">
+                    <div><strong>Name:</strong> ${c.name || 'N/A'}</div>
+                    <div><strong>Email:</strong> ${c.email ? `<a href="mailto:${c.email}" class="text-blue-600">${c.email}</a>` : 'N/A'}</div>
+                    <div><strong>Company:</strong> ${c.company || 'N/A'}</div>
+                    <div><strong>Title:</strong> ${c.title || 'N/A'}</div>
+                    <div><strong>Brand:</strong> <span class="capitalize">${c.brand || 'N/A'}</span></div>
+                    <div><strong>Type:</strong> <span class="capitalize">${c.contact_type || 'N/A'}</span></div>
+                    <div><strong>Source:</strong> <span class="text-gray-600">${c.source || 'N/A'}</span></div>
+                    <div><strong>Status:</strong> <span class="capitalize">${c.status || 'N/A'}</span></div>
+                    ${c.phone ? `<div><strong>Phone:</strong> ${c.phone}</div>` : ''}
+                    ${c.followers_count ? `<div><strong>Followers:</strong> ${formatNumber(c.followers_count)}</div>` : ''}
                 </div>
-                
-                ${selectedContact.contact_type === 'influencer' ? generateSocialLinksHTML() : ''}
+                ${socialHtml ? `<div class="mt-3"><h5 class="font-medium mb-2 text-sm">Social Profiles</h5><div class="space-y-1 text-sm">${socialHtml}</div></div>` : ''}
             </div>
-            
-            <!-- Touch History -->
             <div>
                 <div class="flex items-center justify-between mb-3">
                     <h4 class="font-semibold">Touch History</h4>
@@ -257,10 +521,7 @@ function populateContactModal() {
                         <i class="fas fa-plus mr-1"></i>Add Touch
                     </button>
                 </div>
-                
-                <div class="max-h-64 overflow-y-auto">
-                    <div class="text-gray-500 text-sm">No touch history available</div>
-                </div>
+                <div class="max-h-64 overflow-y-auto">${touchHtml}</div>
             </div>
         </div>
     `;
@@ -401,18 +662,22 @@ function formatNumber(num) {
 // Contact Actions
 function editSelectedContact() {
     if (selectedContact) {
-        alert(`Edit functionality for ${selectedContact.name} coming soon!`);
+        closeContactModal();
+        openEditContactModal(selectedContact);
     }
 }
 
 function addTouch() {
-    if (selectedContact) {
-        alert(`Add touch functionality for ${selectedContact.name} coming soon!`);
-    }
+    if (!selectedContact) return;
+    document.getElementById('touchContactId').value = selectedContact.id;
+    document.getElementById('touchContactName').textContent = selectedContact.name;
+    document.getElementById('touchModal').style.display = 'block';
 }
 
 function importExistingData() {
-    alert('Import functionality coming soon!');
+    populateBrandSelects();
+    document.getElementById('importModal').style.display = 'block';
+    importGoStep(1);
 }
 
 // Filter Functions
@@ -568,13 +833,31 @@ async function viewContactById(contactId) {
     }
 }
 
-function editContact(contactId) {
-    alert(`Edit functionality for contact ${contactId} coming soon!`);
+async function editContact(contactId) {
+    try {
+        const res = await fetch(`/api/contacts/${contactId}`);
+        if (!res.ok) throw new Error('Failed to load contact');
+        const contact = await res.json();
+        openEditContactModal(contact);
+    } catch (e) {
+        showNotification('Failed to load contact for editing.', 'error');
+    }
 }
 
-function deleteContact(contactId, contactName) {
-    if (confirm(`Are you sure you want to delete ${contactName}?`)) {
-        alert(`Delete functionality for ${contactName} coming soon!`);
+async function deleteContact(contactId, contactName) {
+    if (!confirm(`Delete "${contactName}"? This cannot be undone.`)) return;
+    try {
+        const res = await fetch(`/api/contacts/${contactId}`, {method: 'DELETE'});
+        const data = await res.json();
+        if (data.success) {
+            showNotification(`${contactName} deleted.`, 'success');
+            loadContacts();
+            loadStats();
+        } else {
+            showNotification(data.error || 'Delete failed.', 'error');
+        }
+    } catch (e) {
+        showNotification('Delete failed.', 'error');
     }
 }
 
@@ -596,7 +879,247 @@ document.addEventListener('keydown', function(event) {
     if (event.key === 'Escape') {
         closeContactModal();
         closeAddContactModal();
+        closeImportModal();
+        closeTouchModal();
     }
 });
+
+// ── Brand selects ─────────────────────────────────────────────────────────────
+function populateBrandSelects() {
+    const brands = (typeof USER_BRANDS !== 'undefined' && USER_BRANDS.length > 0)
+        ? USER_BRANDS
+        : (typeof window._contactBrandsCache !== 'undefined' ? window._contactBrandsCache : []);
+    ['cf_brand', 'imp_brand', 'brandFilter'].forEach(id => {
+        const sel = document.getElementById(id);
+        if (!sel) return;
+        const existing = new Set(Array.from(sel.options).map(o => o.value));
+        brands.forEach(b => {
+            if (!existing.has(b)) sel.appendChild(new Option(b, b));
+        });
+    });
+    if (typeof ACTIVE_BRAND !== 'undefined' && ACTIVE_BRAND) {
+        const cfb = document.getElementById('cf_brand');
+        if (cfb && !cfb.value) cfb.value = ACTIVE_BRAND;
+        const impb = document.getElementById('imp_brand');
+        if (impb && !impb.value) impb.value = ACTIVE_BRAND;
+    }
+}
+
+// ── Add / Edit Contact form ───────────────────────────────────────────────
+function resetContactForm() {
+    ['cf_name','cf_email','cf_company','cf_title','cf_source','cf_phone',
+     'cf_linkedin_url','cf_twitter','cf_instagram','cf_youtube','cf_bluesky',
+     'cf_tiktok','cf_website','cf_notes'].forEach(id => {
+        const el = document.getElementById(id); if (el) el.value = '';
+    });
+    const f = document.getElementById('cf_followers'); if (f) f.value = '';
+    document.getElementById('editContactId').value = '';
+    const h3 = document.querySelector('#addContactModal h3');
+    if (h3) h3.textContent = 'Add New Contact';
+    populateBrandSelects();
+}
+
+function openEditContactModal(contact) {
+    resetContactForm();
+    document.getElementById('editContactId').value = contact.id;
+    const h3 = document.querySelector('#addContactModal h3');
+    if (h3) h3.textContent = 'Edit Contact';
+    const set = (id, val) => { const el = document.getElementById(id); if (el && val != null) el.value = val; };
+    set('cf_name', contact.name);         set('cf_email', contact.email);
+    set('cf_company', contact.company);   set('cf_title', contact.title);
+    set('cf_source', contact.source);     set('cf_phone', contact.phone);
+    set('cf_brand', contact.brand);       set('cf_contact_type', contact.contact_type);
+    set('cf_linkedin_url', contact.linkedin_url);
+    set('cf_twitter', contact.twitter_handle);
+    set('cf_instagram', contact.instagram_handle);
+    set('cf_youtube', contact.youtube_channel);
+    set('cf_bluesky', contact.bluesky_handle);
+    set('cf_tiktok', contact.tiktok_handle);
+    set('cf_website', contact.website_url);
+    set('cf_followers', contact.followers_count);
+    set('cf_notes', contact.notes);
+    document.getElementById('addContactModal').style.display = 'block';
+}
+
+async function saveContact() {
+    const name  = (document.getElementById('cf_name').value  || '').trim();
+    const brand = (document.getElementById('cf_brand').value || '').trim();
+    if (!name)  { showNotification('Name is required.',  'error'); return; }
+    if (!brand) { showNotification('Brand is required.', 'error'); return; }
+    const editId = document.getElementById('editContactId').value;
+    const payload = {
+        name, brand,
+        email:            (document.getElementById('cf_email').value    || '').trim(),
+        company:          (document.getElementById('cf_company').value  || '').trim(),
+        title:            (document.getElementById('cf_title').value    || '').trim(),
+        contact_type:     document.getElementById('cf_contact_type').value,
+        source:           (document.getElementById('cf_source').value   || '').trim() || 'manual',
+        status:           'active',
+        phone:            (document.getElementById('cf_phone').value    || '').trim(),
+        linkedin_url:     (document.getElementById('cf_linkedin_url').value || '').trim(),
+        twitter_handle:   (document.getElementById('cf_twitter').value  || '').trim(),
+        instagram_handle: (document.getElementById('cf_instagram').value|| '').trim(),
+        youtube_channel:  (document.getElementById('cf_youtube').value  || '').trim(),
+        bluesky_handle:   (document.getElementById('cf_bluesky').value  || '').trim(),
+        tiktok_handle:    (document.getElementById('cf_tiktok').value   || '').trim(),
+        website_url:      (document.getElementById('cf_website').value  || '').trim(),
+        followers_count:  parseInt(document.getElementById('cf_followers').value) || 0,
+        notes:            (document.getElementById('cf_notes').value    || '').trim(),
+    };
+    try {
+        const url    = editId ? `/api/contacts/${editId}` : '/api/contacts';
+        const method = editId ? 'PUT' : 'POST';
+        const res  = await fetch(url, {method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+        const data = await res.json();
+        if (data.success || data.contact) {
+            showNotification(editId ? 'Contact updated.' : 'Contact created.', 'success');
+            closeAddContactModal();
+            loadContacts();
+            loadStats();
+        } else {
+            showNotification(data.error || 'Save failed.', 'error');
+        }
+    } catch (e) { showNotification('Error saving contact.', 'error'); }
+}
+
+// ── Import CSV ─────────────────────────────────────────────────────────────
+const DB_FIELD_LABELS = {
+    name:'Name', email:'Email', company:'Company', title:'Title/Role',
+    linkedin_url:'LinkedIn URL', twitter_handle:'Twitter/X', instagram_handle:'Instagram',
+    youtube_channel:'YouTube', bluesky_handle:'Bluesky', tiktok_handle:'TikTok',
+    website_url:'Website', phone:'Phone', followers_count:'Followers',
+    engagement_rate:'Engagement Rate', notes:'Notes', tags:'Tags'
+};
+let impState = {};
+
+function closeImportModal() {
+    document.getElementById('importModal').style.display = 'none';
+    impState = {};
+}
+
+function importGoStep(n) {
+    for (let i = 1; i <= 3; i++) {
+        const s = document.getElementById('imp_step' + i);
+        if (s) s.style.display = i === n ? '' : 'none';
+        const ind = document.getElementById('imp_step' + i + '_ind');
+        if (ind) ind.className = i === n
+            ? 'px-3 py-1 rounded-full bg-blue-600 text-white text-xs'
+            : 'px-3 py-1 rounded-full bg-gray-200 text-gray-600 text-xs';
+    }
+}
+
+async function importParseCSV() {
+    const fileEl = document.getElementById('imp_csv_file');
+    const brand  = document.getElementById('imp_brand').value;
+    const sourceLabel = (document.getElementById('imp_source_label').value || '').trim();
+    const contactType = document.getElementById('imp_contact_type').value;
+    if (!fileEl.files.length) { showNotification('Select a CSV file.', 'error'); return; }
+    if (!brand)       { showNotification('Select a brand.', 'error'); return; }
+    if (!sourceLabel) { showNotification('Enter a source label.', 'error'); return; }
+    const csvText = await fileEl.files[0].text();
+    impState = {brand, sourceLabel, contactType, csvText};
+    try {
+        const res  = await fetch('/api/contacts/import-csv', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({csv_text: csvText, brand, dry_run: true})
+        });
+        const data = await res.json();
+        if (!data.success) { showNotification(data.error || 'Parse failed.', 'error'); return; }
+        impState.headers     = data.headers;
+        impState.mapping     = data.auto_mapping;
+        impState.previewRows = data.preview_rows;
+        impState.totalRows   = data.total_rows;
+        const tbody = document.getElementById('imp_mapping_rows');
+        tbody.innerHTML = impState.headers.map(h => {
+            const safe = h.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+            const opts = Object.entries(DB_FIELD_LABELS).map(([k,v]) =>
+                `<option value="${k}" ${impState.mapping[h]===k?'selected':''}>${v}</option>`).join('');
+            return `<tr class="border-b">
+                <td class="px-3 py-2 font-mono text-xs">${h}</td>
+                <td class="px-3 py-2">
+                    <select class="border rounded px-1 py-0.5 text-xs w-full"
+                        onchange="impState.mapping['${safe}']=this.value">
+                        <option value="">(ignore)</option>${opts}
+                    </select>
+                </td>
+                <td class="px-3 py-2 text-gray-500 italic text-xs">${((impState.previewRows[0]||{})[h]||'').slice(0,40)}</td>
+            </tr>`;
+        }).join('');
+        importGoStep(2);
+    } catch(e) { showNotification('Failed to parse CSV: ' + e.message, 'error'); }
+}
+
+function importPreviewData() {
+    const mappedCols = impState.headers.filter(h => impState.mapping[h]);
+    document.getElementById('imp_preview_summary').innerHTML =
+        `<strong>${impState.totalRows} rows</strong> found. ` +
+        `Source: <em>${impState.sourceLabel}</em> \u00b7 Brand: <strong>${impState.brand}</strong> \u00b7 ` +
+        `Type: <strong>${impState.contactType}</strong> \u00b7 ` +
+        `Mapped: ${mappedCols.map(h=>DB_FIELD_LABELS[impState.mapping[h]]||impState.mapping[h]).join(', ')}`;
+    document.getElementById('imp_preview_table').innerHTML =
+        `<thead class="bg-gray-50"><tr>${mappedCols.map(h=>
+            `<th class="px-2 py-1 text-left text-xs font-medium">${DB_FIELD_LABELS[impState.mapping[h]]||impState.mapping[h]}</th>`
+        ).join('')}</tr></thead><tbody>${(impState.previewRows||[]).map(row =>
+            `<tr class="border-b">${mappedCols.map(h=>`<td class="px-2 py-1 text-xs">${(row[h]||'').slice(0,50)}</td>`).join('')}</tr>`
+        ).join('')}</tbody>`;
+    importGoStep(3);
+}
+
+async function importConfirm() {
+    try {
+        const res  = await fetch('/api/contacts/import-csv', {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({
+                csv_text:     impState.csvText,
+                brand:        impState.brand,
+                mapping:      impState.mapping,
+                source_label: impState.sourceLabel,
+                contact_type: impState.contactType,
+                dry_run:      false
+            })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showNotification(`Import complete: ${data.imported} imported, ${data.skipped} skipped.`, 'success');
+            closeImportModal();
+            loadContacts();
+            loadStats();
+        } else {
+            showNotification(data.error || 'Import failed.', 'error');
+        }
+    } catch(e) { showNotification('Import failed: ' + e.message, 'error'); }
+}
+
+// ── Touch Modal ─────────────────────────────────────────────────────────────
+function closeTouchModal() {
+    document.getElementById('touchModal').style.display = 'none';
+    ['touch_subject','touch_notes'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+}
+
+async function saveTouch() {
+    const contactId = document.getElementById('touchContactId').value;
+    if (!contactId) return;
+    const payload = {
+        touch_type:      document.getElementById('touch_type').value,
+        touch_direction: document.getElementById('touch_direction').value,
+        subject:         (document.getElementById('touch_subject').value||'').trim(),
+        platform:        document.getElementById('touch_platform').value,
+        message:         (document.getElementById('touch_notes').value||'').trim(),
+        status:          'sent',
+    };
+    try {
+        const res  = await fetch(`/api/contacts/${contactId}/touches`, {
+            method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)
+        });
+        const data = await res.json();
+        if (data.success) {
+            showNotification('Touch recorded.', 'success');
+            closeTouchModal();
+            loadStats();
+        } else {
+            showNotification(data.error || 'Failed to save touch.', 'error');
+        }
+    } catch(e) { showNotification('Error saving touch.', 'error'); }
+}
 </script>
 {% endblock %}
