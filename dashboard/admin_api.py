@@ -504,8 +504,14 @@ CONFIG_SCHEMA = {
             {'key': 'TWITTER_API_SECRET',         'label': 'Twitter API Secret',   'secret': True},
             {'key': 'TWITTER_ACCESS_TOKEN',       'label': 'Twitter Access Token', 'secret': True},
             {'key': 'TWITTER_ACCESS_TOKEN_SECRET','label': 'Twitter Access Secret','secret': True},
+            {'key': 'TWITTER_BEARER_TOKEN',       'label': 'Twitter/X Bearer Token (v2)', 'secret': True,
+             'help': 'Required for Twitter/X API v2 user lookup and search.'},
             {'key': 'LINKEDIN_CLIENT_ID',         'label': 'LinkedIn Client ID',   'secret': False},
             {'key': 'LINKEDIN_CLIENT_SECRET',     'label': 'LinkedIn Client Secret','secret': True},
+            {'key': 'LINKEDIN_ACCESS_TOKEN',      'label': 'LinkedIn Access Token', 'secret': True,
+             'help': 'Optional. Used for authenticated LinkedIn profile/discovery API calls.'},
+            {'key': 'LINKEDIN_REFRESH_TOKEN',     'label': 'LinkedIn Refresh Token', 'secret': True,
+             'help': 'Optional. Used to rotate LinkedIn access tokens for long-running automation.'},
         ]
     },
     'startup_intel': {

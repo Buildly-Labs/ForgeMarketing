@@ -107,6 +107,20 @@ def _build_command(task: Dict[str, object]) -> List[str]:
             command.extend(['--source-id', str(params.get('source_id'))])
         return command
 
+    if task_type == 'influencer_outreach_queue':
+        command = [python_bin, str(project_root / 'automation' / 'process_influencer_outreach_queue.py')]
+        if brand_name and brand_name != 'all':
+            command.extend(['--brand', brand_name])
+        command.extend(['--limit', str(params.get('limit', 100))])
+        command.extend(['--status', str(params.get('status', 'queued'))])
+        if params.get('platform'):
+            command.extend(['--platform', str(params.get('platform'))])
+        if bool(params.get('dry_run', False)):
+            command.append('--dry-run')
+        if bool(params.get('auto_mark_sent', False)):
+            command.append('--auto-mark-sent')
+        return command
+
     raise ValueError(f'Unsupported task type: {task_type}')
 
 

@@ -273,6 +273,26 @@
                 <p class="text-sm text-gray-500" x-text="queueItems.length + ' queued outreach touch(es)'">0 queued outreach touch(es)</p>
             </div>
             <div class="flex items-center space-x-2">
+                <select x-model="queueStatusFilter" class="px-2 py-1 border rounded text-sm" @change="loadOutreachQueue()">
+                    <option value="queued">Queued</option>
+                    <option value="ready">Ready</option>
+                    <option value="sent">Sent</option>
+                    <option value="failed">Failed</option>
+                    <option value="cancelled">Cancelled</option>
+                </select>
+                <select x-model="queuePlatformFilter" class="px-2 py-1 border rounded text-sm" @change="loadOutreachQueue()">
+                    <option value="all">All Platforms</option>
+                    <option value="linkedin">LinkedIn</option>
+                    <option value="twitter">Twitter/X</option>
+                    <option value="instagram">Instagram</option>
+                    <option value="bluesky">Bluesky</option>
+                    <option value="mastodon">Mastodon</option>
+                    <option value="youtube">YouTube</option>
+                    <option value="tiktok">TikTok</option>
+                </select>
+                <button @click="processQueue(false)" :disabled="queueProcessing" class="bg-indigo-600 text-white px-3 py-1 rounded text-sm hover:bg-indigo-700 disabled:opacity-50">
+                    <i class="fas fa-cogs mr-1" :class="{'fa-spin': queueProcessing}"></i>Process
+                </button>
                 <button @click="loadOutreachQueue()" class="text-blue-600 hover:text-blue-800 text-sm">
                     <i class="fas fa-refresh mr-1"></i>Refresh
                 </button>
@@ -299,6 +319,7 @@
                         <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Influencer</th>
                         <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Brand</th>
                         <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Platform</th>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
                         <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Queued</th>
                         <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Message</th>
                         <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
@@ -310,12 +331,29 @@
                             <td class="px-3 py-2 text-sm font-medium text-gray-900" x-text="item.name"></td>
                             <td class="px-3 py-2 text-sm text-gray-700 capitalize" x-text="item.brand"></td>
                             <td class="px-3 py-2 text-sm text-gray-700" x-text="item.platform || item.primary_platform || 'social'"></td>
+                            <td class="px-3 py-2 text-xs">
+                                <span class="inline-flex px-2 py-1 rounded font-semibold"
+                                      :class="{
+                                        'bg-yellow-100 text-yellow-800': item.status === 'queued',
+                                        'bg-blue-100 text-blue-800': item.status === 'ready',
+                                        'bg-green-100 text-green-800': item.status === 'sent',
+                                        'bg-red-100 text-red-800': item.status === 'failed',
+                                        'bg-gray-100 text-gray-700': item.status === 'cancelled'
+                                      }"
+                                      x-text="item.status"></span>
+                            </td>
                             <td class="px-3 py-2 text-xs text-gray-600" x-text="item.created_at"></td>
                             <td class="px-3 py-2 text-xs text-gray-700">
                                 <div class="max-w-md truncate" :title="item.message" x-text="item.message"></div>
                             </td>
                             <td class="px-3 py-2 text-sm">
                                 <div class="flex items-center space-x-2">
+                                    <a :href="item.contact_link || '/contacts'" class="bg-slate-600 text-white px-2 py-1 rounded text-xs hover:bg-slate-700">
+                                        Open Contact
+                                    </a>
+                                    <button @click="updateQueueItem(item.id, 'ready')" :disabled="queueUpdating" class="bg-blue-600 text-white px-2 py-1 rounded text-xs hover:bg-blue-700 disabled:opacity-50" x-show="item.status === 'queued'">
+                                        Mark Ready
+                                    </button>
                                     <button @click="updateQueueItem(item.id, 'sent')" :disabled="queueUpdating" class="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700 disabled:opacity-50">
                                         Mark Sent
                                     </button>
@@ -473,6 +511,7 @@ function influencerManager() {
         syncing: false,
         loadingQueue: false,
         queueUpdating: false,
+        queueProcessing: false,
         showInfluencerModal: false,
         showQueueModal: false,
         selectedInfluencer: null,
@@ -482,6 +521,8 @@ function influencerManager() {
         availableBrands: [],
         influencers: [],
         queueItems: [],
+        queueStatusFilter: 'queued',
+        queuePlatformFilter: 'all',
         stats: {
             total_influencers: 0,
             total_reach: 0,
@@ -767,9 +808,9 @@ function influencerManager() {
         async loadOutreachQueue() {
             this.loadingQueue = true;
             try {
-                let url = '/api/influencers/outreach-queue';
+                let url = `/api/influencers/outreach-queue?status=${encodeURIComponent(this.queueStatusFilter)}&platform=${encodeURIComponent(this.queuePlatformFilter)}`;
                 if (this.selectedBrand !== 'all') {
-                    url += `?brand=${encodeURIComponent(this.selectedBrand)}`;
+                    url += `&brand=${encodeURIComponent(this.selectedBrand)}`;
                 }
                 const response = await fetch(url);
                 if (response.ok) {
@@ -783,6 +824,43 @@ function influencerManager() {
                 this.queueItems = [];
             } finally {
                 this.loadingQueue = false;
+            }
+        },
+
+        async processQueue(autoMarkSent = false) {
+            this.queueProcessing = true;
+            try {
+                const payload = {
+                    status: this.queueStatusFilter,
+                    platform: this.queuePlatformFilter,
+                    limit: 100,
+                    dry_run: false,
+                    auto_mark_sent: !!autoMarkSent,
+                };
+                if (this.selectedBrand !== 'all') {
+                    payload.brand = this.selectedBrand;
+                }
+
+                const response = await fetch('/api/influencers/outreach-queue/process', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const result = await response.json();
+                if (!response.ok || !result.success) {
+                    alert(`Failed to process queue: ${result.error || 'unknown error'}`);
+                    return;
+                }
+                alert(`Processed ${result.processed} queue item(s). Ready: ${result.ready}, Sent: ${result.sent}, Failed: ${result.failed}.`);
+                if (this.queueStatusFilter === 'queued') {
+                    this.queueStatusFilter = 'ready';
+                }
+                await this.loadOutreachQueue();
+            } catch (error) {
+                console.error('Queue process error:', error);
+                alert('Failed to process outreach queue.');
+            } finally {
+                this.queueProcessing = false;
             }
         },
 

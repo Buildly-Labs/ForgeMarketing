@@ -58,6 +58,7 @@
             <option value="report">Report</option>
             <option value="press">Press Discovery</option>
             <option value="lead_radar_research">Lead Radar Research</option>
+            <option value="influencer_outreach_queue">Influencer Outreach Queue</option>
         </select>
         <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
             <input type="checkbox" x-model="showDisabled" @change="loadTasks()"> Show disabled
@@ -194,6 +195,7 @@
                             <option value="report">Weekly Report</option>
                             <option value="press">Press Contact Discovery</option>
                             <option value="lead_radar_research">Lead Radar Research</option>
+                            <option value="influencer_outreach_queue">Influencer Outreach Queue</option>
                         </select>
                     </div>
                     <div>
@@ -274,6 +276,7 @@ function scheduleManager() {
             { id: 'bi_weekly_enrichment', name: 'Influencer Enrichment', description: 'Enrich influencer profiles with fresh data', task_type: 'enrichment', cron_expression: '0 7 * * 1,4', schedule_label: 'Mon & Thu at 7 AM' },
             { id: 'weekly_press', name: 'Press Contact Discovery', description: 'Discover fresh press contacts for the selected brand', task_type: 'press', cron_expression: '0 8 * * 2', schedule_label: 'Every Tuesday at 8 AM' },
             { id: 'daily_lead_radar', name: 'Lead Radar Research', description: 'Run due lead source discovery jobs and queue fresh candidates', task_type: 'lead_radar_research', cron_expression: '0 6 * * *', schedule_label: 'Daily at 6 AM' },
+            { id: 'influencer_queue_prep', name: 'Influencer Outreach Queue Processor', description: 'Prepare queued influencer outreach into ready-to-send actions', task_type: 'influencer_outreach_queue', cron_expression: '0 */2 * * *', schedule_label: 'Every 2 hours' },
         ],
 
         get filteredTasks() {
@@ -426,6 +429,7 @@ function scheduleManager() {
                 'social': 'bg-pink-100 text-pink-700',
                 'report': 'bg-yellow-100 text-yellow-700',
                 'press': 'bg-orange-100 text-orange-700',
+                'influencer_outreach_queue': 'bg-cyan-100 text-cyan-700',
             }[type] || 'bg-gray-100 text-gray-700';
         },
     };

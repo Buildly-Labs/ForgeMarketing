@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
 import sys
 import logging
-from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
+from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode, quote_plus
 
 logger = logging.getLogger(__name__)
 
@@ -5404,6 +5404,11 @@ def api_influencer_outreach_queue():
 
     try:
         brand = request.args.get('brand')
+        platform = request.args.get('platform')
+        status = (request.args.get('status') or 'queued').strip().lower()
+        valid_statuses = {'queued', 'ready', 'sent', 'failed', 'cancelled'}
+        if status not in valid_statuses:
+            return jsonify({'success': False, 'error': 'Invalid status filter'}), 400
         limit = int(request.args.get('limit', 200))
 
         manager = UnifiedContactsManager()
@@ -5433,12 +5438,15 @@ def api_influencer_outreach_queue():
             WHERE c.contact_type = 'influencer'
               AND ct.touch_type = 'social_dm'
               AND ct.touch_direction = 'outbound'
-              AND ct.status = 'queued'
+              AND ct.status = ?
         """
-        params = []
+        params = [status]
         if brand:
             query += " AND c.brand = ?"
             params.append(brand)
+        if platform and platform != 'all':
+            query += " AND (ct.platform = ? OR c.platform = ?)"
+            params.extend([platform, platform])
         query += " ORDER BY ct.created_at DESC LIMIT ?"
         params.append(limit)
 
@@ -5446,7 +5454,34 @@ def api_influencer_outreach_queue():
             conn.row_factory = sqlite3.Row
             items = [dict(row) for row in conn.execute(query, params).fetchall()]
 
+        for item in items:
+            name = item.get('name') or ''
+            item['contact_link'] = f"/contacts?search={quote_plus(name)}" if name else '/contacts'
+
         return jsonify({'success': True, 'count': len(items), 'items': items})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/influencers/outreach-queue/process', methods=['POST'])
+def api_process_influencer_outreach_queue():
+    """Process queued influencer outreach touches into ready/sent items."""
+    if not CONTACTS_SYSTEM_AVAILABLE:
+        return jsonify({'error': 'Contacts system not available'}), 503
+
+    try:
+        data = request.get_json(silent=True) or {}
+        from automation.process_influencer_outreach_queue import InfluencerOutreachQueueProcessor
+
+        processor = InfluencerOutreachQueueProcessor()
+        result = processor.process(
+            brand=data.get('brand') or None,
+            platform=data.get('platform') or None,
+            limit=int(data.get('limit', 100)),
+            status=(data.get('status') or 'queued').strip().lower(),
+            dry_run=bool(data.get('dry_run', False)),
+            auto_mark_sent=bool(data.get('auto_mark_sent', False)),
+        )
+        return jsonify(result), 200
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
@@ -5459,7 +5494,7 @@ def api_update_influencer_outreach_queue_item(touch_id):
     try:
         data = request.get_json(silent=True) or {}
         new_status = (data.get('status') or '').strip().lower()
-        valid_statuses = {'queued', 'sent', 'failed', 'cancelled'}
+        valid_statuses = {'queued', 'ready', 'sent', 'failed', 'cancelled'}
         if new_status not in valid_statuses:
             return jsonify({'success': False, 'error': 'Invalid status'}), 400
 
