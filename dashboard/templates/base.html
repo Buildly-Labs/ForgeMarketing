@@ -51,121 +51,144 @@
 </head>
 <body class="bg-gray-50">
     <!-- Navigation -->
-    <nav class="gradient-bg shadow-lg" x-data="{ mobileMenuOpen: false }">
+    <nav class="gradient-bg shadow-lg" x-data="{ mobileMenuOpen: false, openMenu: null }">
         <div class="max-w-7xl mx-auto px-2 sm:px-4 lg:px-6">
             <div class="flex justify-between h-12">
                 <div class="flex items-center">
                     <div class="flex-shrink-0">
-                        <h1 class="text-white text-lg font-bold">🚀 Marketing Hub</h1>
+                        <a href="{{ url_for('index') }}" class="text-white text-lg font-bold">🚀 Marketing Hub</a>
                     </div>
-                    <!-- Desktop Navigation - Compact Icons -->
-                    <div class="hidden lg:ml-6 lg:flex lg:space-x-1">
-                        <a href="/" class="nav-item text-white px-2 py-1 rounded text-xs font-medium flex flex-col items-center" title="Dashboard">
+                    <!-- Desktop Navigation with grouped dropdowns -->
+                    <div class="hidden lg:ml-6 lg:flex lg:items-center lg:space-x-1">
+
+                        <a href="{{ url_for('index') }}"
+                           class="nav-item text-white px-2 py-1 rounded text-xs font-medium flex flex-col items-center {% if request.endpoint == 'index' %}active{% endif %}"
+                           title="Dashboard">
                             <i class="fas fa-tachometer-alt text-sm mb-0.5"></i>
                             <span>Dashboard</span>
                         </a>
-                        <a href="/brands" class="nav-item text-white px-2 py-1 rounded text-xs font-medium flex flex-col items-center" title="Brands">
+
+                        <a href="{{ url_for('brands') }}"
+                           class="nav-item text-white px-2 py-1 rounded text-xs font-medium flex flex-col items-center {% if request.endpoint in ['brands', 'admin_brands'] %}active{% endif %}"
+                           title="Brands">
                             <i class="fas fa-palette text-sm mb-0.5"></i>
                             <span>Brands</span>
                         </a>
-                        <a href="/generate" class="nav-item text-white px-2 py-1 rounded text-xs font-medium flex flex-col items-center" title="Generate">
-                            <i class="fas fa-magic text-sm mb-0.5"></i>
-                            <span>Generate</span>
-                        </a>
-                        <a href="/campaigns" class="nav-item text-white px-2 py-1 rounded text-xs font-medium flex flex-col items-center" title="Campaigns">
-                            <i class="fas fa-rocket text-sm mb-0.5"></i>
-                            <span>Campaigns</span>
-                        </a>
-                        <a href="/influencers" class="nav-item text-white px-2 py-1 rounded text-xs font-medium flex flex-col items-center" title="Influencers">
-                            <i class="fas fa-users text-sm mb-0.5"></i>
-                            <span>Influencers</span>
-                        </a>
-                        <a href="/contacts" class="nav-item text-white px-2 py-1 rounded text-xs font-medium flex flex-col items-center" title="Contacts">
-                            <i class="fas fa-address-book text-sm mb-0.5"></i>
-                            <span>Contacts</span>
-                        </a>
-                        <a href="/analytics" class="nav-item text-white px-2 py-1 rounded text-xs font-medium flex flex-col items-center" title="Analytics">
-                            <i class="fas fa-chart-line text-sm mb-0.5"></i>
-                            <span>Analytics</span>
-                        </a>
-                        <a href="/reports" class="nav-item text-white px-2 py-1 rounded text-xs font-medium flex flex-col items-center" title="Reports">
-                            <i class="fas fa-file-alt text-sm mb-0.5"></i>
-                            <span>Reports</span>
-                        </a>
-                        <a href="/email-reports" class="nav-item text-white px-2 py-1 rounded text-xs font-medium flex flex-col items-center" title="Email Reports">
-                            <i class="fas fa-envelope-open-text text-sm mb-0.5"></i>
-                            <span>Emails</span>
-                        </a>
-                        <a href="/engagement-report" class="nav-item text-white px-2 py-1 rounded text-xs font-medium flex flex-col items-center" title="Engagement Report">
-                            <i class="fas fa-envelope text-sm mb-0.5"></i>
-                            <span>Engagement</span>
-                        </a>
-                        <a href="/google-ads" class="nav-item text-white px-2 py-1 rounded text-xs font-medium flex flex-col items-center" title="Google Ads">
-                            <i class="fas fa-bullhorn text-sm mb-0.5"></i>
-                            <span>Ads</span>
-                        </a>
-                        <a href="/automation" class="nav-item text-white px-2 py-1 rounded text-xs font-medium flex flex-col items-center" title="Automation">
-                            <i class="fas fa-robot text-sm mb-0.5"></i>
-                            <span>Auto</span>
-                        </a>
-                        <a href="/content-calendar" class="nav-item text-white px-2 py-1 rounded text-xs font-medium flex flex-col items-center" title="Content Calendar">
-                            <i class="fas fa-calendar-alt text-sm mb-0.5"></i>
-                            <span>Calendar</span>
-                        </a>
-                        <a href="/lead-radar" class="nav-item text-white px-2 py-1 rounded text-xs font-medium flex flex-col items-center" title="Lead Radar">
+
+                        <!-- Create -->
+                        <div class="relative" @click.outside="openMenu = null">
+                            <button @click="openMenu = openMenu === 'create' ? null : 'create'"
+                                    class="nav-item text-white px-2 py-1 rounded text-xs font-medium flex flex-col items-center {% if request.endpoint in ['generate', 'campaigns', 'content_calendar_ui'] %}active{% endif %}"
+                                    title="Create">
+                                <i class="fas fa-magic text-sm mb-0.5"></i>
+                                <span>Create <i class="fas fa-chevron-down" style="font-size:0.6rem"></i></span>
+                            </button>
+                            <div x-show="openMenu === 'create'" x-transition class="absolute left-0 mt-1 w-44 bg-white rounded-md shadow-lg z-50 py-1">
+                                <a href="{{ url_for('generate') }}" class="flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <i class="fas fa-magic w-5 mr-2 text-purple-500"></i>Generate
+                                </a>
+                                <a href="{{ url_for('campaigns') }}" class="flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <i class="fas fa-rocket w-5 mr-2 text-blue-500"></i>Campaigns
+                                </a>
+                                <a href="{{ url_for('content_calendar_ui') }}" class="flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <i class="fas fa-calendar-alt w-5 mr-2 text-green-500"></i>Calendar
+                                </a>
+                            </div>
+                        </div>
+
+                        <!-- People -->
+                        <div class="relative" @click.outside="openMenu = null">
+                            <button @click="openMenu = openMenu === 'people' ? null : 'people'"
+                                    class="nav-item text-white px-2 py-1 rounded text-xs font-medium flex flex-col items-center {% if request.endpoint in ['contacts', 'influencers'] %}active{% endif %}"
+                                    title="People">
+                                <i class="fas fa-users text-sm mb-0.5"></i>
+                                <span>People <i class="fas fa-chevron-down" style="font-size:0.6rem"></i></span>
+                            </button>
+                            <div x-show="openMenu === 'people'" x-transition class="absolute left-0 mt-1 w-44 bg-white rounded-md shadow-lg z-50 py-1">
+                                <a href="{{ url_for('contacts') }}" class="flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <i class="fas fa-address-book w-5 mr-2 text-blue-500"></i>Contacts
+                                </a>
+                                <a href="{{ url_for('influencers') }}" class="flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <i class="fas fa-star w-5 mr-2 text-yellow-500"></i>Influencers
+                                </a>
+                            </div>
+                        </div>
+
+                        <!-- Insights -->
+                        <div class="relative" @click.outside="openMenu = null">
+                            <button @click="openMenu = openMenu === 'insights' ? null : 'insights'"
+                                    class="nav-item text-white px-2 py-1 rounded text-xs font-medium flex flex-col items-center {% if request.endpoint in ['analytics', 'reports', 'email_reports', 'engagement_report', 'campaign_report_page'] %}active{% endif %}"
+                                    title="Insights">
+                                <i class="fas fa-chart-line text-sm mb-0.5"></i>
+                                <span>Insights <i class="fas fa-chevron-down" style="font-size:0.6rem"></i></span>
+                            </button>
+                            <div x-show="openMenu === 'insights'" x-transition class="absolute left-0 mt-1 w-48 bg-white rounded-md shadow-lg z-50 py-1">
+                                <a href="{{ url_for('analytics') }}" class="flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <i class="fas fa-chart-line w-5 mr-2 text-blue-500"></i>Analytics
+                                </a>
+                                <a href="{{ url_for('reports') }}" class="flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <i class="fas fa-file-alt w-5 mr-2 text-gray-500"></i>Reports
+                                </a>
+                                <a href="{{ url_for('email_reports') }}" class="flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <i class="fas fa-envelope-open-text w-5 mr-2 text-green-500"></i>Email Reports
+                                </a>
+                                <a href="{{ url_for('engagement_report') }}" class="flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <i class="fas fa-envelope w-5 mr-2 text-purple-500"></i>Engagement
+                                </a>
+                            </div>
+                        </div>
+
+                        <!-- Tools -->
+                        <div class="relative" @click.outside="openMenu = null">
+                            <button @click="openMenu = openMenu === 'tools' ? null : 'tools'"
+                                    class="nav-item text-white px-2 py-1 rounded text-xs font-medium flex flex-col items-center {% if request.endpoint in ['google_ads', 'automation'] %}active{% endif %}"
+                                    title="Tools">
+                                <i class="fas fa-tools text-sm mb-0.5"></i>
+                                <span>Tools <i class="fas fa-chevron-down" style="font-size:0.6rem"></i></span>
+                            </button>
+                            <div x-show="openMenu === 'tools'" x-transition class="absolute left-0 mt-1 w-44 bg-white rounded-md shadow-lg z-50 py-1">
+                                <a href="{{ url_for('google_ads') }}" class="flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <i class="fas fa-bullhorn w-5 mr-2 text-red-500"></i>Google Ads
+                                </a>
+                                <a href="{{ url_for('automation') }}" class="flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <i class="fas fa-robot w-5 mr-2 text-indigo-500"></i>Automation
+                                </a>
+                            </div>
+                        </div>
+
+                        <a href="{{ url_for('lead_api.lead_radar_home') }}"
+                           class="nav-item text-white px-2 py-1 rounded text-xs font-medium flex flex-col items-center {% if request.endpoint and request.endpoint.startswith('lead_api.') %}active{% endif %}"
+                           title="Lead Radar">
                             <i class="fas fa-crosshairs text-sm mb-0.5"></i>
-                            <span>Leads</span>
+                            <span>Lead Radar</span>
                         </a>
-                        <a href="/admin" class="nav-item text-white px-2 py-1 rounded text-xs font-medium flex flex-col items-center" title="Admin">
+
+                        <a href="{{ url_for('admin_settings') }}"
+                           class="nav-item text-white px-2 py-1 rounded text-xs font-medium flex flex-col items-center {% if request.endpoint == 'admin_settings' %}active{% endif %}"
+                           title="Admin">
                             <i class="fas fa-cog text-sm mb-0.5"></i>
                             <span>Admin</span>
                         </a>
+
                     </div>
                     <!-- Medium Screen Navigation - Icon Only -->
-                    <div class="hidden md:flex lg:hidden ml-4 space-x-2">
-                        <a href="/" class="text-white hover:bg-white/10 p-2 rounded" title="Dashboard">
-                            <i class="fas fa-tachometer-alt"></i>
-                        </a>
-                        <a href="/brands" class="text-white hover:bg-white/10 p-2 rounded" title="Brands">
-                            <i class="fas fa-palette"></i>
-                        </a>
-                        <a href="/generate" class="text-white hover:bg-white/10 p-2 rounded" title="Generate">
-                            <i class="fas fa-magic"></i>
-                        </a>
-                        <a href="/campaigns" class="text-white hover:bg-white/10 p-2 rounded" title="Campaigns">
-                            <i class="fas fa-rocket"></i>
-                        </a>
-                        <a href="/influencers" class="text-white hover:bg-white/10 p-2 rounded" title="Influencers">
-                            <i class="fas fa-users"></i>
-                        </a>
-                        <a href="/contacts" class="text-white hover:bg-white/10 p-2 rounded" title="Contacts">
-                            <i class="fas fa-address-book"></i>
-                        </a>
-                        <a href="/analytics" class="text-white hover:bg-white/10 p-2 rounded" title="Analytics">
-                            <i class="fas fa-chart-line"></i>
-                        </a>
-                        <a href="/reports" class="text-white hover:bg-white/10 p-2 rounded" title="Reports">
-                            <i class="fas fa-file-alt"></i>
-                        </a>
-                        <a href="/automation" class="text-white hover:bg-white/10 p-2 rounded" title="Automation">
-                            <i class="fas fa-robot"></i>
-                        </a>
-                        <a href="/content-calendar" class="text-white hover:bg-white/10 p-2 rounded" title="Content Calendar">
-                            <i class="fas fa-calendar-alt"></i>
-                        </a>
-                        <a href="/lead-radar" class="text-white hover:bg-white/10 p-2 rounded" title="Lead Radar">
-                            <i class="fas fa-crosshairs"></i>
-                        </a>
-                        <a href="/admin" class="text-white hover:bg-white/10 p-2 rounded" title="Admin">
-                            <i class="fas fa-cog"></i>
-                        </a>
+                    <div class="hidden md:flex lg:hidden ml-4 space-x-1 items-center">
+                        <a href="{{ url_for('index') }}" class="text-white hover:bg-white/10 p-2 rounded" title="Dashboard"><i class="fas fa-tachometer-alt"></i></a>
+                        <a href="{{ url_for('brands') }}" class="text-white hover:bg-white/10 p-2 rounded" title="Brands"><i class="fas fa-palette"></i></a>
+                        <a href="{{ url_for('generate') }}" class="text-white hover:bg-white/10 p-2 rounded" title="Generate"><i class="fas fa-magic"></i></a>
+                        <a href="{{ url_for('campaigns') }}" class="text-white hover:bg-white/10 p-2 rounded" title="Campaigns"><i class="fas fa-rocket"></i></a>
+                        <a href="{{ url_for('contacts') }}" class="text-white hover:bg-white/10 p-2 rounded" title="Contacts"><i class="fas fa-address-book"></i></a>
+                        <a href="{{ url_for('analytics') }}" class="text-white hover:bg-white/10 p-2 rounded" title="Analytics"><i class="fas fa-chart-line"></i></a>
+                        <a href="{{ url_for('content_calendar_ui') }}" class="text-white hover:bg-white/10 p-2 rounded" title="Calendar"><i class="fas fa-calendar-alt"></i></a>
+                        <a href="{{ url_for('lead_api.lead_radar_home') }}" class="text-white hover:bg-white/10 p-2 rounded" title="Lead Radar"><i class="fas fa-crosshairs"></i></a>
+                        <a href="{{ url_for('admin_settings') }}" class="text-white hover:bg-white/10 p-2 rounded" title="Admin"><i class="fas fa-cog"></i></a>
                     </div>
                 </div>
                 <div class="flex items-center">
                     <!-- Status indicator -->
                     <span class="hidden sm:block text-white text-xs mr-3">
                         <i class="fas fa-circle text-green-400 mr-1"></i>
-                        {{ brands|length }} Active
+                        {{ (brands|length) if brands is defined else 0 }} Active
                     </span>
                     <!-- Mobile menu button -->
                     <button @click="mobileMenuOpen = !mobileMenuOpen" class="md:hidden text-white hover:bg-white/10 p-1 rounded">
@@ -177,51 +200,25 @@
         <!-- Mobile Navigation Menu -->
         <div x-show="mobileMenuOpen" x-transition class="md:hidden bg-black/20">
             <div class="px-2 pt-2 pb-3 space-y-1">
-                <a href="/" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium">
-                    <i class="fas fa-tachometer-alt mr-3 w-4"></i>Dashboard
-                </a>
-                <a href="/brands" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium">
-                    <i class="fas fa-palette mr-3 w-4"></i>Brands
-                </a>
-                <a href="/generate" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium">
-                    <i class="fas fa-magic mr-3 w-4"></i>Generate
-                </a>
-                <a href="/campaigns" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium">
-                    <i class="fas fa-rocket mr-3 w-4"></i>Campaigns
-                </a>
-                <a href="/influencers" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium">
-                    <i class="fas fa-users mr-3 w-4"></i>Influencers
-                </a>
-                <a href="/contacts" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium">
-                    <i class="fas fa-address-book mr-3 w-4"></i>Contacts
-                </a>
-                <a href="/analytics" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium">
-                    <i class="fas fa-chart-line mr-3 w-4"></i>Analytics
-                </a>
-                <a href="/reports" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium">
-                    <i class="fas fa-file-alt mr-3 w-4"></i>Reports
-                </a>
-                <a href="/email-reports" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium">
-                    <i class="fas fa-envelope-open-text mr-3 w-4"></i>Email Reports
-                </a>
-                <a href="/engagement-report" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium">
-                    <i class="fas fa-envelope mr-3 w-4"></i>Engagement Report
-                </a>
-                <a href="/google-ads" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium">
-                    <i class="fas fa-bullhorn mr-3 w-4"></i>Google Ads
-                </a>
-                <a href="/automation" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium">
-                    <i class="fas fa-robot mr-3 w-4"></i>Automation
-                </a>
-                <a href="/content-calendar" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium">
-                    <i class="fas fa-calendar-alt mr-3 w-4"></i>Content Calendar
-                </a>
-                <a href="/lead-radar" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium">
-                    <i class="fas fa-crosshairs mr-3 w-4"></i>Lead Radar
-                </a>
-                <a href="/admin" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium">
-                    <i class="fas fa-cog mr-3 w-4"></i>Admin
-                </a>
+                <a href="{{ url_for('index') }}" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium"><i class="fas fa-tachometer-alt mr-3 w-4"></i>Dashboard</a>
+                <a href="{{ url_for('brands') }}" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium"><i class="fas fa-palette mr-3 w-4"></i>Brands</a>
+                <p class="px-3 pt-2 pb-1 text-white/50 text-xs font-semibold uppercase tracking-wider">Create</p>
+                <a href="{{ url_for('generate') }}" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium pl-6"><i class="fas fa-magic mr-3 w-4"></i>Generate</a>
+                <a href="{{ url_for('campaigns') }}" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium pl-6"><i class="fas fa-rocket mr-3 w-4"></i>Campaigns</a>
+                <a href="{{ url_for('content_calendar_ui') }}" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium pl-6"><i class="fas fa-calendar-alt mr-3 w-4"></i>Calendar</a>
+                <p class="px-3 pt-2 pb-1 text-white/50 text-xs font-semibold uppercase tracking-wider">People</p>
+                <a href="{{ url_for('contacts') }}" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium pl-6"><i class="fas fa-address-book mr-3 w-4"></i>Contacts</a>
+                <a href="{{ url_for('influencers') }}" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium pl-6"><i class="fas fa-users mr-3 w-4"></i>Influencers</a>
+                <p class="px-3 pt-2 pb-1 text-white/50 text-xs font-semibold uppercase tracking-wider">Insights</p>
+                <a href="{{ url_for('analytics') }}" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium pl-6"><i class="fas fa-chart-line mr-3 w-4"></i>Analytics</a>
+                <a href="{{ url_for('reports') }}" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium pl-6"><i class="fas fa-file-alt mr-3 w-4"></i>Reports</a>
+                <a href="{{ url_for('email_reports') }}" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium pl-6"><i class="fas fa-envelope-open-text mr-3 w-4"></i>Email Reports</a>
+                <a href="{{ url_for('engagement_report') }}" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium pl-6"><i class="fas fa-envelope mr-3 w-4"></i>Engagement</a>
+                <p class="px-3 pt-2 pb-1 text-white/50 text-xs font-semibold uppercase tracking-wider">Tools</p>
+                <a href="{{ url_for('google_ads') }}" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium pl-6"><i class="fas fa-bullhorn mr-3 w-4"></i>Google Ads</a>
+                <a href="{{ url_for('automation') }}" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium pl-6"><i class="fas fa-robot mr-3 w-4"></i>Automation</a>
+                <a href="{{ url_for('lead_api.lead_radar_home') }}" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium"><i class="fas fa-crosshairs mr-3 w-4"></i>Lead Radar</a>
+                <a href="{{ url_for('admin_settings') }}" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium"><i class="fas fa-cog mr-3 w-4"></i>Admin</a>
             </div>
         </div>
     </nav>

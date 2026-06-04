@@ -163,6 +163,11 @@ except ImportError as e:
 app = Flask(__name__)
 app.secret_key = os.getenv('DASHBOARD_SECRET_KEY', 'marketing-automation-dashboard-2025')
 
+# Honor X-Forwarded-Prefix header set by nginx when the app runs behind /marketing/ prefix.
+# This lets url_for() generate correct absolute URLs including the /marketing/ path segment.
+from werkzeug.middleware.proxy_fix import ProxyFix
+app.wsgi_app = ProxyFix(app.wsgi_app, x_prefix=1)
+
 
 def _sanitize_database_url(database_url: str) -> str:
     """Normalize DB URL query params for SQLAlchemy/mysqlclient compatibility."""
