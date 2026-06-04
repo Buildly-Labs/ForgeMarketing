@@ -12,7 +12,7 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
-from flask import Flask, render_template, redirect, session, g
+from flask import Flask, render_template, redirect, session, g, request
 from flask_login import LoginManager, current_user, login_required
 
 # Load .env
@@ -91,6 +91,44 @@ def ensure_db():
 MARKETING_URL = os.getenv('MARKETING_URL', '/marketing/')
 PRODUCER_URL = os.getenv('PRODUCER_URL', '/producer/')
 
+# Route prefixes owned by the marketing app. If these are hit at gateway root,
+# redirect into the configured marketing base path to avoid 404 deep links.
+MARKETING_ROUTE_PREFIXES = {
+    'activity',
+    'admin',
+    'analytics',
+    'api',
+    'automation',
+    'brands',
+    'campaigns',
+    'contacts',
+    'content-calendar',
+    'email-reports',
+    'engagement-report',
+    'generate',
+    'google-ads',
+    'influencers',
+    'lead-radar',
+    'leads',
+    'marketing-calendar',
+    'onboarding',
+    'outreach',
+    'reports',
+    'settings',
+}
+
+
+def _normalize_base_path(path_value: str) -> str:
+    path = (path_value or '/marketing/').strip()
+    if not path.startswith('/'):
+        path = '/' + path
+    return path.rstrip('/')
+
+
+def _is_marketing_owned_path(subpath: str) -> bool:
+    first_segment = (subpath or '').split('/', 1)[0]
+    return first_segment in MARKETING_ROUTE_PREFIXES
+
 @app.route('/')
 @login_required
 def index():
@@ -98,6 +136,22 @@ def index():
                            marketing_url=MARKETING_URL,
                            producer_url=PRODUCER_URL,
                            user=current_user)
+
+
+@app.route('/<path:subpath>')
+def marketing_deep_link_redirect(subpath):
+    """Redirect top-level marketing deep links into /marketing/... namespace."""
+    if not _is_marketing_owned_path(subpath):
+        return 'Not Found', 404
+
+    marketing_base = _normalize_base_path(MARKETING_URL)
+    target = f"{marketing_base}/{subpath}"
+
+    query_string = request.query_string.decode('utf-8')
+    if query_string:
+        target = f"{target}?{query_string}"
+
+    return redirect(target, code=302)
 
 @app.route('/health')
 def health():
