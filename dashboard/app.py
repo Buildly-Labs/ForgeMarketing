@@ -1408,6 +1408,14 @@ def index():
                          config=dashboard.config,
                          title=dashboard.config['dashboard']['title'])
 
+
+@app.route('/help/marketing')
+def marketing_help():
+    """Detailed help center for Marketing Hub tools and workflows."""
+    return render_template('help_marketing.html',
+                         brands=dashboard.brands,
+                         title='Marketing Help Center')
+
 @app.route('/brands')
 def brands():
     """Brand management page with real configuration status"""

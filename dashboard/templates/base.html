@@ -59,7 +59,7 @@
                         <a href="{{ url_for('index') }}" class="text-white text-lg font-bold">🚀 Marketing Hub</a>
                     </div>
                     <!-- Desktop Navigation with grouped dropdowns -->
-                    <div class="hidden lg:ml-6 lg:flex lg:items-center lg:space-x-1">
+                    <div class="hidden lg:ml-6 lg:flex lg:items-center lg:space-x-1" @click.outside="openMenu = null">
 
                         <a href="{{ url_for('index') }}"
                            class="nav-item text-white px-2 py-1 rounded text-xs font-medium flex flex-col items-center {% if request.endpoint == 'index' %}active{% endif %}"
@@ -76,7 +76,7 @@
                         </a>
 
                         <!-- Create -->
-                        <div class="relative" @click.outside="openMenu = null">
+                        <div class="relative">
                             <button @click="openMenu = openMenu === 'create' ? null : 'create'"
                                     class="nav-item text-white px-2 py-1 rounded text-xs font-medium flex flex-col items-center {% if request.endpoint in ['generate', 'campaigns', 'content_calendar_ui'] %}active{% endif %}"
                                     title="Create">
@@ -97,7 +97,7 @@
                         </div>
 
                         <!-- People -->
-                        <div class="relative" @click.outside="openMenu = null">
+                        <div class="relative">
                             <button @click="openMenu = openMenu === 'people' ? null : 'people'"
                                     class="nav-item text-white px-2 py-1 rounded text-xs font-medium flex flex-col items-center {% if request.endpoint in ['contacts', 'influencers'] %}active{% endif %}"
                                     title="People">
@@ -115,7 +115,7 @@
                         </div>
 
                         <!-- Insights -->
-                        <div class="relative" @click.outside="openMenu = null">
+                        <div class="relative">
                             <button @click="openMenu = openMenu === 'insights' ? null : 'insights'"
                                     class="nav-item text-white px-2 py-1 rounded text-xs font-medium flex flex-col items-center {% if request.endpoint in ['analytics', 'reports', 'email_reports', 'engagement_report', 'campaign_report_page'] %}active{% endif %}"
                                     title="Insights">
@@ -139,7 +139,7 @@
                         </div>
 
                         <!-- Tools -->
-                        <div class="relative" @click.outside="openMenu = null">
+                        <div class="relative">
                             <button @click="openMenu = openMenu === 'tools' ? null : 'tools'"
                                     class="nav-item text-white px-2 py-1 rounded text-xs font-medium flex flex-col items-center {% if request.endpoint in ['google_ads', 'automation'] %}active{% endif %}"
                                     title="Tools">
@@ -170,6 +170,13 @@
                             <span>Admin</span>
                         </a>
 
+                        <a href="{{ url_for('marketing_help') }}"
+                           class="nav-item text-white px-2 py-1 rounded text-xs font-medium flex flex-col items-center {% if request.endpoint == 'marketing_help' %}active{% endif %}"
+                           title="Help">
+                            <i class="fas fa-circle-question text-sm mb-0.5"></i>
+                            <span>Help</span>
+                        </a>
+
                     </div>
                     <!-- Medium Screen Navigation - Icon Only -->
                     <div class="hidden md:flex lg:hidden ml-4 space-x-1 items-center">
@@ -182,6 +189,7 @@
                         <a href="{{ url_for('content_calendar_ui') }}" class="text-white hover:bg-white/10 p-2 rounded" title="Calendar"><i class="fas fa-calendar-alt"></i></a>
                         <a href="{{ url_for('lead_api.lead_radar_home') }}" class="text-white hover:bg-white/10 p-2 rounded" title="Lead Radar"><i class="fas fa-crosshairs"></i></a>
                         <a href="{{ url_for('admin_settings') }}" class="text-white hover:bg-white/10 p-2 rounded" title="Admin"><i class="fas fa-cog"></i></a>
+                        <a href="{{ url_for('marketing_help') }}" class="text-white hover:bg-white/10 p-2 rounded" title="Help"><i class="fas fa-circle-question"></i></a>
                     </div>
                 </div>
                 <div class="flex items-center">
@@ -219,9 +227,27 @@
                 <a href="{{ url_for('automation') }}" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium pl-6"><i class="fas fa-robot mr-3 w-4"></i>Automation</a>
                 <a href="{{ url_for('lead_api.lead_radar_home') }}" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium"><i class="fas fa-crosshairs mr-3 w-4"></i>Lead Radar</a>
                 <a href="{{ url_for('admin_settings') }}" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium"><i class="fas fa-cog mr-3 w-4"></i>Admin</a>
+                <a href="{{ url_for('marketing_help') }}" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium"><i class="fas fa-circle-question mr-3 w-4"></i>Help Center</a>
             </div>
         </div>
     </nav>
+
+    <section class="bg-blue-50 border-b border-blue-100">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+            <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2">
+                <div class="text-sm text-blue-900">
+                    <strong>How to use Marketing Hub:</strong> Setup brands and data sources, run or schedule generation/discovery, review candidates and outputs, then manually approve final publishing and outreach.
+                </div>
+                <div class="flex flex-wrap gap-2 text-xs">
+                    <a href="{{ url_for('marketing_help') }}" class="bg-white border border-blue-200 text-blue-700 rounded px-2 py-1 hover:bg-blue-100">Full Help</a>
+                    <a href="{{ url_for('marketing_help') }}#getting-started" class="bg-white border border-blue-200 text-blue-700 rounded px-2 py-1 hover:bg-blue-100">Start</a>
+                    <a href="{{ url_for('marketing_help') }}#automation-and-scheduling" class="bg-white border border-blue-200 text-blue-700 rounded px-2 py-1 hover:bg-blue-100">Automation</a>
+                    <a href="{{ url_for('marketing_help') }}#lead-radar-and-lead-gen" class="bg-white border border-blue-200 text-blue-700 rounded px-2 py-1 hover:bg-blue-100">Lead Gen</a>
+                    <a href="{{ url_for('marketing_help') }}#analytics-and-reporting" class="bg-white border border-blue-200 text-blue-700 rounded px-2 py-1 hover:bg-blue-100">Reports</a>
+                </div>
+            </div>
+        </div>
+    </section>
 
     <!-- Main Content -->
     <main class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">

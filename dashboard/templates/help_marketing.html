@@ -1,0 +1,194 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-6">
+  <div class="bg-white rounded-lg shadow p-6">
+    <h1 class="text-3xl font-bold text-gray-900">Marketing Help Center</h1>
+    <p class="text-gray-600 mt-2">Step-by-step guidance for every major workflow in Marketing Hub.</p>
+    <p class="text-sm text-amber-700 mt-3">All outreach and publishing remain human-approved. Use automation for discovery, drafting, and reporting support.</p>
+  </div>
+
+  <div class="bg-white rounded-lg shadow p-6">
+    <h2 class="text-xl font-semibold text-gray-900 mb-4">Jump To Section</h2>
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 text-sm">
+      <a href="#getting-started" class="text-blue-700 hover:underline">Getting Started</a>
+      <a href="#dashboard-and-health" class="text-blue-700 hover:underline">Dashboard and System Health</a>
+      <a href="#brands-and-setup" class="text-blue-700 hover:underline">Brands and Setup</a>
+      <a href="#content-and-campaigns" class="text-blue-700 hover:underline">Content and Campaigns</a>
+      <a href="#contacts-and-influencers" class="text-blue-700 hover:underline">Contacts and Influencers</a>
+      <a href="#lead-radar-and-lead-gen" class="text-blue-700 hover:underline">Lead Radar and Lead Generation</a>
+      <a href="#automation-and-scheduling" class="text-blue-700 hover:underline">Automation and Scheduling</a>
+      <a href="#analytics-and-reporting" class="text-blue-700 hover:underline">Analytics and Reporting</a>
+      <a href="#ads-and-growth" class="text-blue-700 hover:underline">Google Ads and Growth</a>
+      <a href="#admin-and-governance" class="text-blue-700 hover:underline">Admin, Settings, and Governance</a>
+      <a href="#api-and-integration" class="text-blue-700 hover:underline">API and Integration</a>
+      <a href="#troubleshooting" class="text-blue-700 hover:underline">Troubleshooting</a>
+    </div>
+  </div>
+
+  <section id="getting-started" class="bg-white rounded-lg shadow p-6">
+    <h2 class="text-2xl font-semibold mb-3">Getting Started</h2>
+    <ol class="list-decimal list-inside space-y-2 text-gray-700">
+      <li>Complete onboarding and confirm at least one active brand.</li>
+      <li>Configure your sources, workflows, and approval rules.</li>
+      <li>Use generation and discovery tools to prepare draft outputs.</li>
+      <li>Review, approve, and manually publish final outputs.</li>
+      <li>Track outcomes in analytics and reports and tune weekly.</li>
+    </ol>
+    <div class="mt-4 flex flex-wrap gap-2 text-sm">
+      <a href="{{ url_for('onboarding') }}" class="px-3 py-1 rounded bg-blue-100 text-blue-800">Open Onboarding</a>
+      <a href="{{ url_for('index') }}" class="px-3 py-1 rounded bg-gray-100 text-gray-800">Open Dashboard</a>
+      <a href="#troubleshooting" class="px-3 py-1 rounded bg-yellow-100 text-yellow-800">Troubleshooting</a>
+    </div>
+  </section>
+
+  <section id="dashboard-and-health" class="bg-white rounded-lg shadow p-6">
+    <h2 class="text-2xl font-semibold mb-3">Dashboard and System Health</h2>
+    <p class="text-gray-700">Use Dashboard for status overview, key counts, and quick access to each subsystem.</p>
+    <ul class="list-disc list-inside mt-3 space-y-1 text-gray-700">
+      <li>Check active brands, tool readiness, and quick links.</li>
+      <li>Use Activity to inspect real-time operations and monitoring signals.</li>
+    </ul>
+    <div class="mt-4 flex flex-wrap gap-2 text-sm">
+      <a href="{{ url_for('index') }}" class="px-3 py-1 rounded bg-gray-100 text-gray-800">Open Dashboard</a>
+      <a href="{{ url_for('activity') }}" class="px-3 py-1 rounded bg-gray-100 text-gray-800">Open Activity</a>
+    </div>
+  </section>
+
+  <section id="brands-and-setup" class="bg-white rounded-lg shadow p-6">
+    <h2 class="text-2xl font-semibold mb-3">Brands and Setup</h2>
+    <p class="text-gray-700">Create and maintain brand profiles, voice, and operational context before running campaigns.</p>
+    <ul class="list-disc list-inside mt-3 space-y-1 text-gray-700">
+      <li>Verify naming, description, and website values.</li>
+      <li>Store brand-specific strategy notes for generation quality.</li>
+      <li>Ensure email/social/API credentials are configured in Admin.</li>
+    </ul>
+    <div class="mt-4 flex flex-wrap gap-2 text-sm">
+      <a href="{{ url_for('brands') }}" class="px-3 py-1 rounded bg-gray-100 text-gray-800">Open Brands</a>
+      <a href="{{ url_for('admin_settings') }}" class="px-3 py-1 rounded bg-gray-100 text-gray-800">Open Admin</a>
+    </div>
+  </section>
+
+  <section id="content-and-campaigns" class="bg-white rounded-lg shadow p-6">
+    <h2 class="text-2xl font-semibold mb-3">Content and Campaigns</h2>
+    <p class="text-gray-700">Generate draft content, plan campaign work, and route actions into calendars.</p>
+    <ul class="list-disc list-inside mt-3 space-y-1 text-gray-700">
+      <li>Use Generate for draft copy and ideation.</li>
+      <li>Use Campaigns to organize and execute brand initiatives.</li>
+      <li>Use Content Calendar and Marketing Calendar for scheduling and ownership.</li>
+    </ul>
+    <div class="mt-4 flex flex-wrap gap-2 text-sm">
+      <a href="{{ url_for('generate') }}" class="px-3 py-1 rounded bg-gray-100 text-gray-800">Open Generate</a>
+      <a href="{{ url_for('campaigns') }}" class="px-3 py-1 rounded bg-gray-100 text-gray-800">Open Campaigns</a>
+      <a href="{{ url_for('content_calendar_ui') }}" class="px-3 py-1 rounded bg-gray-100 text-gray-800">Open Content Calendar</a>
+      <a href="{{ url_for('marketing_calendar_ui') }}" class="px-3 py-1 rounded bg-gray-100 text-gray-800">Open Marketing Calendar</a>
+    </div>
+  </section>
+
+  <section id="contacts-and-influencers" class="bg-white rounded-lg shadow p-6">
+    <h2 class="text-2xl font-semibold mb-3">Contacts and Influencers</h2>
+    <p class="text-gray-700">Manage CRM entities and influencer discovery pipelines used by outreach and campaigns.</p>
+    <ul class="list-disc list-inside mt-3 space-y-1 text-gray-700">
+      <li>Use Contacts for lifecycle, segmentation, and dedupe handling.</li>
+      <li>Use Influencers for discovery, enrichment, and candidate review.</li>
+    </ul>
+    <div class="mt-4 flex flex-wrap gap-2 text-sm">
+      <a href="{{ url_for('contacts') }}" class="px-3 py-1 rounded bg-gray-100 text-gray-800">Open Contacts</a>
+      <a href="{{ url_for('influencers') }}" class="px-3 py-1 rounded bg-gray-100 text-gray-800">Open Influencers</a>
+    </div>
+  </section>
+
+  <section id="lead-radar-and-lead-gen" class="bg-white rounded-lg shadow p-6">
+    <h2 class="text-2xl font-semibold mb-3">Lead Radar and Lead Generation</h2>
+    <p class="text-gray-700">Use Lead Radar for source-driven research, candidate review, and conversion into approved leads.</p>
+    <ol class="list-decimal list-inside mt-3 space-y-2 text-gray-700">
+      <li>Define Sources with query keywords and run frequency.</li>
+      <li>Run source jobs manually or run due sources in batch.</li>
+      <li>Review Candidates, approve/reject/mark duplicates, and convert to leads.</li>
+      <li>Track Leads, regions, and follow-up tasks.</li>
+    </ol>
+    <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 text-sm">
+      <a href="{{ url_for('lead_api.lead_radar_home') }}" class="px-3 py-1 rounded bg-gray-100 text-gray-800">Lead Radar Home</a>
+      <a href="{{ url_for('lead_api.lead_radar_sources_page') }}" class="px-3 py-1 rounded bg-gray-100 text-gray-800">Lead Sources</a>
+      <a href="{{ url_for('lead_api.lead_radar_candidates_page') }}" class="px-3 py-1 rounded bg-gray-100 text-gray-800">Candidates</a>
+      <a href="{{ url_for('lead_api.lead_radar_rules_page') }}" class="px-3 py-1 rounded bg-gray-100 text-gray-800">Scoring Rules</a>
+      <a href="{{ url_for('lead_api.lead_radar_feedback_page') }}" class="px-3 py-1 rounded bg-gray-100 text-gray-800">Feedback</a>
+      <a href="{{ url_for('lead_api.lead_radar_settings_page') }}" class="px-3 py-1 rounded bg-gray-100 text-gray-800">Lead Settings</a>
+      <a href="{{ url_for('lead_api.leads_page') }}" class="px-3 py-1 rounded bg-gray-100 text-gray-800">Leads</a>
+      <a href="{{ url_for('lead_api.leads_regions_page') }}" class="px-3 py-1 rounded bg-gray-100 text-gray-800">Lead Regions</a>
+      <a href="{{ url_for('lead_api.leads_import_page') }}" class="px-3 py-1 rounded bg-gray-100 text-gray-800">Lead Import</a>
+    </div>
+  </section>
+
+  <section id="automation-and-scheduling" class="bg-white rounded-lg shadow p-6">
+    <h2 class="text-2xl font-semibold mb-3">Automation and Scheduling</h2>
+    <p class="text-gray-700">Run recurring workflows for discovery, enrichment, reporting, and lead research.</p>
+    <ul class="list-disc list-inside mt-3 space-y-1 text-gray-700">
+      <li>Set schedules for each task type based on business cadence.</li>
+      <li>Use lead_radar_research tasks to run due source jobs daily.</li>
+      <li>Keep automation human-supervised for compliance and quality control.</li>
+    </ul>
+    <div class="mt-4 flex flex-wrap gap-2 text-sm">
+      <a href="{{ url_for('automation') }}" class="px-3 py-1 rounded bg-gray-100 text-gray-800">Open Automation</a>
+      <a href="{{ url_for('outreach') }}" class="px-3 py-1 rounded bg-gray-100 text-gray-800">Open Outreach</a>
+      <a href="{{ url_for('marketing_help') }}#lead-radar-and-lead-gen" class="px-3 py-1 rounded bg-blue-100 text-blue-800">Lead Radar Workflow</a>
+    </div>
+  </section>
+
+  <section id="analytics-and-reporting" class="bg-white rounded-lg shadow p-6">
+    <h2 class="text-2xl font-semibold mb-3">Analytics and Reporting</h2>
+    <p class="text-gray-700">Measure operational and channel outcomes, then adjust content and campaign strategy.</p>
+    <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-sm">
+      <a href="{{ url_for('analytics') }}" class="px-3 py-1 rounded bg-gray-100 text-gray-800">Analytics</a>
+      <a href="{{ url_for('reports') }}" class="px-3 py-1 rounded bg-gray-100 text-gray-800">Reports</a>
+      <a href="{{ url_for('email_reports') }}" class="px-3 py-1 rounded bg-gray-100 text-gray-800">Email Reports</a>
+      <a href="{{ url_for('engagement_report') }}" class="px-3 py-1 rounded bg-gray-100 text-gray-800">Engagement Report</a>
+    </div>
+  </section>
+
+  <section id="ads-and-growth" class="bg-white rounded-lg shadow p-6">
+    <h2 class="text-2xl font-semibold mb-3">Google Ads and Growth</h2>
+    <p class="text-gray-700">Use paid channel management and growth insights to support demand generation.</p>
+    <div class="mt-4 flex flex-wrap gap-2 text-sm">
+      <a href="{{ url_for('google_ads') }}" class="px-3 py-1 rounded bg-gray-100 text-gray-800">Open Google Ads</a>
+      <a href="{{ url_for('campaigns') }}" class="px-3 py-1 rounded bg-gray-100 text-gray-800">Open Campaigns</a>
+    </div>
+  </section>
+
+  <section id="admin-and-governance" class="bg-white rounded-lg shadow p-6">
+    <h2 class="text-2xl font-semibold mb-3">Admin, Settings, and Governance</h2>
+    <p class="text-gray-700">Manage credentials, policies, and global configuration.</p>
+    <ul class="list-disc list-inside mt-3 space-y-1 text-gray-700">
+      <li>Store and validate service credentials.</li>
+      <li>Review compliance and manual approval requirements.</li>
+      <li>Keep do-not-contact and consent fields up to date.</li>
+    </ul>
+    <div class="mt-4 flex flex-wrap gap-2 text-sm">
+      <a href="{{ url_for('admin_settings') }}" class="px-3 py-1 rounded bg-gray-100 text-gray-800">Open Admin/Settings</a>
+    </div>
+  </section>
+
+  <section id="api-and-integration" class="bg-white rounded-lg shadow p-6">
+    <h2 class="text-2xl font-semibold mb-3">API and Integration</h2>
+    <p class="text-gray-700">Use API endpoints for external orchestration and scripted operations.</p>
+    <ul class="list-disc list-inside mt-3 space-y-1 text-gray-700">
+      <li>Status and health checks: /api/status</li>
+      <li>Lead Radar automation: /api/lead-radar/research-jobs/run and /api/lead-radar/research-jobs/run-due</li>
+      <li>Lead lifecycle: /api/leads and /api/leads/regions</li>
+    </ul>
+  </section>
+
+  <section id="troubleshooting" class="bg-white rounded-lg shadow p-6">
+    <h2 class="text-2xl font-semibold mb-3">Troubleshooting</h2>
+    <ul class="list-disc list-inside space-y-2 text-gray-700">
+      <li>If nav links fail at root paths, use /marketing/* routes and confirm gateway redirects are current.</li>
+      <li>If dropdown menus close unexpectedly, refresh cache after deployment of the shared base template fix.</li>
+      <li>If Lead Radar finds no candidates, verify source query keywords, source type, and run frequency.</li>
+      <li>If scheduled tasks fail, check task type configuration and command support in runner services.</li>
+      <li>If analytics are empty, verify credential setup and date ranges in reports views.</li>
+    </ul>
+    <div class="mt-4">
+      <a href="#getting-started" class="text-blue-700 hover:underline text-sm">Back to top workflow steps</a>
+    </div>
+  </section>
+</div>
+{% endblock %}
