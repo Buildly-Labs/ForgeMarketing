@@ -5454,9 +5454,10 @@ def api_influencer_outreach_queue():
             conn.row_factory = sqlite3.Row
             items = [dict(row) for row in conn.execute(query, params).fetchall()]
 
+        base_contacts_url = url_for('contacts')
         for item in items:
             name = item.get('name') or ''
-            item['contact_link'] = f"/contacts?search={quote_plus(name)}" if name else '/contacts'
+            item['contact_link'] = f"{base_contacts_url}?search={quote_plus(name)}" if name else base_contacts_url
 
         return jsonify({'success': True, 'count': len(items), 'items': items})
     except Exception as e:

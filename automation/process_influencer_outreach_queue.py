@@ -8,6 +8,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from automation.social_outreach_dispatcher import SocialOutreachDispatcher
+
 project_root = Path(__file__).parent.parent
 DB_PATH = project_root / 'data' / 'unified_contacts.db'
 
@@ -21,6 +23,7 @@ class InfluencerOutreachQueueProcessor:
 
     def __init__(self, db_path: Optional[Path] = None):
         self.db_path = db_path or DB_PATH
+        self.dispatcher = SocialOutreachDispatcher()
 
     def _fetch_queue_items(
         self,
@@ -194,8 +197,24 @@ class InfluencerOutreachQueueProcessor:
                         )
                     continue
 
-                next_status = 'sent' if auto_mark_sent else 'ready'
                 prepared_message = self._prepare_message(item, target)
+                dispatch_result: Dict[str, Any] = {}
+
+                if auto_mark_sent:
+                    dispatch_result = self.dispatcher.dispatch(
+                        channel=target.get('channel', 'unknown'),
+                        target=target.get('target', ''),
+                        message=prepared_message,
+                        metadata={
+                            'brand': item.get('brand'),
+                            'contact_id': item.get('contact_id'),
+                            'touch_id': touch_id,
+                            'influencer_name': item.get('name'),
+                        },
+                    )
+                    next_status = 'sent' if dispatch_result.get('success') else 'failed'
+                else:
+                    next_status = 'ready'
 
                 details.append({
                     'touch_id': touch_id,
@@ -204,11 +223,14 @@ class InfluencerOutreachQueueProcessor:
                     'status': next_status,
                     'target_channel': target.get('channel'),
                     'target': target.get('target'),
+                    'dispatch': dispatch_result,
                 })
 
                 processed += 1
                 if next_status == 'sent':
                     sent += 1
+                elif next_status == 'failed':
+                    failed += 1
                 else:
                     ready += 1
 
@@ -222,7 +244,15 @@ class InfluencerOutreachQueueProcessor:
                         (
                             next_status,
                             prepared_message,
-                            f"Prepared at {_now_iso()} UTC for {target.get('channel')}:{target.get('target')}",
+                            (
+                                f"Dispatched at {_now_iso()} UTC via {target.get('channel')}:{target.get('target')}"
+                                if next_status == 'sent'
+                                else (
+                                    f"Dispatch failed at {_now_iso()} UTC: {dispatch_result.get('error', 'unknown error')}"
+                                    if next_status == 'failed'
+                                    else f"Prepared at {_now_iso()} UTC for {target.get('channel')}:{target.get('target')}"
+                                )
+                            ),
                             touch_id,
                         ),
                     )

@@ -293,6 +293,9 @@
                 <button @click="processQueue(false)" :disabled="queueProcessing" class="bg-indigo-600 text-white px-3 py-1 rounded text-sm hover:bg-indigo-700 disabled:opacity-50">
                     <i class="fas fa-cogs mr-1" :class="{'fa-spin': queueProcessing}"></i>Process
                 </button>
+                <button @click="processQueue(true)" :disabled="queueProcessing" class="bg-emerald-600 text-white px-3 py-1 rounded text-sm hover:bg-emerald-700 disabled:opacity-50">
+                    <i class="fas fa-paper-plane mr-1" :class="{'fa-spin': queueProcessing}"></i>Process & Send
+                </button>
                 <button @click="loadOutreachQueue()" class="text-blue-600 hover:text-blue-800 text-sm">
                     <i class="fas fa-refresh mr-1"></i>Refresh
                 </button>
@@ -505,6 +508,7 @@
 <script>
 function influencerManager() {
     return {
+        appBase: "{{ url_for('index') }}".replace(/\/$/, ''),
         discovering: false,
         generatingReports: false,
         loadingInfluencers: false,
@@ -536,9 +540,16 @@ function influencerManager() {
             this.loadInfluencers();
         },
 
+        apiUrl(path) {
+            if (!path) return path;
+            if (path.startsWith('http://') || path.startsWith('https://')) return path;
+            const normalized = path.startsWith('/') ? path : `/${path}`;
+            return this.appBase ? `${this.appBase}${normalized}` : normalized;
+        },
+
         async loadBrands() {
             try {
-                const res = await fetch('/api/admin/brands');
+                const res = await fetch(this.apiUrl('/api/admin/brands'));
                 if (res.ok) {
                     const data = await res.json();
                     this.brands = (data.brands || []).map(b => b.name || b);
@@ -564,7 +575,7 @@ function influencerManager() {
         
         async loadStats() {
             try {
-                const response = await fetch('/api/influencers/stats');
+                const response = await fetch(this.apiUrl('/api/influencers/stats'));
                 if (response.ok) {
                     this.stats = await response.json();
                 }
@@ -576,7 +587,7 @@ function influencerManager() {
         async loadInfluencers() {
             this.loadingInfluencers = true;
             try {
-                const response = await fetch('/api/influencers/list');
+                const response = await fetch(this.apiUrl('/api/influencers/list'));
                 if (response.ok) {
                     const data = await response.json();
                     this.influencers = data.influencers || [];
@@ -591,7 +602,7 @@ function influencerManager() {
         async runBrandDiscovery(brand) {
             this.discovering = true;
             try {
-                const response = await fetch(`/api/influencers/discover/${brand}`, {
+                const response = await fetch(this.apiUrl(`/api/influencers/discover/${brand}`), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({})
@@ -618,7 +629,7 @@ function influencerManager() {
             this.discovering = true;
             try {
                 const promises = this.brands.map(brand => 
-                    fetch(`/api/influencers/discover/${brand}`, {
+                    fetch(this.apiUrl(`/api/influencers/discover/${brand}`), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({})
@@ -639,12 +650,12 @@ function influencerManager() {
         
         async viewBrandReport(brand) {
             try {
-                const response = await fetch(`/api/influencers/report/${brand}`);
+                const response = await fetch(this.apiUrl(`/api/influencers/report/${brand}`));
                 if (response.ok) {
                     const result = await response.json();
                     if (result.success && result.report.url) {
                         // Open report in new tab
-                        window.open(result.report.url, '_blank');
+                        window.open(this.apiUrl(result.report.url), '_blank');
                     } else {
                         alert(`No report available for ${brand}. Please generate one first.`);
                     }
@@ -660,7 +671,7 @@ function influencerManager() {
         async generateBrandReport(brand) {
             this.generatingReports = true;
             try {
-                const response = await fetch(`/api/influencers/report/${brand}`, {
+                const response = await fetch(this.apiUrl(`/api/influencers/report/${brand}`), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' }
                 });
@@ -682,7 +693,7 @@ function influencerManager() {
             this.generatingReports = true;
             try {
                 const promises = this.brands.map(brand => 
-                    fetch(`/api/influencers/report/${brand}`, {
+                    fetch(this.apiUrl(`/api/influencers/report/${brand}`), {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' }
                     })
@@ -757,7 +768,7 @@ function influencerManager() {
             }
             
             try {
-                const response = await fetch(`/api/influencers/${influencer.id}/delete`, {
+                const response = await fetch(this.apiUrl(`/api/influencers/${influencer.id}/delete`), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ soft_delete: true })
@@ -778,7 +789,7 @@ function influencerManager() {
         async syncInfluencersToContacts() {
             this.syncing = true;
             try {
-                const response = await fetch('/api/influencers/sync-to-contacts', {
+                const response = await fetch(this.apiUrl('/api/influencers/sync-to-contacts'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' }
                 });
@@ -808,7 +819,7 @@ function influencerManager() {
         async loadOutreachQueue() {
             this.loadingQueue = true;
             try {
-                let url = `/api/influencers/outreach-queue?status=${encodeURIComponent(this.queueStatusFilter)}&platform=${encodeURIComponent(this.queuePlatformFilter)}`;
+                let url = this.apiUrl(`/api/influencers/outreach-queue?status=${encodeURIComponent(this.queueStatusFilter)}&platform=${encodeURIComponent(this.queuePlatformFilter)}`);
                 if (this.selectedBrand !== 'all') {
                     url += `&brand=${encodeURIComponent(this.selectedBrand)}`;
                 }
@@ -841,7 +852,7 @@ function influencerManager() {
                     payload.brand = this.selectedBrand;
                 }
 
-                const response = await fetch('/api/influencers/outreach-queue/process', {
+                const response = await fetch(this.apiUrl('/api/influencers/outreach-queue/process'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(payload)
@@ -853,7 +864,7 @@ function influencerManager() {
                 }
                 alert(`Processed ${result.processed} queue item(s). Ready: ${result.ready}, Sent: ${result.sent}, Failed: ${result.failed}.`);
                 if (this.queueStatusFilter === 'queued') {
-                    this.queueStatusFilter = 'ready';
+                    this.queueStatusFilter = autoMarkSent ? 'sent' : 'ready';
                 }
                 await this.loadOutreachQueue();
             } catch (error) {
@@ -867,7 +878,7 @@ function influencerManager() {
         async updateQueueItem(id, status) {
             this.queueUpdating = true;
             try {
-                const response = await fetch(`/api/influencers/outreach-queue/${id}/status`, {
+                const response = await fetch(this.apiUrl(`/api/influencers/outreach-queue/${id}/status`), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ status })
@@ -895,7 +906,7 @@ function influencerManager() {
             if (!influencer) return;
             
             try {
-                const response = await fetch('/api/influencers/sync-to-contacts', {
+                const response = await fetch(this.apiUrl('/api/influencers/sync-to-contacts'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ influencer_ids: [influencer.id] })

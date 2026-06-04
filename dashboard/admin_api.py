@@ -512,6 +512,14 @@ CONFIG_SCHEMA = {
              'help': 'Optional. Used for authenticated LinkedIn profile/discovery API calls.'},
             {'key': 'LINKEDIN_REFRESH_TOKEN',     'label': 'LinkedIn Refresh Token', 'secret': True,
              'help': 'Optional. Used to rotate LinkedIn access tokens for long-running automation.'},
+            {'key': 'LINKEDIN_AUTHOR_URN',        'label': 'LinkedIn Author URN', 'secret': False,
+             'help': 'Required for direct LinkedIn outreach posting (e.g. urn:li:person:...).'},
+            {'key': 'TWITTER_OUTREACH_WEBHOOK_URL','label': 'Twitter Outreach Webhook URL', 'secret': True,
+             'help': 'Optional fallback endpoint when direct Twitter API delivery is unavailable.'},
+            {'key': 'LINKEDIN_OUTREACH_WEBHOOK_URL','label': 'LinkedIn Outreach Webhook URL', 'secret': True,
+             'help': 'Optional fallback endpoint when direct LinkedIn API delivery is unavailable.'},
+            {'key': 'SOCIAL_OUTREACH_WEBHOOK_URL','label': 'Generic Social Outreach Webhook URL', 'secret': True,
+             'help': 'Fallback dispatcher for channels like Instagram/Bluesky/Mastodon/TikTok.'},
         ]
     },
     'startup_intel': {
