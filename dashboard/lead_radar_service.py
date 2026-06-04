@@ -47,6 +47,14 @@ ALLOWED_SOURCE_TYPES = {
     "csv_import",
     "manual",
     "other",
+    # Startup Intel plugin
+    "yc_companies",
+    "sbir_awards",
+    "nsf_awards",
+    "sec_edgar",
+    "product_hunt_api",
+    "opencorporates",
+    "companies_house",
 }
 
 LEAD_STATUSES = {
@@ -427,6 +435,246 @@ def _candidate_duplicate(brand_name, item):
 
 
 def seed_sources_for_brand(brand_name: str) -> dict:
+    """Create a practical set of auto-research sources for a brand using its stored profile.
+
+    Safe to call multiple times — skips sources that already exist by name.
+    Returns {created: int, skipped: int, sources: list}.
+    """
+    brand = Brand.query.filter_by(name=brand_name).first()
+    if not brand:
+        return {"created": 0, "skipped": 0, "sources": [], "error": "Brand not found"}
+
+    display_name = (brand.display_name or brand_name).strip()
+    website_url = (brand.website_url or "").strip()
+
+    base_kw = [w for w in display_name.lower().split() if len(w) > 3 and w not in {"the","and","for","with","that","this"}]
+    if website_url:
+        from urllib.parse import urlparse
+        domain = urlparse(website_url).netloc.replace("www.", "").split(".")[0]
+        if domain and domain not in base_kw:
+            base_kw.insert(0, domain)
+
+    from dashboard.models import BrandSettings
+    settings = BrandSettings.query.filter_by(brand_id=brand.id).first()
+    target_audience = ""
+    product_type = ""
+    if settings:
+        try:
+            adv = settings.get_advanced_settings() or {}
+            mp = adv.get("marketing_profile") or {}
+            target_audience = mp.get("target_audience", "")
+            product_type = mp.get("product_type", "")
+        except Exception:
+            pass
+
+    audience_kw = [w.strip() for w in (target_audience + " " + product_type).split()
+                   if len(w.strip()) > 3 and w.strip() not in {"that","this","with","and","for"}][:4]
+    all_kw = base_kw[:3] + audience_kw[:3]
+    if not all_kw:
+        all_kw = [brand_name]
+
+    templates = [
+        {
+            "name": f"{display_name} — Hacker News",
+            "source_type": "hacker_news",
+            "url": "",
+            "query_keywords": all_kw,
+            "run_frequency": "daily",
+            "notes": "Search HN for mentions, job posts, and Show HN projects relevant to the brand.",
+        },
+        {
+            "name": f"{display_name} — Reddit",
+            "source_type": "reddit",
+            "url": "",
+            "query_keywords": all_kw,
+            "run_frequency": "daily",
+            "notes": "Search Reddit for users asking about problems your brand solves.",
+        },
+        {
+            "name": f"{display_name} — GitHub",
+            "source_type": "github",
+            "url": "",
+            "query_keywords": all_kw[:2],
+            "run_frequency": "weekly",
+            "notes": "Find developers building in your problem space.",
+        },
+        {
+            "name": f"{display_name} — Product Hunt",
+            "source_type": "product_hunt",
+            "url": "https://www.producthunt.com/feed",
+            "query_keywords": all_kw[:2],
+            "run_frequency": "daily",
+            "notes": "New products in your category — potential partners or customers.",
+        },
+        {
+            "name": f"{display_name} — Web Search",
+            "source_type": "google_search",
+            "url": "",
+            "query_keywords": all_kw,
+            "run_frequency": "weekly",
+            "notes": "DuckDuckGo web search for leads matching your keywords.",
+        },
+        {
+            "name": f"{display_name} — Manual / Paste List",
+            "source_type": "manual",
+            "url": "",
+            "query_keywords": [],
+            "run_frequency": "manual",
+            "notes": "Paste names/URLs directly from LinkedIn or conference lists.",
+        },
+    ]
+
+    created = skipped = 0
+    sources = []
+    for tmpl in templates:
+        existing = LeadSource.query.filter_by(brand_name=brand_name, name=tmpl["name"]).first()
+        if existing:
+            skipped += 1
+            sources.append(_source_summary(existing))
+            continue
+
+        freq = tmpl["run_frequency"]
+        src = LeadSource(
+            brand_name=brand_name,
+            name=tmpl["name"],
+            source_type=tmpl["source_type"],
+            url=tmpl["url"],
+            query_keywords=tmpl["query_keywords"],
+            run_frequency=freq,
+            next_run_at=datetime.utcnow() if freq in {"daily", "weekly", "monthly"} else None,
+            is_active=True,
+            notes=tmpl["notes"],
+        )
+        db.session.add(src)
+        db.session.flush()
+        created += 1
+        sources.append(_source_summary(src))
+
+    db.session.commit()
+    return {"created": created, "skipped": skipped, "sources": sources}
+
+
+def enrich_candidate(candidate_id: int) -> dict:
+    """Run the Startup Intel enricher on a LeadCandidate and persist findings."""
+    candidate = LeadCandidate.query.get(candidate_id)
+    if not candidate:
+        return {"error": "Candidate not found"}
+    try:
+        from dashboard.lead_radar_startup_adapters import StartupEnricher
+        enrichment = StartupEnricher().enrich(candidate)
+
+        summary = enrichment.pop("enrichment_summary", "")
+        existing = (candidate.signal_summary or "").strip()
+        if summary:
+            candidate.signal_summary = (
+                existing + ("\n\n🔍 Enrichment: " if existing else "🔍 Enrichment: ") + summary
+            ).strip()
+
+        # Append new signal keywords to detected_keywords
+        kws = list(candidate.detected_keywords or [])
+        for field, prefix in [
+            ("linkedin_url", "linkedin"),
+            ("twitter_handle", "twitter"),
+            ("github_url", "github"),
+            ("contact_email", "email"),
+        ]:
+            val = enrichment.get(field, "")
+            if val and not any(k.startswith(f"{prefix}:") for k in kws):
+                kws.append(f"{prefix}:{val}")
+        candidate.detected_keywords = kws[:30]
+
+        db.session.commit()
+        return {"success": True, "enrichment": enrichment, "signals": summary}
+    except Exception as exc:
+        return {"error": str(exc)}
+
+
+def seed_startup_sources_for_brand(brand_name: str) -> dict:
+    """Create Startup Intel discovery sources for a brand (idempotent)."""
+    brand = Brand.query.filter_by(name=brand_name).first()
+    if not brand:
+        return {"created": 0, "skipped": 0, "sources": [], "error": "Brand not found"}
+
+    display_name = (brand.display_name or brand_name).strip()
+    all_kw = [brand_name.lower()]
+
+    # Pull target audience / product type from brand settings
+    from dashboard.models import BrandSettings
+    settings = BrandSettings.query.filter_by(brand_id=brand.id).first()
+    if settings:
+        try:
+            adv = settings.get_advanced_settings() or {}
+            mp = adv.get("marketing_profile") or {}
+            extra_words = " ".join([mp.get("target_audience", ""), mp.get("product_type", "")])
+            extra = [
+                w.strip().lower() for w in extra_words.split()
+                if len(w.strip()) > 3 and w.strip().lower() not in
+                   {"that", "this", "with", "and", "for", "the", "are", "have"}
+            ]
+            all_kw.extend(extra[:3])
+        except Exception:
+            pass
+
+    templates = [
+        {
+            "name": f"{display_name} — YC Companies",
+            "source_type": "yc_companies",
+            "run_frequency": "weekly",
+            "notes": "Discover YCombinator-backed startups. Add industry keywords like 'developer tools' or 'saas' to filter by batch.",
+        },
+        {
+            "name": f"{display_name} — SBIR Awards",
+            "source_type": "sbir_awards",
+            "run_frequency": "weekly",
+            "notes": "SBIR/STTR award recipients — deep-tech startups with gov funding who often need external tech execution help.",
+        },
+        {
+            "name": f"{display_name} — NSF Awards",
+            "source_type": "nsf_awards",
+            "run_frequency": "monthly",
+            "notes": "NSF research award recipients — university spinouts and early-stage deep-tech companies.",
+        },
+        {
+            "name": f"{display_name} — SEC Form D Raises",
+            "source_type": "sec_edgar",
+            "run_frequency": "weekly",
+            "notes": "Companies that recently filed Form D equity raises. Companies post-raise often need to scale teams fast.",
+        },
+        {
+            "name": f"{display_name} — Product Hunt API",
+            "source_type": "product_hunt_api",
+            "run_frequency": "daily",
+            "notes": "Newly launched products on Product Hunt. Requires API token in Admin → System Config → Startup Intel.",
+        },
+    ]
+
+    created = skipped = 0
+    sources = []
+    for tmpl in templates:
+        existing = LeadSource.query.filter_by(brand_name=brand_name, name=tmpl["name"]).first()
+        if existing:
+            skipped += 1
+            sources.append(_source_summary(existing))
+            continue
+        freq = tmpl["run_frequency"]
+        src = LeadSource(
+            brand_name=brand_name,
+            name=tmpl["name"],
+            source_type=tmpl["source_type"],
+            url="",
+            query_keywords=all_kw[:4],
+            run_frequency=freq,
+            next_run_at=datetime.utcnow() if freq in {"daily", "weekly", "monthly"} else None,
+            is_active=True,
+            notes=tmpl["notes"],
+        )
+        db.session.add(src)
+        db.session.flush()
+        created += 1
+        sources.append(_source_summary(src))
+
+    db.session.commit()
+    return {"created": created, "skipped": skipped, "sources": sources}
     """Create a practical set of auto-research sources for a brand using its stored profile.
 
     Safe to call multiple times — skips sources that already exist by name.

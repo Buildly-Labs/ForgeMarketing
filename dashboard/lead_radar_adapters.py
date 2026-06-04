@@ -411,6 +411,31 @@ ADAPTERS = {
     "other": ManualListAdapter(),
 }
 
+# ── Startup Intel Plugin ───────────────────────────────────────────────────────
+# Registered here after base ADAPTERS so there's no circular import.
+try:
+    from dashboard.lead_radar_startup_adapters import (  # noqa: E402
+        YCombinatorAdapter,
+        SBIRAdapter,
+        NSFAwardsAdapter,
+        SECEdgarFormDAdapter,
+        ProductHuntAPIAdapter,
+        OpenCorporatesAdapter,
+        CompaniesHouseAdapter,
+    )
+    ADAPTERS.update({
+        "yc_companies":    YCombinatorAdapter(),
+        "sbir_awards":     SBIRAdapter(),
+        "nsf_awards":      NSFAwardsAdapter(),
+        "sec_edgar":       SECEdgarFormDAdapter(),
+        "product_hunt_api": ProductHuntAPIAdapter(),
+        "opencorporates":  OpenCorporatesAdapter(),
+        "companies_house": CompaniesHouseAdapter(),
+    })
+except Exception as _si_err:
+    import logging
+    logging.getLogger(__name__).warning("Startup Intel plugin not loaded: %s", _si_err)
+
 
 def get_adapter(source_type: str) -> BaseLeadSourceAdapter:
     return ADAPTERS.get(source_type or "manual", ManualListAdapter())

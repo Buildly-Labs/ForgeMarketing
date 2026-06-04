@@ -28,6 +28,7 @@ from dashboard.lead_radar_service import (
     calculate_fit_score,
     capture_feedback,
     convert_candidate_to_lead,
+    enrich_candidate,
     find_region_for_country,
     generate_draft_for_lead,
     get_dashboard_summary,
@@ -37,6 +38,7 @@ from dashboard.lead_radar_service import (
     run_due_source_research_jobs,
     seed_buildly_defaults_if_present,
     seed_sources_for_brand,
+    seed_startup_sources_for_brand,
     update_source_performance,
     upsert_followup_task,
     validate_lead_payload,
@@ -1128,3 +1130,99 @@ def seed_sources():
         return jsonify({"success": False, "error": "brand_name is required"}), 400
     result = seed_sources_for_brand(brand_name)
     return jsonify({"success": True, "data": result})
+
+
+# ── Startup Intel Plugin endpoints ─────────────────────────────────────────────
+
+@lead_api_bp.route("/lead-radar/startup-intel")
+def lead_radar_startup_intel_page():
+    return render_template("lead_radar_startup_intel.html", title="Startup Intel")
+
+
+@lead_api_bp.route("/api/lead-radar/startup-intel/status", methods=["GET"])
+def startup_intel_status():
+    """Plugin status + API key configuration summary."""
+    from dashboard.models import SystemConfig
+    from dashboard.lead_radar_startup_adapters import CONFIG_KEYS, SOURCE_TYPES, PLUGIN_DESCRIPTION
+    key_status = {}
+    for name, (db_key, _env) in CONFIG_KEYS.items():
+        row = SystemConfig.query.filter_by(key=db_key).first()
+        key_status[name] = bool(row and row.value)
+    return jsonify({
+        "success": True,
+        "data": {
+            "plugin_id": "startup_intel",
+            "description": PLUGIN_DESCRIPTION,
+            "source_types": sorted(SOURCE_TYPES),
+            "free_sources": ["yc_companies", "sbir_awards", "nsf_awards", "sec_edgar"],
+            "paid_sources": {
+                "product_hunt_api": {
+                    "label": "Product Hunt API v2",
+                    "configured": key_status.get("product_hunt", False),
+                    "get_key_url": "https://producthunt.com/v2/oauth/applications",
+                    "instructions": "Create an application, generate a Bearer token under 'Developer Token'.",
+                },
+                "opencorporates": {
+                    "label": "OpenCorporates",
+                    "configured": key_status.get("opencorporates", False),
+                    "get_key_url": "https://opencorporates.com/api_accounts/new",
+                    "instructions": "Register for a free API account. Copy the API token.",
+                },
+                "companies_house": {
+                    "label": "Companies House (UK)",
+                    "configured": key_status.get("companies_house", False),
+                    "get_key_url": "https://developer.company-information.service.gov.uk/",
+                    "instructions": "Register, create an application, and use the API key for Basic Auth.",
+                },
+                "github": {
+                    "label": "GitHub (rate-limit boost)",
+                    "configured": key_status.get("github", False),
+                    "get_key_url": "https://github.com/settings/tokens/new",
+                    "instructions": "Generate a Personal Access Token (no scopes needed for public data). Raises rate limit from 60 to 5,000 req/hr.",
+                },
+            },
+        },
+    })
+
+
+@lead_api_bp.route("/api/lead-radar/startup-intel/seed-sources", methods=["POST"])
+def startup_intel_seed_sources():
+    """Create Startup Intel sources for a brand."""
+    data = request.get_json() or {}
+    brand_name = (data.get("brand_name") or "").strip()
+    if not brand_name:
+        return jsonify({"success": False, "error": "brand_name is required"}), 400
+    result = seed_startup_sources_for_brand(brand_name)
+    return jsonify({"success": True, "data": result})
+
+
+@lead_api_bp.route("/api/lead-radar/candidates/<int:candidate_id>/enrich", methods=["POST"])
+def enrich_candidate_route(candidate_id):
+    """Run the Startup Intel enricher on a single candidate."""
+    result = enrich_candidate(candidate_id)
+    if "error" in result:
+        code = 404 if "not found" in result["error"].lower() else 500
+        return jsonify({"success": False, "error": result["error"]}), code
+    return jsonify({"success": True, "data": result})
+
+
+@lead_api_bp.route("/api/lead-radar/startup-intel/candidates", methods=["GET"])
+def startup_intel_candidates():
+    """List candidates from startup intel source types."""
+    from dashboard.lead_radar_startup_adapters import SOURCE_TYPES
+    brand_name = request.args.get("brand_name", "").strip()
+    status = request.args.get("status", "").strip()
+    limit = int(request.args.get("limit", 50))
+
+    q = (
+        LeadCandidate.query
+        .join(LeadSource, LeadSource.id == LeadCandidate.lead_source_id)
+        .filter(LeadSource.source_type.in_(SOURCE_TYPES))
+    )
+    if brand_name:
+        q = q.filter(LeadCandidate.brand_name == brand_name)
+    if status:
+        q = q.filter(LeadCandidate.status == status)
+
+    candidates = q.order_by(LeadCandidate.updated_at.desc()).limit(limit).all()
+    return jsonify({"success": True, "data": [_candidate_to_dict(c) for c in candidates]})

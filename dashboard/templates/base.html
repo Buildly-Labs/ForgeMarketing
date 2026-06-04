@@ -156,12 +156,29 @@
                             </div>
                         </div>
 
-                        <a href="{{ url_for('lead_api.lead_radar_home') }}"
-                           class="nav-item text-white px-2 py-1 rounded text-xs font-medium flex flex-col items-center {% if request.endpoint and request.endpoint.startswith('lead_api.') %}active{% endif %}"
-                           title="Lead Radar">
-                            <i class="fas fa-crosshairs text-sm mb-0.5"></i>
-                            <span>Lead Radar</span>
-                        </a>
+                        <!-- Lead Radar dropdown -->
+                        <div class="relative">
+                            <button @click="openMenu = openMenu === 'leads' ? null : 'leads'"
+                                    class="nav-item text-white px-2 py-1 rounded text-xs font-medium flex flex-col items-center {% if request.endpoint and request.endpoint.startswith('lead_api.') %}active{% endif %}"
+                                    title="Lead Radar">
+                                <i class="fas fa-crosshairs text-sm mb-0.5"></i>
+                                <span>Leads <i class="fas fa-chevron-down" style="font-size:0.6rem"></i></span>
+                            </button>
+                            <div x-show="openMenu === 'leads'" x-transition class="absolute left-0 mt-1 w-48 bg-white rounded-md shadow-lg z-50 py-1">
+                                <a href="{{ url_for('lead_api.lead_radar_home') }}" class="flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <i class="fas fa-crosshairs w-5 mr-2 text-indigo-500"></i>Lead Radar
+                                </a>
+                                <a href="{{ url_for('lead_api.lead_radar_startup_intel_page') }}" class="flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <i class="fas fa-rocket w-5 mr-2 text-orange-500"></i>Startup Intel
+                                </a>
+                                <a href="{{ url_for('lead_api.leads_page') }}" class="flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <i class="fas fa-users w-5 mr-2 text-blue-500"></i>Leads
+                                </a>
+                                <a href="{{ url_for('lead_api.lead_radar_candidates_page') }}" class="flex items-center px-3 py-2 text-sm text-gray-700 hover:bg-gray-100">
+                                    <i class="fas fa-user-check w-5 mr-2 text-green-500"></i>Candidates
+                                </a>
+                            </div>
+                        </div>
 
                         <a href="{{ url_for('admin_settings') }}"
                            class="nav-item text-white px-2 py-1 rounded text-xs font-medium flex flex-col items-center {% if request.endpoint == 'admin_settings' %}active{% endif %}"
@@ -226,6 +243,8 @@
                 <a href="{{ url_for('google_ads') }}" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium pl-6"><i class="fas fa-bullhorn mr-3 w-4"></i>Google Ads</a>
                 <a href="{{ url_for('automation') }}" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium pl-6"><i class="fas fa-robot mr-3 w-4"></i>Automation</a>
                 <a href="{{ url_for('lead_api.lead_radar_home') }}" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium"><i class="fas fa-crosshairs mr-3 w-4"></i>Lead Radar</a>
+                <a href="{{ url_for('lead_api.lead_radar_startup_intel_page') }}" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium pl-6"><i class="fas fa-rocket mr-3 w-4"></i>Startup Intel</a>
+                <a href="{{ url_for('lead_api.leads_page') }}" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium pl-6"><i class="fas fa-users mr-3 w-4"></i>Leads</a>
                 <a href="{{ url_for('admin_settings') }}" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium"><i class="fas fa-cog mr-3 w-4"></i>Admin</a>
                 <a href="{{ url_for('marketing_help') }}" class="text-white hover:bg-white/10 block px-3 py-2 rounded text-sm font-medium"><i class="fas fa-circle-question mr-3 w-4"></i>Help Center</a>
             </div>

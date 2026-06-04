@@ -508,6 +508,35 @@ CONFIG_SCHEMA = {
             {'key': 'LINKEDIN_CLIENT_SECRET',     'label': 'LinkedIn Client Secret','secret': True},
         ]
     },
+    'startup_intel': {
+        'label': 'Startup Intel Plugin',
+        'fields': [
+            {
+                'key': 'startup_intel_product_hunt_token',
+                'label': 'Product Hunt API Bearer Token',
+                'secret': True,
+                'help': 'Get at producthunt.com/v2/oauth/applications → create app → Developer Token. Enables product_hunt_api source.',
+            },
+            {
+                'key': 'startup_intel_opencorporates_key',
+                'label': 'OpenCorporates API Key',
+                'secret': True,
+                'help': 'Register free at opencorporates.com/api_accounts/new. Enables opencorporates source.',
+            },
+            {
+                'key': 'startup_intel_companies_house_key',
+                'label': 'Companies House API Key (UK)',
+                'secret': True,
+                'help': 'Register free at developer.company-information.service.gov.uk. Enables companies_house source.',
+            },
+            {
+                'key': 'startup_intel_github_token',
+                'label': 'GitHub Personal Access Token (enrichment)',
+                'secret': True,
+                'help': 'Optional. Generate at github.com/settings/tokens/new (no scopes needed). Raises enrichment rate limit from 60 to 5,000 req/hr.',
+            },
+        ]
+    },
     'analytics': {
         'label': 'Analytics',
         'fields': [

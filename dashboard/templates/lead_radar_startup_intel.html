@@ -1,0 +1,372 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="space-y-5">
+
+  <!-- Header -->
+  <div class="bg-white rounded-lg shadow p-5">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+      <div>
+        <div class="flex items-center gap-2">
+          <h1 class="text-2xl font-bold">Startup Intel</h1>
+          <span class="text-xs bg-indigo-100 text-indigo-700 px-2 py-0.5 rounded-full font-medium">ForgeMarketing Plugin</span>
+        </div>
+        <p class="text-sm text-gray-600 mt-1">
+          Discover early-stage startups from YCombinator, SBIR/NSF grants, SEC Form D raises, Product Hunt, and more.
+          Candidates are enriched with GitHub, LinkedIn, Twitter, and contact details, then queued for human review.
+        </p>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <select id="brand_name" class="border rounded px-2 py-2 text-sm" onchange="loadAll()">
+          <option value="">— select brand —</option>
+        </select>
+        <button onclick="seedStartupSources()" class="bg-indigo-600 text-white rounded px-3 py-2 text-sm hover:bg-indigo-700">
+          <i class="fas fa-rocket mr-1"></i>Bootstrap Startup Sources
+        </button>
+        <button onclick="runDueStartupSources()" class="bg-emerald-600 text-white rounded px-3 py-2 text-sm hover:bg-emerald-700">
+          <i class="fas fa-play mr-1"></i>Run Due Sources
+        </button>
+        <a href="/lead-radar/sources" class="bg-gray-100 text-gray-700 rounded px-3 py-2 text-sm hover:bg-gray-200">
+          <i class="fas fa-cog mr-1"></i>All Sources
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div id="statusBar" class="hidden rounded p-3 text-sm whitespace-pre-line"></div>
+
+  <!-- API Key Status -->
+  <div class="bg-white rounded-lg shadow p-5">
+    <h2 class="font-semibold mb-3">Data Source Status</h2>
+    <div id="sourceStatus" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
+      <div class="text-gray-400 col-span-4"><i class="fas fa-spinner fa-spin mr-2"></i>Loading…</div>
+    </div>
+  </div>
+
+  <!-- Active Startup Sources -->
+  <div class="bg-white rounded-lg shadow p-5">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="font-semibold">Active Startup Sources</h2>
+      <a href="/lead-radar/sources" class="text-xs text-blue-600 hover:underline">Manage all sources →</a>
+    </div>
+    <div id="startupSourcesList" class="text-sm">
+      <p class="text-gray-400"><i class="fas fa-spinner fa-spin mr-1"></i>Loading…</p>
+    </div>
+  </div>
+
+  <!-- Recent Candidates -->
+  <div class="bg-white rounded-lg shadow p-5">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="font-semibold">Startup Candidates Queue</h2>
+      <div class="flex gap-2">
+        <select id="candidateStatus" class="border rounded px-2 py-1 text-xs" onchange="loadCandidates()">
+          <option value="">All</option>
+          <option value="new">New</option>
+          <option value="needs_review">Needs Review</option>
+          <option value="approved">Approved</option>
+          <option value="rejected">Rejected</option>
+        </select>
+        <a href="/lead-radar/candidates" class="text-xs text-blue-600 hover:underline">Full candidate queue →</a>
+      </div>
+    </div>
+    <div id="candidatesList" class="text-sm">
+      <p class="text-gray-400"><i class="fas fa-spinner fa-spin mr-1"></i>Loading…</p>
+    </div>
+  </div>
+
+  <!-- API Key Setup -->
+  <div class="bg-white rounded-lg shadow p-5">
+    <h2 class="font-semibold mb-3">API Key Setup</h2>
+    <p class="text-sm text-gray-600 mb-4">
+      The sources below require free API keys. Add them in
+      <a href="/admin" class="text-blue-600 underline">Admin → System Config → Startup Intel Plugin</a>.
+    </p>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+      <div class="border rounded p-3">
+        <div class="font-medium mb-1"><i class="fas fa-cat text-orange-500 mr-1"></i>Product Hunt API v2</div>
+        <p class="text-xs text-gray-600 mb-2">New product launches — great signal for "just shipped, likely founder-led".</p>
+        <a href="https://producthunt.com/v2/oauth/applications" target="_blank"
+           class="text-blue-600 text-xs underline">
+          producthunt.com/v2/oauth/applications →
+        </a>
+        <p class="text-xs text-gray-500 mt-1">Create an application → copy the "Developer Token". Store as <code>startup_intel_product_hunt_token</code>.</p>
+      </div>
+      <div class="border rounded p-3">
+        <div class="font-medium mb-1"><i class="fas fa-building text-blue-500 mr-1"></i>OpenCorporates</div>
+        <p class="text-xs text-gray-600 mb-2">Recently incorporated US companies. Pairs well with SEC Form D filings.</p>
+        <a href="https://opencorporates.com/api_accounts/new" target="_blank"
+           class="text-blue-600 text-xs underline">
+          opencorporates.com/api_accounts/new →
+        </a>
+        <p class="text-xs text-gray-500 mt-1">Register for a free account. Store key as <code>startup_intel_opencorporates_key</code>.</p>
+      </div>
+      <div class="border rounded p-3">
+        <div class="font-medium mb-1"><i class="fas fa-flag text-red-500 mr-1"></i>Companies House (UK)</div>
+        <p class="text-xs text-gray-600 mb-2">Newly formed UK companies — free official government data including officers.</p>
+        <a href="https://developer.company-information.service.gov.uk/" target="_blank"
+           class="text-blue-600 text-xs underline">
+          developer.company-information.service.gov.uk →
+        </a>
+        <p class="text-xs text-gray-500 mt-1">Register, create an application. Store key as <code>startup_intel_companies_house_key</code>.</p>
+      </div>
+      <div class="border rounded p-3">
+        <div class="font-medium mb-1"><i class="fab fa-github text-gray-800 mr-1"></i>GitHub Token (optional)</div>
+        <p class="text-xs text-gray-600 mb-2">Not required, but raises enrichment rate limit from 60 to 5,000 requests/hour.</p>
+        <a href="https://github.com/settings/tokens/new" target="_blank"
+           class="text-blue-600 text-xs underline">
+          github.com/settings/tokens/new →
+        </a>
+        <p class="text-xs text-gray-500 mt-1">No scopes needed for public data. Store as <code>startup_intel_github_token</code>.</p>
+      </div>
+    </div>
+    <div class="mt-4 p-3 bg-green-50 border border-green-200 rounded text-xs text-green-800">
+      <strong>Free sources (no key needed):</strong>
+      YCombinator directory (updated daily by YC) ·
+      SBIR/STTR awards (sbir.gov) ·
+      NSF Awards (research.gov) ·
+      SEC Form D filings (sec.gov) ·
+      Hacker News "Launch HN" and "Who is Hiring" posts
+    </div>
+  </div>
+
+</div>
+
+
+<script>
+function activeBrand() { return document.getElementById('brand_name').value.trim(); }
+
+document.addEventListener('DOMContentLoaded', () => {
+  populateBrandSelect('brand_name');
+  if (typeof ACTIVE_BRAND !== 'undefined' && ACTIVE_BRAND) {
+    document.getElementById('brand_name').value = ACTIVE_BRAND;
+  }
+  loadAll();
+});
+
+function populateBrandSelect(id) {
+  const sel = document.getElementById(id);
+  if (!sel) return;
+  const brands = (typeof USER_BRANDS !== 'undefined') ? USER_BRANDS : [];
+  const active = (typeof ACTIVE_BRAND !== 'undefined') ? ACTIVE_BRAND : '';
+  brands.forEach(b => {
+    if (![...sel.options].some(o => o.value === b))
+      sel.appendChild(new Option(b, b, b === active, b === active));
+  });
+}
+
+function loadAll() {
+  loadPluginStatus();
+  loadStartupSources();
+  loadCandidates();
+}
+
+// ── Plugin status ──────────────────────────────────────────────────────────────
+async function loadPluginStatus() {
+  const res = await fetch('/api/lead-radar/startup-intel/status');
+  const json = await res.json();
+  if (!json.success) return;
+  const d = json.data;
+
+  const freeHtml = d.free_sources.map(s =>
+    `<div class="p-2 bg-green-50 border border-green-200 rounded">
+      <div class="font-medium text-green-800"><i class="fas fa-check-circle mr-1 text-green-600"></i>${s}</div>
+      <div class="text-xs text-gray-500">Free — no key needed</div>
+    </div>`
+  ).join('');
+
+  const paidHtml = Object.entries(d.paid_sources).map(([key, src]) =>
+    `<div class="p-2 ${src.configured ? 'bg-green-50 border border-green-200' : 'bg-amber-50 border border-amber-200'} rounded">
+      <div class="font-medium ${src.configured ? 'text-green-800' : 'text-amber-800'}">
+        <i class="fas ${src.configured ? 'fa-check-circle text-green-600' : 'fa-exclamation-circle text-amber-500'} mr-1"></i>
+        ${src.label}
+      </div>
+      <div class="text-xs ${src.configured ? 'text-gray-500' : 'text-amber-700'}">
+        ${src.configured ? 'API key saved' :
+          `<a href="${src.get_key_url}" target="_blank" class="underline">Get free key →</a>`}
+      </div>
+    </div>`
+  ).join('');
+
+  document.getElementById('sourceStatus').innerHTML = freeHtml + paidHtml;
+}
+
+// ── Startup sources ────────────────────────────────────────────────────────────
+const STARTUP_SOURCE_TYPES = new Set([
+  'yc_companies','sbir_awards','nsf_awards','sec_edgar',
+  'product_hunt_api','opencorporates','companies_house'
+]);
+
+async function loadStartupSources() {
+  const brand = activeBrand();
+  const url = '/api/lead-radar/sources' + (brand ? '?brand_name=' + encodeURIComponent(brand) : '');
+  const res = await fetch(url);
+  const json = await res.json();
+  const startup = (json.data || []).filter(s => STARTUP_SOURCE_TYPES.has(s.source_type));
+  const el = document.getElementById('startupSourcesList');
+  if (!startup.length) {
+    el.innerHTML = `<div class="text-center py-6 text-gray-400">
+      No startup sources yet.
+      <br><button onclick="seedStartupSources()" class="mt-3 bg-indigo-600 text-white rounded px-4 py-2 text-sm">
+        <i class="fas fa-rocket mr-1"></i>Bootstrap Startup Sources
+      </button>
+    </div>`;
+    return;
+  }
+  el.innerHTML = `<table class="min-w-full">
+    <thead class="bg-gray-50"><tr>
+      <th class="px-3 py-2 text-left text-xs font-medium text-gray-500">Source</th>
+      <th class="px-3 py-2 text-left text-xs font-medium text-gray-500">Type</th>
+      <th class="px-3 py-2 text-left text-xs font-medium text-gray-500">Schedule</th>
+      <th class="px-3 py-2 text-left text-xs font-medium text-gray-500">Last Run</th>
+      <th class="px-3 py-2 text-left text-xs font-medium text-gray-500">Next Run</th>
+      <th class="px-3 py-2 text-left text-xs font-medium text-gray-500">Keywords</th>
+      <th class="px-3 py-2 text-left text-xs font-medium text-gray-500"></th>
+    </tr></thead>
+    <tbody>
+    ${startup.map(s => {
+      const isDue = s.run_frequency !== 'manual' && (!s.next_run_at || new Date(s.next_run_at) <= new Date());
+      const noKw = !s.query_keywords || s.query_keywords.length === 0;
+      return `<tr class="border-b hover:bg-gray-50">
+        <td class="px-3 py-2 font-medium">${s.name}</td>
+        <td class="px-3 py-2 text-xs text-gray-600">${s.source_type}</td>
+        <td class="px-3 py-2"><span class="bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full text-xs">${s.run_frequency}</span></td>
+        <td class="px-3 py-2 text-xs text-gray-500">${s.last_run_at ? new Date(s.last_run_at).toLocaleDateString() : 'Never'}</td>
+        <td class="px-3 py-2 text-xs ${isDue ? 'text-orange-600 font-semibold' : 'text-gray-500'}">${isDue ? '⏰ Due' : (s.next_run_at ? new Date(s.next_run_at).toLocaleDateString() : '—')}</td>
+        <td class="px-3 py-2 text-xs">${noKw ? '<span class="text-red-500">⚠ no keywords</span>' : (s.query_keywords||[]).join(', ')}</td>
+        <td class="px-3 py-2">
+          <button onclick="runSingleSource(${s.id})" class="bg-emerald-600 text-white rounded px-2 py-1 text-xs">▶ Run</button>
+        </td>
+      </tr>`;
+    }).join('')}
+    </tbody></table>`;
+}
+
+// ── Candidates ─────────────────────────────────────────────────────────────────
+async function loadCandidates() {
+  const brand = activeBrand();
+  const status = document.getElementById('candidateStatus').value;
+  const params = new URLSearchParams();
+  if (brand) params.set('brand_name', brand);
+  if (status) params.set('status', status);
+  params.set('limit', '30');
+  const res = await fetch('/api/lead-radar/startup-intel/candidates?' + params);
+  const json = await res.json();
+  const candidates = json.data || [];
+  const el = document.getElementById('candidatesList');
+  if (!candidates.length) {
+    el.innerHTML = `<p class="text-gray-400 py-4 text-center">
+      No startup candidates yet. Run a source to populate the queue.
+    </p>`;
+    return;
+  }
+  el.innerHTML = candidates.map(c => {
+    const kws = (c.detected_keywords || []).slice(0, 5).join(' · ');
+    const hasLinkedIn = kws.includes('linkedin:');
+    const hasGitHub = kws.includes('github:');
+    const enriched = c.signal_summary && c.signal_summary.includes('Enrichment:');
+    return `<div class="border-b py-3 flex items-start justify-between gap-3">
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="font-medium">${c.raw_company || c.raw_name || 'Unknown'}</span>
+          <span class="text-xs bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded">${c.status||'new'}</span>
+          ${hasLinkedIn ? '<span class="text-xs bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">LinkedIn ✓</span>' : ''}
+          ${hasGitHub ? '<span class="text-xs bg-gray-900 text-white px-1.5 py-0.5 rounded">GitHub ✓</span>' : ''}
+          ${enriched ? '<span class="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded">Enriched</span>' : ''}
+        </div>
+        <div class="text-xs text-gray-500 mt-0.5">${c.raw_title||''}</div>
+        <div class="text-xs text-gray-400 mt-0.5 truncate max-w-lg">${(c.signal_summary||'').split('Enrichment:')[0].trim().slice(0,180)}</div>
+        ${c.raw_url ? `<a href="${c.raw_url}" target="_blank" class="text-xs text-blue-600 hover:underline">${c.raw_url.slice(0,60)}…</a>` : ''}
+      </div>
+      <div class="flex gap-1 shrink-0">
+        <button onclick="enrichCandidate(${c.id})" class="bg-purple-600 text-white rounded px-2 py-1 text-xs" title="Enrich — find LinkedIn, GitHub, email">
+          <i class="fas fa-search-plus"></i>
+        </button>
+        <button onclick="reviewCandidate(${c.id}, 'approve')" class="bg-green-600 text-white rounded px-2 py-1 text-xs">✓</button>
+        <button onclick="reviewCandidate(${c.id}, 'reject')" class="bg-red-600 text-white rounded px-2 py-1 text-xs">✗</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ── Actions ────────────────────────────────────────────────────────────────────
+async function enrichCandidate(id) {
+  setStatus('🔍 Enriching candidate ' + id + '…', 'info');
+  const res = await fetch(`/api/lead-radar/candidates/${id}/enrich`, {method: 'POST'});
+  const json = await res.json();
+  if (!json.success) { setStatus(json.error || 'Enrichment failed', 'error'); return; }
+  const signals = json.data?.signals || 'Done';
+  setStatus(`✅ Enriched: ${signals}`, 'success');
+  loadCandidates();
+}
+
+async function reviewCandidate(id, action) {
+  const res = await fetch(`/api/lead-radar/candidates/${id}/review`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({action})
+  });
+  const json = await res.json();
+  if (!json.success) { setStatus(json.error || 'Failed', 'error'); return; }
+  setStatus(`Candidate ${action}d.`, 'success');
+  loadCandidates();
+}
+
+async function seedStartupSources() {
+  const brand = activeBrand();
+  if (!brand) { setStatus('Select a brand first.', 'error'); return; }
+  setStatus('Creating startup sources for ' + brand + '…', 'info');
+  const res = await fetch('/api/lead-radar/startup-intel/seed-sources', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({brand_name: brand})
+  });
+  const json = await res.json();
+  if (!json.success) { setStatus(json.error || 'Failed', 'error'); return; }
+  const d = json.data;
+  setStatus(`✅ ${d.created} startup sources created, ${d.skipped} already existed.`, 'success');
+  loadStartupSources();
+}
+
+async function runSingleSource(sourceId) {
+  setStatus('Running source…', 'info');
+  const res = await fetch('/api/lead-radar/research-jobs/run', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({lead_source_id: sourceId})
+  });
+  const json = await res.json();
+  if (!json.success) { setStatus(json.error || 'Run failed', 'error'); return; }
+  const d = json.data;
+  setStatus(`✅ Done — ${d.candidates_created} candidates from ${d.results_count} items.\n${d.run_log||''}`, 'success');
+  loadStartupSources();
+  loadCandidates();
+}
+
+async function runDueStartupSources() {
+  const brand = activeBrand();
+  setStatus('Running all due startup sources…', 'info');
+  const res = await fetch('/api/lead-radar/research-jobs/run-due', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({brand_name: brand || undefined, limit: 25})
+  });
+  const json = await res.json();
+  if (!json.success) { setStatus(json.error || 'Failed', 'error'); return; }
+  const d = json.data;
+  const lines = (d.jobs || []).map(j =>
+    `  • ${j.source_name || 'Source ' + j.lead_source_id}: ${j.status} — ${j.candidates_created} candidates`
+    + (j.error_message ? `\n    ⚠ ${j.error_message}` : '')
+  ).join('\n');
+  setStatus(`✅ ${d.sources_considered} sources — ${d.total_candidates_created} new candidates\n${lines}`, 'success');
+  loadStartupSources();
+  loadCandidates();
+}
+
+function setStatus(msg, type) {
+  const el = document.getElementById('statusBar');
+  el.className = 'rounded p-3 text-sm whitespace-pre-line ' + (
+    type === 'error' ? 'bg-red-50 border border-red-200 text-red-800' :
+    type === 'success' ? 'bg-green-50 border border-green-200 text-green-800' :
+    'bg-blue-50 border border-blue-200 text-blue-800'
+  );
+  el.textContent = msg;
+  el.classList.remove('hidden');
+  if (type !== 'error') setTimeout(() => el.classList.add('hidden'), 15000);
+}
+</script>
+{% endblock %}
