@@ -5301,10 +5301,13 @@ def api_sync_influencers_to_contacts():
         
         data = request.get_json(silent=True) or {}
         queue_outreach = data.get('queue_outreach', True)
+        influencer_ids = {int(i) for i in (data.get('influencer_ids') or []) if str(i).isdigit()}
         
         # Get all non-deleted influencers
         discovery = BrandInfluencerDiscovery()
         influencers = discovery.get_brand_influencers()
+        if influencer_ids:
+            influencers = [inf for inf in influencers if int(inf.get('id', 0) or 0) in influencer_ids]
         
         contacts_manager = UnifiedContactsManager()
         synced_count = 0
@@ -5392,6 +5395,94 @@ def api_sync_influencers_to_contacts():
             'success': False,
             'error': str(e)
         }), 500
+
+@app.route('/api/influencers/outreach-queue')
+def api_influencer_outreach_queue():
+    """List queued influencer outreach touches."""
+    if not CONTACTS_SYSTEM_AVAILABLE:
+        return jsonify({'error': 'Contacts system not available'}), 503
+
+    try:
+        brand = request.args.get('brand')
+        limit = int(request.args.get('limit', 200))
+
+        manager = UnifiedContactsManager()
+        import sqlite3
+
+        query = """
+            SELECT
+                ct.id,
+                ct.contact_id,
+                ct.subject,
+                ct.message,
+                ct.platform,
+                ct.status,
+                ct.created_at,
+                c.name,
+                c.brand,
+                c.email,
+                c.platform AS primary_platform,
+                c.linkedin_url,
+                c.twitter_handle,
+                c.instagram_handle,
+                c.bluesky_handle,
+                c.tiktok_handle,
+                c.youtube_channel
+            FROM contact_touches ct
+            JOIN contacts c ON c.id = ct.contact_id
+            WHERE c.contact_type = 'influencer'
+              AND ct.touch_type = 'social_dm'
+              AND ct.touch_direction = 'outbound'
+              AND ct.status = 'queued'
+        """
+        params = []
+        if brand:
+            query += " AND c.brand = ?"
+            params.append(brand)
+        query += " ORDER BY ct.created_at DESC LIMIT ?"
+        params.append(limit)
+
+        with sqlite3.connect(manager.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            items = [dict(row) for row in conn.execute(query, params).fetchall()]
+
+        return jsonify({'success': True, 'count': len(items), 'items': items})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/influencers/outreach-queue/<int:touch_id>/status', methods=['POST'])
+def api_update_influencer_outreach_queue_item(touch_id):
+    """Update queued influencer outreach touch status."""
+    if not CONTACTS_SYSTEM_AVAILABLE:
+        return jsonify({'error': 'Contacts system not available'}), 503
+
+    try:
+        data = request.get_json(silent=True) or {}
+        new_status = (data.get('status') or '').strip().lower()
+        valid_statuses = {'queued', 'sent', 'failed', 'cancelled'}
+        if new_status not in valid_statuses:
+            return jsonify({'success': False, 'error': 'Invalid status'}), 400
+
+        manager = UnifiedContactsManager()
+        import sqlite3
+
+        with sqlite3.connect(manager.db_path) as conn:
+            cur = conn.execute(
+                """
+                UPDATE contact_touches
+                SET status = ?
+                WHERE id = ?
+                  AND touch_type = 'social_dm'
+                  AND touch_direction = 'outbound'
+                """,
+                (new_status, touch_id),
+            )
+            if cur.rowcount == 0:
+                return jsonify({'success': False, 'error': 'Queue item not found'}), 404
+
+        return jsonify({'success': True, 'id': touch_id, 'status': new_status})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 # ============================================================================
 # CONTACTS MANAGEMENT API ENDPOINTS

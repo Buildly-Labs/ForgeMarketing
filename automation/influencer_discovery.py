@@ -1365,11 +1365,16 @@ class LinkedInSearcher(PlatformSearcher):
         
         # Method 1: Search via Google for LinkedIn profiles
         linkedin_profiles = await self._search_linkedin_via_google(keywords, max_results)
+
+        # Method 2: Fallback to DuckDuckGo when Google yields little/no data.
+        if not linkedin_profiles:
+            linkedin_profiles = await self._search_linkedin_via_duckduckgo(keywords, max_results)
         
         for profile_data in linkedin_profiles[:max_results]:
             # Check alignment with brand
             headline = profile_data.get('headline', '')
-            if any(keyword.lower() in headline.lower() for keyword in keywords):
+            searchable = f"{headline} {profile_data.get('name', '')} {profile_data.get('username', '')}".lower()
+            if any(keyword.lower() in searchable for keyword in keywords) or profile_data.get('url'):
                 profile = SocialMediaProfile(
                     platform="linkedin",
                     username=profile_data.get('username', ''),
@@ -1393,6 +1398,7 @@ class LinkedInSearcher(PlatformSearcher):
     async def _search_linkedin_via_google(self, keywords: List[str], max_results: int) -> List[Dict]:
         """Search for real LinkedIn profiles via Google"""
         profiles = []
+        seen = set()
         
         try:
             for keyword in keywords[:3]:
@@ -1413,17 +1419,25 @@ class LinkedInSearcher(PlatformSearcher):
                         from urllib.parse import unquote
                         
                         # Extract LinkedIn profile URLs from Google results
-                        pattern = r'/url\?q=(https://(?:www\.)?linkedin\.com/in/[^&\s"]+)'
-                        matches = re.findall(pattern, html)
+                        patterns = [
+                            r'/url\?q=(https://(?:www\.)?linkedin\.com/in/[^&\s"]+)',
+                            r'https?://(?:www\.)?linkedin\.com/in/[A-Za-z0-9\-_%]+/?',
+                        ]
+                        matches = []
+                        for pattern in patterns:
+                            matches.extend(re.findall(pattern, html))
                         
                         for match in matches:
                             profile_url = unquote(match).split('&')[0]
                             username = profile_url.rstrip('/').split('/in/')[-1].split('?')[0]
+                            if profile_url in seen:
+                                continue
                             
                             if username and len(profiles) < max_results:
                                 # Extract name/headline from Google snippet
                                 profile_data = self._extract_linkedin_from_google(html, profile_url, username, keyword)
                                 if profile_data:
+                                    seen.add(profile_url)
                                     profiles.append(profile_data)
                 
                 await asyncio.sleep(2)  # Rate limiting
@@ -1432,6 +1446,52 @@ class LinkedInSearcher(PlatformSearcher):
             logger.warning(f"LinkedIn Google search failed: {e}")
         
         logger.info(f"🔍 Found {len(profiles)} LinkedIn profiles via Google")
+        return profiles
+
+    async def _search_linkedin_via_duckduckgo(self, keywords: List[str], max_results: int) -> List[Dict]:
+        """Fallback LinkedIn profile discovery via DuckDuckGo HTML results."""
+        profiles = []
+        seen = set()
+
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+            }
+            for keyword in keywords[:3]:
+                url = "https://duckduckgo.com/html/"
+                params = {'q': f'site:linkedin.com/in/ "{keyword}"'}
+
+                async with self.session.get(url, params=params, headers=headers) as response:
+                    if response.status != 200:
+                        continue
+
+                    html = await response.text()
+                    import re
+                    matches = re.findall(r'https?://(?:www\.)?linkedin\.com/in/[A-Za-z0-9\-_%]+/?', html)
+
+                    for profile_url in matches:
+                        normalized = profile_url.rstrip('/')
+                        if normalized in seen or len(profiles) >= max_results:
+                            continue
+                        username = normalized.split('/in/')[-1].split('?')[0]
+                        if not username:
+                            continue
+                        seen.add(normalized)
+                        profiles.append({
+                            'name': username.replace('-', ' ').title(),
+                            'username': username,
+                            'url': normalized,
+                            'headline': keyword,
+                            'connections': 0,
+                            'posts': 0,
+                            'location': ''
+                        })
+
+                await asyncio.sleep(1)
+        except Exception as e:
+            logger.warning(f"LinkedIn DuckDuckGo search failed: {e}")
+
+        logger.info(f"🦆 Found {len(profiles)} LinkedIn profiles via DuckDuckGo")
         return profiles
     
     def _extract_linkedin_from_google(self, html: str, profile_url: str, username: str, keyword: str) -> Dict:
@@ -1496,6 +1556,10 @@ class TwitterSearcher(PlatformSearcher):
         
         # Method 1: Search via Google for Twitter profiles
         twitter_profiles = await self._search_twitter_via_google(keywords, max_results)
+
+        # Method 1b: Fallback to DuckDuckGo when Google yields nothing.
+        if not twitter_profiles:
+            twitter_profiles = await self._search_twitter_via_duckduckgo(keywords, max_results)
         
         # Method 2: Use Twitter API v2 (if available)
         if not twitter_profiles:
@@ -1506,18 +1570,19 @@ class TwitterSearcher(PlatformSearcher):
         
         for profile_data in twitter_profiles[:max_results]:
             # Check alignment with brand
-            if any(keyword.lower() in profile_data['bio'].lower() for keyword in keywords):
+            searchable = f"{profile_data.get('bio', '')} {profile_data.get('display_name', '')} {profile_data.get('username', '')}".lower()
+            if any(keyword.lower() in searchable for keyword in keywords) or profile_data.get('followers', 0) >= 50 or profile_data.get('verified'):
                 profile = SocialMediaProfile(
                     platform="twitter",
-                    username=profile_data['username'],
-                    display_name=profile_data['display_name'],
-                    profile_url=f"https://twitter.com/{profile_data['username']}",
-                    verified=profile_data['verified'],
-                    followers=profile_data['followers'],
-                    following=profile_data['following'],
-                    posts_count=profile_data['tweets'],
-                    engagement_rate=self._estimate_twitter_engagement(profile_data['followers']),
-                    bio=profile_data['bio']
+                    username=profile_data.get('username', ''),
+                    display_name=profile_data.get('display_name', profile_data.get('username', '')),
+                    profile_url=profile_data.get('url', f"https://twitter.com/{profile_data.get('username', '')}"),
+                    verified=profile_data.get('verified', False),
+                    followers=profile_data.get('followers', 0),
+                    following=profile_data.get('following', 0),
+                    posts_count=profile_data.get('tweets', 0),
+                    engagement_rate=self._estimate_twitter_engagement(profile_data.get('followers', 0)),
+                    bio=profile_data.get('bio', '')
                 )
                 profiles.append(profile)
         
@@ -1538,6 +1603,7 @@ class TwitterSearcher(PlatformSearcher):
     async def _search_twitter_via_google(self, keywords: List[str], max_results: int) -> List[Dict]:
         """Search for Twitter profiles via Google"""
         profiles = []
+        seen = set()
         
         try:
             for keyword in keywords[:2]:
@@ -1565,10 +1631,13 @@ class TwitterSearcher(PlatformSearcher):
                             for match in matches:
                                 url = unquote(match) if '/url?q=' in match else match
                                 username = url.split('.com/')[-1].split('?')[0].split('/')[0]
+                                if username in seen:
+                                    continue
                                 
                                 if username and not username.startswith('hashtag') and len(profiles) < max_results:
                                     profile_data = await self._get_twitter_public_data(username)
                                     if profile_data:
+                                        seen.add(username)
                                         profiles.append(profile_data)
                 
                 await asyncio.sleep(2)  # Rate limiting
@@ -1577,6 +1646,44 @@ class TwitterSearcher(PlatformSearcher):
             logger.warning(f"Twitter Google search failed: {e}")
         
         logger.info(f"🐦 Found {len(profiles)} Twitter profiles via Google")
+        return profiles
+
+    async def _search_twitter_via_duckduckgo(self, keywords: List[str], max_results: int) -> List[Dict]:
+        """Fallback Twitter/X profile discovery via DuckDuckGo HTML results."""
+        profiles = []
+        seen = set()
+
+        try:
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+            }
+            for keyword in keywords[:3]:
+                url = "https://duckduckgo.com/html/"
+                params = {'q': f'site:x.com OR site:twitter.com "{keyword}"'}
+
+                async with self.session.get(url, params=params, headers=headers) as response:
+                    if response.status != 200:
+                        continue
+
+                    html = await response.text()
+                    import re
+                    handles = re.findall(r'https?://(?:twitter|x)\.com/([A-Za-z0-9_]{1,50})', html)
+
+                    for username in handles:
+                        if username in seen or len(profiles) >= max_results:
+                            continue
+                        if username.startswith('search') or username.startswith('home'):
+                            continue
+                        seen.add(username)
+                        profile_data = await self._get_twitter_public_data(username)
+                        if profile_data:
+                            profiles.append(profile_data)
+
+                await asyncio.sleep(1)
+        except Exception as e:
+            logger.warning(f"Twitter DuckDuckGo search failed: {e}")
+
+        logger.info(f"🦆 Found {len(profiles)} Twitter profiles via DuckDuckGo")
         return profiles
     
     async def _search_twitter_api(self, keywords: List[str], max_results: int) -> List[Dict]:
@@ -1693,6 +1800,8 @@ class TwitterSearcher(PlatformSearcher):
                 'username': username,
                 'display_name': display_name,
                 'followers': followers,
+                'following': 0,
+                'tweets': 0,
                 'bio': bio,
                 'verified': 'verified' in html.lower() or 'checkmark' in html.lower(),
                 'url': f"https://twitter.com/{username}"

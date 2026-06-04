@@ -147,6 +147,9 @@
                 <button @click="loadInfluencers()" class="text-blue-600 hover:text-blue-800">
                     <i class="fas fa-refresh mr-1"></i>Refresh
                 </button>
+                <button @click="openOutreachQueue()" class="ml-2 bg-indigo-600 text-white px-3 py-1 rounded text-sm hover:bg-indigo-700">
+                    <i class="fas fa-inbox mr-1"></i>Outreach Queue
+                </button>
                 <button @click="syncInfluencersToContacts()" :disabled="syncing" class="ml-2 bg-green-600 text-white px-3 py-1 rounded text-sm hover:bg-green-700 disabled:opacity-50">
                     <i class="fas fa-sync mr-1" :class="{'fa-spin': syncing}"></i>
                     <span x-text="syncing ? 'Syncing...' : 'Sync to Contacts'"></span>
@@ -252,6 +255,74 @@
                                 <button @click="markInfluencerDeleted(influencer)" class="text-red-600 hover:text-red-900" title="Mark as deleted">
                                     <i class="fas fa-trash"></i>
                                 </button>
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Outreach Queue Modal -->
+<div x-show="showQueueModal" x-cloak class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+    <div class="relative top-16 mx-auto p-5 border w-11/12 max-w-5xl shadow-lg rounded-md bg-white">
+        <div class="flex items-center justify-between pb-3 border-b">
+            <div>
+                <h3 class="text-lg font-semibold">Influencer Outreach Queue</h3>
+                <p class="text-sm text-gray-500" x-text="queueItems.length + ' queued outreach touch(es)'">0 queued outreach touch(es)</p>
+            </div>
+            <div class="flex items-center space-x-2">
+                <button @click="loadOutreachQueue()" class="text-blue-600 hover:text-blue-800 text-sm">
+                    <i class="fas fa-refresh mr-1"></i>Refresh
+                </button>
+                <button @click="showQueueModal = false" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        </div>
+
+        <div x-show="loadingQueue" class="text-center py-8">
+            <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+            <p class="text-gray-500 mt-2">Loading outreach queue...</p>
+        </div>
+
+        <div x-show="!loadingQueue && queueItems.length === 0" class="text-center py-8 text-gray-500">
+            <i class="fas fa-inbox text-3xl mb-2"></i>
+            <p>No queued influencer outreach touches found.</p>
+        </div>
+
+        <div x-show="!loadingQueue && queueItems.length > 0" class="overflow-x-auto mt-4">
+            <table class="min-w-full table-fixed">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Influencer</th>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Brand</th>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Platform</th>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Queued</th>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Message</th>
+                        <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                </thead>
+                <tbody class="bg-white divide-y divide-gray-200">
+                    <template x-for="item in queueItems" :key="'queue-' + item.id">
+                        <tr class="hover:bg-gray-50">
+                            <td class="px-3 py-2 text-sm font-medium text-gray-900" x-text="item.name"></td>
+                            <td class="px-3 py-2 text-sm text-gray-700 capitalize" x-text="item.brand"></td>
+                            <td class="px-3 py-2 text-sm text-gray-700" x-text="item.platform || item.primary_platform || 'social'"></td>
+                            <td class="px-3 py-2 text-xs text-gray-600" x-text="item.created_at"></td>
+                            <td class="px-3 py-2 text-xs text-gray-700">
+                                <div class="max-w-md truncate" :title="item.message" x-text="item.message"></div>
+                            </td>
+                            <td class="px-3 py-2 text-sm">
+                                <div class="flex items-center space-x-2">
+                                    <button @click="updateQueueItem(item.id, 'sent')" :disabled="queueUpdating" class="bg-green-600 text-white px-2 py-1 rounded text-xs hover:bg-green-700 disabled:opacity-50">
+                                        Mark Sent
+                                    </button>
+                                    <button @click="updateQueueItem(item.id, 'cancelled')" :disabled="queueUpdating" class="bg-gray-600 text-white px-2 py-1 rounded text-xs hover:bg-gray-700 disabled:opacity-50">
+                                        Cancel
+                                    </button>
+                                </div>
                             </td>
                         </tr>
                     </template>
@@ -400,13 +471,17 @@ function influencerManager() {
         generatingReports: false,
         loadingInfluencers: false,
         syncing: false,
+        loadingQueue: false,
+        queueUpdating: false,
         showInfluencerModal: false,
+        showQueueModal: false,
         selectedInfluencer: null,
         selectedBrand: 'all',
         platformFilter: 'all',
         brands: [],
         availableBrands: [],
         influencers: [],
+        queueItems: [],
         stats: {
             total_influencers: 0,
             total_reach: 0,
@@ -671,6 +746,7 @@ function influencerManager() {
                     const result = await response.json();
                     const queued = result.queued_outreach_count || 0;
                     alert(`✅ Successfully synced ${result.synced_count} influencers to contacts system${queued ? ` and queued ${queued} outreach touch${queued === 1 ? '' : 'es'}` : ''}!`);
+                    await this.loadOutreachQueue();
                 } else {
                     const error = await response.json();
                     alert(`❌ Failed to sync influencers: ${error.error}`);
@@ -680,6 +756,55 @@ function influencerManager() {
                 alert('❌ Error syncing influencers. Please try again.');
             } finally {
                 this.syncing = false;
+            }
+        },
+
+        async openOutreachQueue() {
+            this.showQueueModal = true;
+            await this.loadOutreachQueue();
+        },
+
+        async loadOutreachQueue() {
+            this.loadingQueue = true;
+            try {
+                let url = '/api/influencers/outreach-queue';
+                if (this.selectedBrand !== 'all') {
+                    url += `?brand=${encodeURIComponent(this.selectedBrand)}`;
+                }
+                const response = await fetch(url);
+                if (response.ok) {
+                    const result = await response.json();
+                    this.queueItems = result.items || [];
+                } else {
+                    this.queueItems = [];
+                }
+            } catch (error) {
+                console.error('Queue load error:', error);
+                this.queueItems = [];
+            } finally {
+                this.loadingQueue = false;
+            }
+        },
+
+        async updateQueueItem(id, status) {
+            this.queueUpdating = true;
+            try {
+                const response = await fetch(`/api/influencers/outreach-queue/${id}/status`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ status })
+                });
+                if (!response.ok) {
+                    const error = await response.json();
+                    alert(`Failed to update queue item: ${error.error || 'unknown error'}`);
+                    return;
+                }
+                await this.loadOutreachQueue();
+            } catch (error) {
+                console.error('Queue update error:', error);
+                alert('Failed to update outreach queue item.');
+            } finally {
+                this.queueUpdating = false;
             }
         },
         
@@ -702,6 +827,7 @@ function influencerManager() {
                     const result = await response.json();
                     const queued = result.queued_outreach_count || 0;
                     alert(`${influencer.name} has been synced to CRM contacts${queued ? ' and added to the outreach queue' : ''}!`);
+                    await this.loadOutreachQueue();
                 } else {
                     alert('Failed to sync to CRM. Please try again.');
                 }
