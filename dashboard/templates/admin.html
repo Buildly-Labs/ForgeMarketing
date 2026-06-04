@@ -112,44 +112,77 @@
                     class="px-4 py-2 rounded-lg font-medium transition-colors">
                 <i class="fab fa-linkedin mr-2"></i>LinkedIn
             </button>
+            <button @click="activeTab = 'sysconfig'" :class="activeTab === 'sysconfig' ? 'bg-gray-900 text-white' : 'bg-gray-200 text-gray-700'"
+                    class="px-4 py-2 rounded-lg font-medium transition-colors">
+                <i class="fas fa-database mr-2"></i>System Config
+            </button>
         </div>
 
         <!-- AI Service Configuration -->
         <div x-show="activeTab === 'ai'" class="space-y-6">
             <div class="border-l-4 border-purple-500 bg-purple-50 p-4 rounded">
-                <div class="flex">
-                    <div class="ml-3">
-                        <h3 class="text-sm font-medium text-purple-800">AI Service Status</h3>
-                        <div class="mt-2 text-sm text-purple-700">
-                            <p x-show="aiConfig.configured">
-                                Stored provider: <span class="font-semibold" x-text="aiConfig.provider || 'ollama'"></span>
-                            </p>
-                            <p x-show="!aiConfig.configured">No AI provider has been saved yet.</p>
-                            <p x-show="connectionStatus.ai">✅ AI service is reachable</p>
-                            <p x-show="!connectionStatus.ai && aiConfig.configured">❌ Saved AI service is not reachable right now</p>
-                        </div>
-                    </div>
+                <h3 class="text-sm font-medium text-purple-800 mb-2">AI Service — Where to find credentials</h3>
+                <div class="text-sm text-purple-700 space-y-1">
+                    <p><strong>OpenAI:</strong> <a href="https://platform.openai.com/api-keys" target="_blank" class="underline">platform.openai.com/api-keys</a> → Create new secret key. Paste it as the API Key below.</p>
+                    <p><strong>Ollama (self-hosted):</strong> Install from <a href="https://ollama.com" target="_blank" class="underline">ollama.com</a>, run <code class="bg-white px-1 rounded">ollama serve</code>, then use <code class="bg-white px-1 rounded">http://localhost:11434</code> as the host.</p>
+                    <p><strong>Gemini:</strong> <a href="https://aistudio.google.com/app/apikey" target="_blank" class="underline">aistudio.google.com/app/apikey</a> → Get API Key.</p>
                 </div>
+                <div class="mt-2 text-xs text-purple-600" x-show="connectionStatus.ai">✅ AI service is reachable</div>
+                <div class="mt-2 text-xs text-red-600" x-show="!connectionStatus.ai && aiConfig.configured">❌ Saved AI service is not reachable right now</div>
             </div>
-            
+
             <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <div class="space-y-4">
-                    <h4 class="text-lg font-medium text-gray-900">Service Information</h4>
-                    <div class="bg-gray-50 p-4 rounded">
-                        <p class="text-sm text-gray-600">Provider: <span class="font-mono" x-text="aiConfig.provider || 'Not set'"></span></p>
-                        <p class="text-sm text-gray-600 mt-2">Base URL: <span class="font-mono" x-text="aiConfig.url || 'Not set'"></span></p>
-                        <p class="text-sm text-gray-600 mt-2">Default Model: <span class="font-mono" x-text="aiConfig.model || 'Not set'"></span></p>
-                        <p class="text-sm text-gray-600 mt-2">Status: <span :class="connectionStatus.ai ? 'text-green-600' : 'text-red-600'" class="font-medium" x-text="connectionStatus.ai ? 'Online' : 'Offline'"></span></p>
+                    <div class="flex items-center justify-between">
+                        <h4 class="text-lg font-medium text-gray-900">Configure AI Provider</h4>
+                        <button @click="loadAiConfig()" class="text-sm text-blue-600 hover:underline"><i class="fas fa-download mr-1"></i>Load from DB</button>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Provider</label>
+                        <select x-model="credentials.ai.provider" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500">
+                            <option value="">— select —</option>
+                            <option value="openai">OpenAI (GPT-4 etc.)</option>
+                            <option value="ollama">Ollama (self-hosted)</option>
+                            <option value="gemini">Google Gemini</option>
+                        </select>
+                    </div>
+                    <div x-show="credentials.ai.provider === 'openai' || credentials.ai.provider === 'gemini'">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">API Key</label>
+                        <input type="password" x-model="credentials.ai.api_key"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                               placeholder="sk-... (OpenAI) or AIza... (Gemini)">
+                    </div>
+                    <div x-show="credentials.ai.provider === 'ollama'">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Ollama Host URL</label>
+                        <input type="text" x-model="credentials.ai.url"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                               placeholder="http://localhost:11434">
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Model Name</label>
+                        <input type="text" x-model="credentials.ai.model"
+                               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500"
+                               placeholder="e.g. gpt-4o, llama3, gemini-1.5-flash">
                     </div>
                 </div>
                 <div class="space-y-4">
-                    <h4 class="text-lg font-medium text-gray-900">Test AI Service</h4>
-                    <button @click="testConnection('ai')" :disabled="testing" 
-                            class="w-full bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors">
-                        <i class="fas fa-robot mr-2"></i>
-                        <span x-show="!testing">Test AI Connection</span>
-                        <span x-show="testing">Testing...</span>
-                    </button>
+                    <h4 class="text-lg font-medium text-gray-900">Stored Configuration</h4>
+                    <div class="bg-gray-50 p-4 rounded text-sm space-y-1">
+                        <p>Provider: <span class="font-mono" x-text="aiConfig.provider || 'not set'"></span></p>
+                        <p>URL / Host: <span class="font-mono" x-text="aiConfig.url || 'not set'"></span></p>
+                        <p>Model: <span class="font-mono" x-text="aiConfig.model || 'not set'"></span></p>
+                        <p>Status: <span :class="connectionStatus.ai ? 'text-green-600 font-semibold' : 'text-red-600'" x-text="connectionStatus.ai ? 'Online' : 'Offline'"></span></p>
+                    </div>
+                    <div class="flex gap-3">
+                        <button @click="saveAiConfig()" :disabled="saving"
+                                class="flex-1 bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors">
+                            <i class="fas fa-save mr-2"></i><span x-show="!saving">Save AI Config</span><span x-show="saving">Saving…</span>
+                        </button>
+                        <button @click="testConnection('ai')" :disabled="testing"
+                                class="flex-1 bg-gray-200 text-gray-800 px-4 py-2 rounded-lg hover:bg-gray-300 disabled:opacity-50 transition-colors">
+                            <i class="fas fa-plug mr-2"></i><span x-show="!testing">Test</span><span x-show="testing">Testing…</span>
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -356,6 +389,67 @@
         </div>
     </div>
 
+        <!-- System Config Tab -->
+        <div x-show="activeTab === 'sysconfig'" class="space-y-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h3 class="text-lg font-semibold">System Configuration</h3>
+                    <p class="text-sm text-gray-600">All configuration values are stored in the database. Load current values, edit, and save per category.</p>
+                </div>
+                <button @click="loadConfigValues()" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm">
+                    <i class="fas fa-sync mr-2"></i>Reload All from DB
+                </button>
+            </div>
+
+            <template x-for="cat in configCategories" :key="cat.key">
+                <div class="border border-gray-200 rounded-lg p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <h4 class="font-semibold text-gray-800" x-text="cat.label"></h4>
+                        <button @click="saveConfigSection(cat.key)"
+                                class="bg-gray-900 text-white text-sm px-3 py-1 rounded hover:bg-gray-700">
+                            <i class="fas fa-save mr-1"></i>Save
+                        </button>
+                    </div>
+
+                    <!-- Per-category instructions -->
+                    <div x-show="cat.instructions" class="mb-3 p-3 bg-blue-50 border-l-4 border-blue-400 rounded text-xs text-blue-800" x-html="cat.instructions"></div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <template x-for="field in cat.fields" :key="field.key">
+                            <div>
+                                <label class="block text-xs font-medium text-gray-700 mb-1">
+                                    <span x-text="field.label"></span>
+                                    <span x-show="field.secret" class="ml-1 text-gray-400">(secret)</span>
+                                </label>
+                                <template x-if="field.type === 'select'">
+                                    <select :name="field.key" x-model="configValues[field.key]"
+                                            class="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-500">
+                                        <option value="">— select —</option>
+                                        <template x-for="opt in field.options" :key="opt">
+                                            <option :value="opt" x-text="opt"></option>
+                                        </template>
+                                    </select>
+                                </template>
+                                <template x-if="field.type !== 'select'">
+                                    <div class="flex">
+                                        <input :type="field.secret && !field._show ? 'password' : 'text'"
+                                               x-model="configValues[field.key]"
+                                               :placeholder="field.default ? ('default: ' + field.default) : ''"
+                                               class="flex-1 border border-gray-300 rounded-l px-2 py-1.5 text-sm focus:ring-2 focus:ring-blue-500">
+                                        <button x-show="field.secret"
+                                                @click="field._show = !field._show"
+                                                class="border border-l-0 border-gray-300 rounded-r px-2 py-1.5 text-gray-500 hover:bg-gray-100">
+                                            <i :class="field._show ? 'fas fa-eye-slash' : 'fas fa-eye'"></i>
+                                        </button>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </template>
+        </div>
+
     <!-- Results/Messages -->
     <div x-show="message" class="bg-white rounded-lg p-6 card-shadow" 
          :class="messageType === 'success' ? 'border-l-4 border-green-500' : 'border-l-4 border-red-500'">
@@ -389,11 +483,15 @@ function adminPanel() {
             configured: false
         },
         emailConfigs: [],
+        configCategories: [],
+        configValues: {},
+        configSaving: false,
         credentials: {
             ai: {
                 provider: '',
                 url: '',
-                model: ''
+                model: '',
+                api_key: ''
             },
             twitter: {
                 brand: '',
@@ -418,6 +516,142 @@ function adminPanel() {
             this.checkAllConnections();
             this.loadBrands();
             this.loadStoredCredentials();
+            this.loadConfigSchema();
+        },
+
+        async loadConfigSchema() {
+            try {
+                const res = await fetch('/api/admin/config/schema');
+                if (!res.ok) return;
+                const data = await res.json();
+                const schema = data.schema || {};
+
+                // Per-category instructions shown inline in System Config tab
+                const instructions = {
+                    email: 'Find SMTP keys at <a class="underline" href="https://app.brevo.com/settings/keys/smtp" target="_blank">Brevo → SMTP &amp; API → SMTP credentials</a> (login = your Brevo account email). For MailerSend: <a class="underline" href="https://app.mailersend.com/api-tokens" target="_blank">mailersend.com/api-tokens</a>.',
+                    ai: 'OpenAI keys at <a class="underline" href="https://platform.openai.com/api-keys" target="_blank">platform.openai.com/api-keys</a>. Gemini keys at <a class="underline" href="https://aistudio.google.com/app/apikey" target="_blank">aistudio.google.com/app/apikey</a>. Ollama: run locally, host is usually http://localhost:11434.',
+                    social: 'Twitter/X: <a class="underline" href="https://developer.twitter.com/en/portal/projects-and-apps" target="_blank">developer.twitter.com</a> → create app → Keys and Tokens. LinkedIn: <a class="underline" href="https://www.linkedin.com/developers/apps" target="_blank">linkedin.com/developers/apps</a> → Auth tab → Client ID and Secret.',
+                    analytics: 'Google Analytics: <a class="underline" href="https://console.cloud.google.com/apis/credentials" target="_blank">Google Cloud Console → Credentials</a>. Property ID from GA4 Admin → Property Settings. YouTube Channel ID from your channel URL.',
+                    notifications: 'Pushover: <a class="underline" href="https://pushover.net/api" target="_blank">pushover.net/api</a> — register an application to get API token; user key is in your account dashboard.',
+                    outreach: 'These are safety limits to prevent over-sending. Defaults are conservative. Increase only after testing deliverability.',
+                    site: 'Basic identity settings used in email footers and outreach templates.',
+                };
+
+                this.configCategories = Object.entries(schema).map(([key, cat]) => ({
+                    key,
+                    label: cat.label || key,
+                    instructions: instructions[key] || '',
+                    fields: (cat.fields || []).map(f => ({...f, _show: false})),
+                }));
+
+                await this.loadConfigValues();
+            } catch (e) {
+                console.error('Could not load config schema', e);
+            }
+        },
+
+        async loadConfigValues() {
+            try {
+                const res = await fetch('/api/admin/config');
+                if (!res.ok) return;
+                const data = await res.json();
+                const vals = {};
+                for (const cfg of (data.configs || [])) {
+                    // Don't overwrite secrets with the masked '***' placeholder
+                    if (cfg.value && cfg.value !== '***') vals[cfg.key] = cfg.value;
+                }
+                this.configValues = {...this.configValues, ...vals};
+            } catch (e) {
+                console.error('Could not load config values', e);
+            }
+        },
+
+        async saveConfigSection(categoryKey) {
+            const cat = this.configCategories.find(c => c.key === categoryKey);
+            if (!cat) return;
+
+            const items = cat.fields
+                .filter(f => this.configValues[f.key] !== undefined && this.configValues[f.key] !== '')
+                .map(f => ({
+                    key: f.key,
+                    value: this.configValues[f.key] || '',
+                    category: categoryKey,
+                    is_secret: !!f.secret,
+                    description: f.label,
+                }));
+
+            if (!items.length) {
+                this.showMessage('No values to save in this section.', 'error');
+                return;
+            }
+
+            try {
+                this.configSaving = true;
+                const res = await fetch('/api/admin/config', {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({items}),
+                });
+                const result = await res.json();
+                if (result.success) {
+                    this.showMessage(`✅ ${cat.label} configuration saved (${result.saved.length} values)`, 'success');
+                    await this.checkAllConnections();
+                } else {
+                    this.showMessage(`❌ Save failed: ${result.error}`, 'error');
+                }
+            } catch (e) {
+                this.showMessage(`❌ Error: ${e.message}`, 'error');
+            } finally {
+                this.configSaving = false;
+            }
+        },
+
+        async loadAiConfig() {
+            try {
+                const res = await fetch('/api/admin/credentials');
+                if (!res.ok) return;
+                const data = await res.json();
+                const ai = (data.credentials || {}).ai || {};
+                this.credentials.ai.provider = ai.provider || '';
+                this.credentials.ai.url = ai.url || '';
+                this.credentials.ai.model = ai.model || '';
+                this.showMessage('AI config loaded from database.', 'success');
+            } catch (e) {
+                console.error('loadAiConfig error', e);
+            }
+        },
+
+        async saveAiConfig() {
+            this.saving = true;
+            try {
+                const aiPayload = this.credentials.ai;
+                const items = [
+                    {key: 'ai_provider', value: aiPayload.provider || '', category: 'ai', is_secret: false, description: 'AI provider type'},
+                    {key: 'ai_model', value: aiPayload.model || '', category: 'ai', is_secret: false, description: 'Default AI model'},
+                    {key: 'ai_ollama_url', value: aiPayload.provider === 'ollama' ? (aiPayload.url || '') : '', category: 'ai', is_secret: false, description: 'Ollama server URL'},
+                ];
+                if (aiPayload.api_key && aiPayload.provider !== 'ollama') {
+                    const keyName = aiPayload.provider === 'gemini' ? 'GEMINI_API_KEY' : 'OPENAI_API_KEY';
+                    items.push({key: keyName, value: aiPayload.api_key, category: 'ai', is_secret: true, description: `${aiPayload.provider} API key`});
+                }
+                const res = await fetch('/api/admin/config', {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({items: items.filter(i => i.value !== '')}),
+                });
+                const result = await res.json();
+                if (result.success) {
+                    this.showMessage('✅ AI config saved to database', 'success');
+                    await this.loadStoredCredentials();
+                    await this.checkAllConnections();
+                } else {
+                    this.showMessage(`❌ Save failed: ${result.error}`, 'error');
+                }
+            } catch (e) {
+                this.showMessage(`❌ Error saving AI config: ${e.message}`, 'error');
+            } finally {
+                this.saving = false;
+            }
         },
 
         async loadStoredCredentials() {
