@@ -12,6 +12,11 @@
   <div class="bg-white rounded-lg shadow p-4 grid grid-cols-1 md:grid-cols-4 gap-2">
     <input id="brand_name" placeholder="brand_name" class="border rounded p-2" />
     <input id="status" placeholder="status (needs_review)" class="border rounded p-2" value="needs_review" />
+    <select id="scope" class="border rounded p-2" onchange="loadCandidates()">
+      <option value="all">All Team Candidates</option>
+      <option value="mine">My Queue Only</option>
+    </select>
+    <input id="scope_owner" placeholder="reviewer (for my queue)" class="border rounded p-2" onchange="loadCandidates()" />
     <button onclick="loadCandidates()" class="bg-gray-900 text-white rounded p-2">Refresh</button>
     <a href="/lead-radar/sources" class="bg-emerald-600 text-white rounded p-2 text-center">Manage Sources</a>
   </div>
@@ -103,8 +108,11 @@ async function loadCandidates() {
   const q = new URLSearchParams();
   const brand = document.getElementById('brand_name').value.trim();
   const status = document.getElementById('status').value.trim();
+  const scope = document.getElementById('scope').value;
+  const owner = document.getElementById('scope_owner').value.trim();
   if (brand) q.set('brand_name', brand);
   if (status) q.set('status', status);
+  if (scope === 'mine' && owner) q.set('reviewer', owner);
   const res = await fetch('/api/lead-radar/candidates?' + q.toString());
   const json = await res.json();
   const wrap = document.getElementById('candidates');
@@ -131,6 +139,9 @@ async function loadCandidates() {
 
 if (typeof ACTIVE_BRAND !== 'undefined' && ACTIVE_BRAND) {
   document.getElementById('brand_name').value = ACTIVE_BRAND;
+}
+if (typeof CURRENT_USER !== 'undefined' && CURRENT_USER) {
+  document.getElementById('scope_owner').value = CURRENT_USER;
 }
 
 loadCandidates();

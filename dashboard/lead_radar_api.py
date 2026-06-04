@@ -772,6 +772,9 @@ def list_candidates():
     status = request.args.get("status")
     if status:
         q = q.filter_by(status=status)
+    reviewer = (request.args.get("reviewer") or "").strip()
+    if reviewer:
+        q = q.filter_by(reviewer=reviewer)
     return jsonify({"success": True, "data": [_candidate_to_dict(c) for c in q.order_by(LeadCandidate.updated_at.desc()).all()]})
 
 
@@ -1004,6 +1007,8 @@ def lead_radar_dashboard_summary():
 def lead_radar_login_overview():
     """Operational snapshot for login/dashboard visibility of lead generation flow."""
     requested_brand = request.args.get("brand_name", "").strip()
+    owner_filter = (request.args.get("owner") or "").strip()
+    mine_only = str(request.args.get("mine_only") or "").strip().lower() in {"1", "true", "yes", "on"}
 
     brand_rows = Brand.query.filter_by(is_active=True).order_by(Brand.name.asc()).all()
     brand_names = [b.name for b in brand_rows]
@@ -1012,12 +1017,16 @@ def lead_radar_login_overview():
     leads_query = Lead.query.filter_by(archived_at=None)
     if active_brand:
         leads_query = leads_query.filter_by(brand_name=active_brand)
+    if mine_only and owner_filter:
+        leads_query = leads_query.filter_by(owner=owner_filter)
 
     leads = leads_query.order_by(Lead.updated_at.desc()).limit(8).all()
 
     candidates_query = LeadCandidate.query
     if active_brand:
         candidates_query = candidates_query.filter_by(brand_name=active_brand)
+    if mine_only and owner_filter:
+        candidates_query = candidates_query.filter_by(reviewer=owner_filter)
     recent_candidates = candidates_query.order_by(LeadCandidate.updated_at.desc()).limit(10).all()
 
     candidate_counts = Counter([c.status or "new" for c in recent_candidates])
@@ -1066,6 +1075,10 @@ def lead_radar_login_overview():
             "timestamp": _dt(now),
             "brands": brand_names,
             "active_brand": active_brand,
+            "scope": {
+                "mine_only": mine_only,
+                "owner": owner_filter,
+            },
             "leads": [_lead_to_dict(l) for l in leads],
             "recent_candidates": [_candidate_to_dict(c) for c in recent_candidates],
             "candidate_counts": dict(candidate_counts),

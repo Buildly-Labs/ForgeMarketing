@@ -100,6 +100,15 @@
                 <h3 class="text-xl font-semibold">Lead Radar Queue</h3>
                 <p class="text-sm text-gray-600">See new leads, candidate review workload, and research activity immediately after login.</p>
             </div>
+            <div class="flex flex-wrap items-center gap-2">
+                <select x-model="leadRadarScope" @change="loadLeadRadarOverview()" class="border border-gray-300 rounded px-2 py-1 text-sm">
+                    <option value="all">All Team Leads</option>
+                    <option value="mine">My Queue Only</option>
+                </select>
+                <input x-show="leadRadarScope === 'mine'" x-model="leadRadarOwner" @change="loadLeadRadarOverview()"
+                       class="border border-gray-300 rounded px-2 py-1 text-sm"
+                       placeholder="owner/reviewer name">
+            </div>
             <div class="flex flex-wrap gap-2">
                 <a href="/lead-radar" class="bg-gray-100 text-gray-700 px-3 py-2 rounded hover:bg-gray-200 text-sm">Open Lead Radar</a>
                 <a href="/leads" class="bg-blue-100 text-blue-700 px-3 py-2 rounded hover:bg-blue-200 text-sm">Open Leads</a>
@@ -289,8 +298,13 @@ function dashboard() {
                 open_leads_without_owner: 0
             }
         },
+        leadRadarScope: 'all',
+        leadRadarOwner: '',
         
         async init() {
+            if (typeof CURRENT_USER !== 'undefined' && CURRENT_USER) {
+                this.leadRadarOwner = CURRENT_USER;
+            }
             await this.loadStatus();
             await this.loadLeadRadarOverview();
         },
@@ -298,7 +312,15 @@ function dashboard() {
         async loadLeadRadarOverview() {
             try {
                 const active = (typeof ACTIVE_BRAND !== 'undefined' && ACTIVE_BRAND) ? ACTIVE_BRAND : '';
-                const url = '/api/lead-radar/login-overview' + (active ? ('?brand_name=' + encodeURIComponent(active)) : '');
+                const params = new URLSearchParams();
+                if (active) params.set('brand_name', active);
+                if (this.leadRadarScope === 'mine') {
+                    params.set('mine_only', '1');
+                    if (this.leadRadarOwner) {
+                        params.set('owner', this.leadRadarOwner);
+                    }
+                }
+                const url = '/api/lead-radar/login-overview' + (params.toString() ? ('?' + params.toString()) : '');
                 const res = await fetch(url);
                 if (!res.ok) {
                     return;

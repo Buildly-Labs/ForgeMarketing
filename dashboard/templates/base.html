@@ -269,6 +269,7 @@
     <script>
         const ACTIVE_BRAND = {{ (active_brand.name if active_brand else '') | tojson }};
         const USER_BRANDS = {{ (user_brands | map(attribute='name') | list if user_brands else []) | tojson }};
+        const CURRENT_USER = {{ ((current_user.display_name or current_user.email) if current_user is defined and current_user.is_authenticated else '') | tojson }};
 
         // Global functions
         function showNotification(message, type = 'info') {
