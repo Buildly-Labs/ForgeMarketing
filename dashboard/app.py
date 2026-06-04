@@ -4,7 +4,7 @@ Unified Marketing Automation Dashboard
 Main web interface for managing all brand marketing activities
 """
 
-from flask import Flask, render_template, request, jsonify, redirect, url_for, send_from_directory, abort
+from flask import Flask, render_template, request, jsonify, redirect, url_for, send_from_directory, abort, session
 import asyncio
 import json
 import yaml
@@ -234,6 +234,53 @@ app.register_blueprint(admin_bp)
 app.register_blueprint(marketing_calendar_bp)
 app.register_blueprint(lead_api_bp)
 
+
+def _get_user_brand_context():
+    """Return user-scoped brand list and active brand from DB/session."""
+    try:
+        from dashboard.models import Brand
+
+        # Start with all active brands so screens remain data-driven even
+        # when auth middleware is unavailable or not initialized.
+        user_brands = Brand.query.filter_by(is_active=True).order_by(Brand.name.asc()).all()
+
+        # Narrow to authenticated user scope when flask-login is available.
+        try:
+            from flask_login import current_user
+            if current_user.is_authenticated:
+                if current_user.is_admin:
+                    pass
+                else:
+                    user_brands = [b for b in current_user.get_brands() if b.is_active]
+        except Exception:
+            pass
+
+        active_brand = None
+        active_brand_id = session.get('active_brand_id')
+        active_brand_name = session.get('active_brand_name')
+
+        if active_brand_id:
+            active_brand = next((b for b in user_brands if b.id == active_brand_id), None)
+        if active_brand is None and active_brand_name:
+            active_brand = next((b for b in user_brands if b.name == active_brand_name), None)
+        if active_brand is None and user_brands:
+            active_brand = user_brands[0]
+
+        return user_brands, active_brand
+    except Exception:
+        return [], None
+
+
+@app.context_processor
+def inject_brand_context():
+    """Inject user brand context into all templates for dropdowns and JS globals."""
+    user_brands, active_brand = _get_user_brand_context()
+    return {
+        'user_brands': user_brands,
+        'active_brand': active_brand,
+        'brands': [b.name for b in user_brands],
+    }
+
 # Initialize database on app startup
 @app.before_request
 def initialize_database():
@@ -278,6 +325,18 @@ def check_onboarding():
         # Database not ready yet — let the request through rather than
         # permanently caching a wrong answer
         print(f"⚠️  Error checking onboarding status: {e}")
+
+
+@app.before_request
+def sync_dashboard_brands_from_db():
+    """Keep in-memory dashboard brands aligned with DB for data-driven screens."""
+    try:
+        user_brands, _ = _get_user_brand_context()
+        brand_names = [b.name for b in user_brands]
+        if hasattr(globals().get('dashboard', None), 'brands'):
+            dashboard.brands = brand_names
+    except Exception:
+        pass
 
 # Onboarding route
 @app.route('/onboarding')
@@ -980,7 +1039,7 @@ class MarketingDashboard:
     
     def get_fallback_analytics(self) -> Dict[str, Any]:
         """Enhanced fallback analytics when real data unavailable"""
-        brands = self.brands if self.brands else ['default']
+        brands = list(self.brands) if self.brands else []
         results = {}
         
         for brand in brands:
@@ -1036,7 +1095,7 @@ class MarketingDashboard:
     def get_mock_analytics_summary(self) -> Dict[str, Any]:
         """Return mock analytics summary"""
         summary = {}
-        brands = self.brands if self.brands else ['default']
+        brands = list(self.brands) if self.brands else []
         for brand in brands[:4]:
             score = round(7.0 + ((hash(brand) % 20) / 10), 1)
             trend = 'up' if hash(brand) % 2 == 0 else 'stable'
@@ -1486,8 +1545,11 @@ def brands():
 @app.route('/generate')
 def generate():
     """Content generation page"""
+    user_brands, active_brand = _get_user_brand_context()
     return render_template('generate.html',
-                         brands=dashboard.brands,
+                         brands=[b.name for b in user_brands],
+                         user_brands=user_brands,
+                         active_brand=active_brand,
                          title='Content Generation')
 
 @app.route('/outreach')
@@ -1706,7 +1768,7 @@ def api_social_activity():
     """API endpoint for recent social media activity"""
     if not SOCIAL_AVAILABLE or not social_manager:
         # Return simple mock data aligned to configured brands
-        default_brand = dashboard.brands[0] if dashboard.brands else 'default'
+        default_brand = dashboard.brands[0] if dashboard.brands else 'unassigned'
         return jsonify({
             'success': True,
             'data': [
@@ -1742,7 +1804,7 @@ def api_social_metrics():
     """API endpoint for brand performance metrics"""
     def _fallback_metrics():
         metrics = {}
-        brands = dashboard.brands if dashboard.brands else ['default']
+        brands = dashboard.brands if dashboard.brands else []
         for brand in brands:
             metrics[brand] = {
                 'name': brand,
@@ -4406,10 +4468,16 @@ def api_get_outreach_reports():
 def api_send_test_email():
     """Send a test email using the unified email service with smart routing"""
     try:
-        data = request.get_json()
-        to_email = data.get('to', 'admin@example.com')
-        brand = data.get('brand', 'default')
+        data = request.get_json() or {}
+        to_email = data.get('to') or os.getenv('ADMIN_EMAIL', 'admin@example.com')
+        brand = data.get('brand') or (dashboard.brands[0] if dashboard.brands else '')
         campaign_type = data.get('campaign_type', 'general_outreach')
+
+        if not brand:
+            return jsonify({
+                'success': False,
+                'message': 'No active brands configured. Add a brand before sending test emails.'
+            }), 400
         
         # Check email configuration first
         if not ENVIRONMENT_CONFIG['email']['mailersend_configured'] and not ENVIRONMENT_CONFIG['email']['brevo_configured']:
@@ -4513,8 +4581,8 @@ Best regards,
 def api_test_all_email_configurations():
     """Test email configuration for all brands and campaign types using unified service"""
     try:
-        data = request.get_json()
-        to_email = data.get('to', 'admin@example.com')
+        data = request.get_json() or {}
+        to_email = data.get('to') or os.getenv('ADMIN_EMAIL', 'admin@example.com')
         
         # Import the unified email service
         from unified_email_service import UnifiedEmailService
@@ -4524,7 +4592,12 @@ def api_test_all_email_configurations():
         
         # Test comprehensive routing
         test_results = []
-        brands_to_test = (dashboard.brands[:3] if dashboard.brands else ['default'])
+        brands_to_test = dashboard.brands[:3] if dashboard.brands else []
+        if not brands_to_test:
+            return jsonify({
+                'success': False,
+                'message': 'No active brands configured. Add at least one brand before running comprehensive email tests.'
+            }), 400
         campaigns_to_test = ['general_outreach', 'daily_analytics']  # Key campaigns
         
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')

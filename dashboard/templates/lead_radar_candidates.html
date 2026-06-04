@@ -4,18 +4,33 @@
   <div class="bg-white rounded-lg shadow p-6">
     <h1 class="text-2xl font-bold">Lead Candidates</h1>
     <p class="text-sm text-gray-600">Review candidates before conversion to leads. Human approval is required.</p>
+    <p class="text-xs text-gray-500 mt-1">Assign region and reviewer so ownership is explicit and queue work is visible.</p>
   </div>
+
+  <div class="bg-white rounded-lg shadow p-4" id="queue_summary">Loading queue summary...</div>
 
   <div class="bg-white rounded-lg shadow p-4 grid grid-cols-1 md:grid-cols-4 gap-2">
     <input id="brand_name" placeholder="brand_name" class="border rounded p-2" />
     <input id="status" placeholder="status (needs_review)" class="border rounded p-2" value="needs_review" />
     <button onclick="loadCandidates()" class="bg-gray-900 text-white rounded p-2">Refresh</button>
+    <a href="/lead-radar/sources" class="bg-emerald-600 text-white rounded p-2 text-center">Manage Sources</a>
   </div>
 
   <div class="bg-white rounded-lg shadow p-4" id="candidates"></div>
 </div>
 
 <script>
+let regionsById = {};
+
+function regionOptionsHtml(selectedId) {
+  const options = ['<option value="">Unassigned</option>'];
+  Object.values(regionsById).forEach(r => {
+    const selected = String(r.id) === String(selectedId || '') ? 'selected' : '';
+    options.push(`<option value="${r.id}" ${selected}>${r.name}</option>`);
+  });
+  return options.join('');
+}
+
 async function act(candidateId, action) {
   const reviewer = prompt('Reviewer name:', '');
   const res = await fetch(`/api/lead-radar/candidates/${candidateId}/review`, {
@@ -36,7 +51,55 @@ async function convert(candidateId) {
   loadCandidates();
 }
 
+async function assign(candidateId) {
+  const regionSelect = document.getElementById(`candidate-region-${candidateId}`);
+  const reviewerInput = document.getElementById(`candidate-reviewer-${candidateId}`);
+  const payload = {
+    region_id: regionSelect && regionSelect.value ? parseInt(regionSelect.value, 10) : null,
+    reviewer: reviewerInput ? reviewerInput.value.trim() : ''
+  };
+
+  const res = await fetch(`/api/lead-radar/candidates/${candidateId}/assign`, {
+    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(payload)
+  });
+  const json = await res.json();
+  if (!json.success) { alert(json.error || 'Failed'); return; }
+  loadCandidates();
+}
+
+async function loadRegions() {
+  const brand = document.getElementById('brand_name').value.trim();
+  const url = '/api/leads/regions' + (brand ? ('?brand_name=' + encodeURIComponent(brand)) : '');
+  const res = await fetch(url);
+  const json = await res.json();
+  regionsById = {};
+  (json.data || []).forEach(r => { regionsById[r.id] = r; });
+}
+
+async function loadQueueSummary() {
+  const brand = document.getElementById('brand_name').value.trim();
+  const url = '/api/lead-radar/login-overview' + (brand ? ('?brand_name=' + encodeURIComponent(brand)) : '');
+  const res = await fetch(url);
+  const json = await res.json();
+  const data = json.data || {};
+  const candidateCounts = data.candidate_counts || {};
+  const unassigned = data.unassigned || {};
+
+  document.getElementById('queue_summary').innerHTML = `
+    <div class="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">
+      <div class="p-3 bg-gray-50 rounded">Needs Review: <strong>${candidateCounts.needs_review || 0}</strong></div>
+      <div class="p-3 bg-gray-50 rounded">Approved: <strong>${candidateCounts.approved || 0}</strong></div>
+      <div class="p-3 bg-gray-50 rounded">Due Sources: <strong>${(data.due_sources || []).length}</strong></div>
+      <div class="p-3 bg-gray-50 rounded">Unowned Sources: <strong>${unassigned.sources_without_owner || 0}</strong></div>
+      <div class="p-3 bg-gray-50 rounded">Unowned Leads: <strong>${unassigned.open_leads_without_owner || 0}</strong></div>
+    </div>
+  `;
+}
+
 async function loadCandidates() {
+  await loadRegions();
+  await loadQueueSummary();
+
   const q = new URLSearchParams();
   const brand = document.getElementById('brand_name').value.trim();
   const status = document.getElementById('status').value.trim();
@@ -51,6 +114,11 @@ async function loadCandidates() {
       <div class="text-xs text-gray-600">source=${c.lead_source_id} region=${c.region_id || ''} status=${c.status}</div>
       <div class="text-sm mt-1">${c.signal_summary || ''}</div>
       <div class="text-xs mt-2">fit_score=<strong>${c.fit_score}</strong> why=${JSON.stringify(c.score_breakdown || [])}</div>
+      <div class="mt-2 grid grid-cols-1 md:grid-cols-3 gap-2">
+        <select id="candidate-region-${c.id}" class="border rounded px-2 py-1 text-sm">${regionOptionsHtml(c.region_id)}</select>
+        <input id="candidate-reviewer-${c.id}" class="border rounded px-2 py-1 text-sm" placeholder="reviewer" value="${c.reviewer || ''}">
+        <button class="px-2 py-1 bg-indigo-600 text-white rounded text-sm" onclick="assign(${c.id})">Assign</button>
+      </div>
       <div class="mt-2 space-x-2">
         <button class="px-2 py-1 bg-green-600 text-white rounded" onclick="convert(${c.id})">Convert to Lead</button>
         <button class="px-2 py-1 bg-yellow-600 text-white rounded" onclick="act(${c.id}, 'reject')">Reject</button>
@@ -59,6 +127,10 @@ async function loadCandidates() {
       </div>
     </div>
   `).join('') || '<p class="text-sm text-gray-600">No candidates.</p>';
+}
+
+if (typeof ACTIVE_BRAND !== 'undefined' && ACTIVE_BRAND) {
+  document.getElementById('brand_name').value = ACTIVE_BRAND;
 }
 
 loadCandidates();

@@ -3,7 +3,8 @@
 Human-in-the-loop regional lead intelligence. No auto-send behavior.
 """
 
-from datetime import datetime
+from collections import Counter
+from datetime import datetime, timedelta
 
 from flask import Blueprint, jsonify, render_template, request
 
@@ -16,6 +17,7 @@ from dashboard.lead_radar_models import (
     LeadRadarSetting,
     LeadSource,
     OutreachTemplate,
+    ResearchJob,
     RegionProfile,
     ScoringRule,
 )
@@ -192,6 +194,22 @@ def _candidate_to_dict(candidate: LeadCandidate):
     }
 
 
+def _research_job_to_dict(job: ResearchJob):
+    source = LeadSource.query.get(job.lead_source_id)
+    return {
+        "id": job.id,
+        "lead_source_id": job.lead_source_id,
+        "source_name": source.name if source else "Unknown Source",
+        "status": job.status,
+        "results_count": job.results_count,
+        "candidates_created": job.candidates_created,
+        "error_message": job.error_message,
+        "started_at": _dt(job.started_at),
+        "completed_at": _dt(job.completed_at),
+        "updated_at": _dt(job.updated_at),
+    }
+
+
 # Pages
 @lead_api_bp.route("/lead-radar")
 def lead_radar_home():
@@ -298,6 +316,33 @@ def create_region():
     db.session.add(region)
     db.session.commit()
     return jsonify({"success": True, "data": _region_to_dict(region)}), 201
+
+
+@lead_api_bp.route("/api/leads/regions/<int:region_id>", methods=["PUT"])
+def update_region(region_id):
+    region = RegionProfile.query.get_or_404(region_id)
+    data = request.get_json() or {}
+
+    editable = [
+        "name", "owner", "countries", "timezone_notes", "primary_offer",
+        "entry_price_min", "entry_price_max", "currency", "target_segments",
+        "preferred_channels", "outreach_tone", "local_notes", "is_active",
+    ]
+    for field in editable:
+        if field in data:
+            setattr(region, field, data[field])
+
+    if "slug" in data:
+        slug = (data.get("slug") or "").strip()
+        if not slug:
+            return jsonify({"success": False, "error": "slug cannot be empty"}), 400
+        existing = RegionProfile.query.filter_by(brand_name=region.brand_name, slug=slug).first()
+        if existing and existing.id != region.id:
+            return jsonify({"success": False, "error": "region slug already exists"}), 409
+        region.slug = slug
+
+    db.session.commit()
+    return jsonify({"success": True, "data": _region_to_dict(region)})
 
 
 @lead_api_bp.route("/api/leads", methods=["GET"])
@@ -756,6 +801,26 @@ def review_candidate(candidate_id):
     return jsonify({"success": True, "data": _candidate_to_dict(candidate)})
 
 
+@lead_api_bp.route("/api/lead-radar/candidates/<int:candidate_id>/assign", methods=["POST"])
+def assign_candidate(candidate_id):
+    candidate = LeadCandidate.query.get_or_404(candidate_id)
+    data = request.get_json() or {}
+
+    if "region_id" in data:
+        candidate.region_id = data.get("region_id")
+    if "reviewer" in data:
+        candidate.reviewer = data.get("reviewer", "")
+    if data.get("review_notes"):
+        candidate.review_notes = data.get("review_notes")
+
+    # Assigning a candidate moves it into a visible working queue unless already terminal.
+    if candidate.status in {"new", "queued", "pending"}:
+        candidate.status = "needs_review"
+
+    db.session.commit()
+    return jsonify({"success": True, "data": _candidate_to_dict(candidate)})
+
+
 @lead_api_bp.route("/api/lead-radar/candidates/<int:candidate_id>/convert", methods=["POST"])
 def convert_candidate(candidate_id):
     candidate = LeadCandidate.query.get_or_404(candidate_id)
@@ -933,6 +998,97 @@ def update_settings():
 def lead_radar_dashboard_summary():
     brand_name = request.args.get("brand_name")
     return jsonify({"success": True, "data": get_dashboard_summary(brand_name=brand_name)})
+
+
+@lead_api_bp.route("/api/lead-radar/login-overview", methods=["GET"])
+def lead_radar_login_overview():
+    """Operational snapshot for login/dashboard visibility of lead generation flow."""
+    requested_brand = request.args.get("brand_name", "").strip()
+
+    brand_rows = Brand.query.filter_by(is_active=True).order_by(Brand.name.asc()).all()
+    brand_names = [b.name for b in brand_rows]
+    active_brand = requested_brand if requested_brand in brand_names else (brand_names[0] if brand_names else "")
+
+    leads_query = Lead.query.filter_by(archived_at=None)
+    if active_brand:
+        leads_query = leads_query.filter_by(brand_name=active_brand)
+
+    leads = leads_query.order_by(Lead.updated_at.desc()).limit(8).all()
+
+    candidates_query = LeadCandidate.query
+    if active_brand:
+        candidates_query = candidates_query.filter_by(brand_name=active_brand)
+    recent_candidates = candidates_query.order_by(LeadCandidate.updated_at.desc()).limit(10).all()
+
+    candidate_counts = Counter([c.status or "new" for c in recent_candidates])
+
+    region_query = RegionProfile.query
+    if active_brand:
+        region_query = region_query.filter_by(brand_name=active_brand)
+    regions = region_query.order_by(RegionProfile.name.asc()).all()
+
+    source_query = LeadSource.query
+    if active_brand:
+        source_query = source_query.filter_by(brand_name=active_brand)
+    sources = source_query.order_by(LeadSource.updated_at.desc()).all()
+
+    source_ids = [s.id for s in sources]
+    jobs = []
+    if source_ids:
+        jobs = ResearchJob.query.filter(ResearchJob.lead_source_id.in_(source_ids)).order_by(ResearchJob.updated_at.desc()).limit(25).all()
+
+    now = datetime.utcnow()
+    running_jobs = [j for j in jobs if j.status in {"queued", "running"}]
+    recent_jobs = jobs[:8]
+    due_sources = [
+        s for s in sources
+        if s.is_active and s.run_frequency in {"daily", "weekly", "monthly"}
+        and (s.next_run_at is None or s.next_run_at <= now)
+    ]
+    upcoming_sources = [
+        s for s in sources
+        if s.is_active and s.run_frequency in {"daily", "weekly", "monthly"}
+        and s.next_run_at is not None and now < s.next_run_at <= now + timedelta(hours=24)
+    ]
+
+    open_statuses = {"researched", "qualified", "contacted", "reply_received", "meeting_scheduled", "call_booked", "proposal_sent"}
+    open_leads = [l for l in leads_query.limit(500).all() if (l.status or "") in open_statuses]
+    workload = Counter([l.owner or "unassigned" for l in open_leads])
+
+    setting_payload = {}
+    if active_brand:
+        setting = LeadRadarSetting.query.filter_by(brand_name=active_brand).first()
+        setting_payload = (setting.settings_json or {}) if setting else {}
+
+    return jsonify({
+        "success": True,
+        "data": {
+            "timestamp": _dt(now),
+            "brands": brand_names,
+            "active_brand": active_brand,
+            "leads": [_lead_to_dict(l) for l in leads],
+            "recent_candidates": [_candidate_to_dict(c) for c in recent_candidates],
+            "candidate_counts": dict(candidate_counts),
+            "regions": [_region_to_dict(r) for r in regions],
+            "sources": [_source_to_dict(s) for s in sources[:20]],
+            "running_jobs": [_research_job_to_dict(j) for j in running_jobs[:10]],
+            "recent_jobs": [_research_job_to_dict(j) for j in recent_jobs],
+            "due_sources": [_source_to_dict(s) for s in due_sources[:20]],
+            "upcoming_sources": [_source_to_dict(s) for s in upcoming_sources[:20]],
+            "owner_workload": dict(workload),
+            "unassigned": {
+                "regions_without_owner": len([r for r in regions if not (r.owner or "").strip()]),
+                "sources_without_owner": len([s for s in sources if not (s.owner or "").strip()]),
+                "sources_without_region": len([s for s in sources if not s.region_id]),
+                "open_leads_without_owner": len([l for l in open_leads if not (l.owner or "").strip()]),
+            },
+            "settings": {
+                "always_on_research": bool(setting_payload.get("always_on_research", True)),
+                "auto_run_on_login": bool(setting_payload.get("auto_run_on_login", False)),
+                "target_new_candidates_daily": int(setting_payload.get("target_new_candidates_daily", 10) or 10),
+            },
+        },
+    })
 
 
 @lead_api_bp.route("/api/lead-radar/seed-defaults", methods=["POST"])

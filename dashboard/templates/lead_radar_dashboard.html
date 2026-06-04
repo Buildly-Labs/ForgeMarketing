@@ -26,6 +26,14 @@
     <h2 class="text-lg font-semibold mb-4">Summary</h2>
     <div id="summary" class="text-sm text-gray-700">Loading...</div>
   </div>
+
+  <div class="bg-white rounded-lg shadow p-6">
+    <div class="flex items-center justify-between mb-3">
+      <h2 class="text-lg font-semibold">Live Operations Snapshot</h2>
+      <button onclick="runDueSourcesFromHome()" class="bg-emerald-600 text-white px-3 py-1 rounded text-sm">Run Due Research</button>
+    </div>
+    <div id="ops_snapshot" class="text-sm text-gray-700">Loading...</div>
+  </div>
 </div>
 
 <script>
@@ -46,5 +54,65 @@
     </div>
   `;
 })();
+
+async function runDueSourcesFromHome() {
+  const params = new URLSearchParams(window.location.search);
+  const brand = params.get('brand_name');
+  const res = await fetch('/api/lead-radar/research-jobs/run-due', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ brand_name: brand || undefined, limit: 25 })
+  });
+  const json = await res.json();
+  if (!json.success) {
+    alert(json.error || 'Failed to run due sources');
+    return;
+  }
+  alert(`Due sources executed. New candidates: ${json.data.total_candidates_created || 0}`);
+  loadOpsSnapshot();
+}
+
+async function loadOpsSnapshot() {
+  const params = new URLSearchParams(window.location.search);
+  const brand = params.get('brand_name');
+  const url = '/api/lead-radar/login-overview' + (brand ? ('?brand_name=' + encodeURIComponent(brand)) : '');
+  const res = await fetch(url);
+  const json = await res.json();
+  const data = json.data || {};
+  const unassigned = data.unassigned || {};
+  const counts = data.candidate_counts || {};
+
+  document.getElementById('ops_snapshot').innerHTML = `
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+      <div class="p-3 bg-gray-50 rounded">Needs Review: <strong>${counts.needs_review || 0}</strong></div>
+      <div class="p-3 bg-gray-50 rounded">Due Sources: <strong>${(data.due_sources || []).length}</strong></div>
+      <div class="p-3 bg-gray-50 rounded">Running Jobs: <strong>${(data.running_jobs || []).length}</strong></div>
+      <div class="p-3 bg-gray-50 rounded">Unowned Leads: <strong>${unassigned.open_leads_without_owner || 0}</strong></div>
+    </div>
+    <div class="text-xs text-gray-600 mb-3">
+      Ownership gaps: regions ${unassigned.regions_without_owner || 0}, sources ${unassigned.sources_without_owner || 0}, source-region links ${unassigned.sources_without_region || 0}.
+    </div>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+      <div class="border rounded p-3">
+        <h3 class="font-semibold mb-2">Recent Leads</h3>
+        ${(data.leads || []).slice(0, 5).map(l => `
+          <div class="border-b py-1">
+            <strong>${l.company_name || ''}</strong> · ${l.owner || 'unassigned'} · ${l.status || 'researched'}
+          </div>
+        `).join('') || '<p class="text-gray-500">No leads yet.</p>'}
+      </div>
+      <div class="border rounded p-3">
+        <h3 class="font-semibold mb-2">Research Jobs</h3>
+        ${(data.recent_jobs || []).slice(0, 5).map(j => `
+          <div class="border-b py-1">
+            <strong>${j.source_name}</strong> · ${j.status} · +${j.candidates_created || 0} candidates
+          </div>
+        `).join('') || '<p class="text-gray-500">No jobs yet.</p>'}
+      </div>
+    </div>
+  `;
+}
+
+loadOpsSnapshot();
 </script>
 {% endblock %}

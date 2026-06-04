@@ -93,6 +93,89 @@
         </div>
     </div>
 
+    <!-- Lead Radar At Login -->
+    <div class="bg-white rounded-lg p-6 card-shadow">
+        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-4">
+            <div>
+                <h3 class="text-xl font-semibold">Lead Radar Queue</h3>
+                <p class="text-sm text-gray-600">See new leads, candidate review workload, and research activity immediately after login.</p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                <a href="/lead-radar" class="bg-gray-100 text-gray-700 px-3 py-2 rounded hover:bg-gray-200 text-sm">Open Lead Radar</a>
+                <a href="/leads" class="bg-blue-100 text-blue-700 px-3 py-2 rounded hover:bg-blue-200 text-sm">Open Leads</a>
+                <a href="/lead-radar/candidates" class="bg-yellow-100 text-yellow-700 px-3 py-2 rounded hover:bg-yellow-200 text-sm">Review Candidates</a>
+                <button @click="runDueLeadResearch()" class="bg-emerald-600 text-white px-3 py-2 rounded hover:bg-emerald-700 text-sm">Run Due Research</button>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-5">
+            <div class="p-3 bg-gray-50 rounded">
+                <div class="text-xs text-gray-500">Needs Review</div>
+                <div class="text-2xl font-semibold" x-text="leadRadar.candidateCounts.needs_review || 0">0</div>
+            </div>
+            <div class="p-3 bg-gray-50 rounded">
+                <div class="text-xs text-gray-500">Due Sources</div>
+                <div class="text-2xl font-semibold" x-text="leadRadar.dueSources.length">0</div>
+            </div>
+            <div class="p-3 bg-gray-50 rounded">
+                <div class="text-xs text-gray-500">Running Jobs</div>
+                <div class="text-2xl font-semibold" x-text="leadRadar.runningJobs.length">0</div>
+            </div>
+            <div class="p-3 bg-gray-50 rounded">
+                <div class="text-xs text-gray-500">Open Leads Unassigned</div>
+                <div class="text-2xl font-semibold" x-text="leadRadar.unassigned.open_leads_without_owner || 0">0</div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div class="border border-gray-200 rounded p-3">
+                <h4 class="font-semibold mb-2">Latest Leads</h4>
+                <template x-for="lead in leadRadar.recentLeads" :key="'lead-' + lead.id">
+                    <div class="text-sm border-b border-gray-100 py-2 flex items-center justify-between gap-2">
+                        <div>
+                            <div class="font-medium" x-text="lead.company_name"></div>
+                            <div class="text-xs text-gray-600">
+                                <span x-text="lead.owner || 'unassigned'"></span>
+                                ·
+                                <span x-text="lead.status || 'researched'"></span>
+                                ·
+                                <span x-text="lead.brand_name"></span>
+                            </div>
+                        </div>
+                        <a :href="'/leads/' + lead.id" class="text-blue-600 text-xs">Open</a>
+                    </div>
+                </template>
+                <p x-show="leadRadar.recentLeads.length === 0" class="text-sm text-gray-500">No leads yet. Run due sources or convert candidates to start pipeline.</p>
+            </div>
+
+            <div class="border border-gray-200 rounded p-3">
+                <h4 class="font-semibold mb-2">Research Activity</h4>
+                <template x-for="job in leadRadar.recentJobs" :key="'job-' + job.id">
+                    <div class="text-sm border-b border-gray-100 py-2">
+                        <div class="flex items-center justify-between">
+                            <span class="font-medium" x-text="job.source_name"></span>
+                            <span class="text-xs px-2 py-0.5 rounded"
+                                  :class="job.status === 'completed' ? 'bg-green-100 text-green-700' : (job.status === 'failed' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700')"
+                                  x-text="job.status"></span>
+                        </div>
+                        <div class="text-xs text-gray-600 mt-1">
+                            candidates: <span x-text="job.candidates_created || 0"></span>
+                            · results: <span x-text="job.results_count || 0"></span>
+                        </div>
+                    </div>
+                </template>
+                <p x-show="leadRadar.recentJobs.length === 0" class="text-sm text-gray-500">No research job history yet.</p>
+            </div>
+        </div>
+
+        <div class="mt-4 text-xs text-gray-600">
+            Ownership gaps:
+            regions <strong x-text="leadRadar.unassigned.regions_without_owner || 0"></strong>,
+            sources <strong x-text="leadRadar.unassigned.sources_without_owner || 0"></strong>,
+            source-region links <strong x-text="leadRadar.unassigned.sources_without_region || 0"></strong>.
+        </div>
+    </div>
+
     <!-- Intern Action Board -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <div class="bg-white rounded-lg p-6 card-shadow">
@@ -193,9 +276,78 @@ function dashboard() {
         needsReview: [],
         readyToSchedule: [],
         performanceChecks: [],
+        leadRadar: {
+            candidateCounts: {},
+            recentLeads: [],
+            runningJobs: [],
+            recentJobs: [],
+            dueSources: [],
+            unassigned: {
+                regions_without_owner: 0,
+                sources_without_owner: 0,
+                sources_without_region: 0,
+                open_leads_without_owner: 0
+            }
+        },
         
         async init() {
             await this.loadStatus();
+            await this.loadLeadRadarOverview();
+        },
+
+        async loadLeadRadarOverview() {
+            try {
+                const active = (typeof ACTIVE_BRAND !== 'undefined' && ACTIVE_BRAND) ? ACTIVE_BRAND : '';
+                const url = '/api/lead-radar/login-overview' + (active ? ('?brand_name=' + encodeURIComponent(active)) : '');
+                const res = await fetch(url);
+                if (!res.ok) {
+                    return;
+                }
+                const json = await res.json();
+                const data = json.data || {};
+
+                this.leadRadar.candidateCounts = data.candidate_counts || {};
+                this.leadRadar.recentLeads = data.leads || [];
+                this.leadRadar.runningJobs = data.running_jobs || [];
+                this.leadRadar.recentJobs = data.recent_jobs || [];
+                this.leadRadar.dueSources = data.due_sources || [];
+                this.leadRadar.unassigned = data.unassigned || this.leadRadar.unassigned;
+
+                const settings = data.settings || {};
+                const autoRunKey = `lead-radar-auto-run:${data.active_brand || 'all'}`;
+                if (settings.auto_run_on_login && this.leadRadar.dueSources.length > 0 && !sessionStorage.getItem(autoRunKey)) {
+                    sessionStorage.setItem(autoRunKey, '1');
+                    await this.runDueLeadResearch(true);
+                }
+            } catch (error) {
+                console.error('Failed to load Lead Radar overview:', error);
+            }
+        },
+
+        async runDueLeadResearch(silent = false) {
+            try {
+                const active = (typeof ACTIVE_BRAND !== 'undefined' && ACTIVE_BRAND) ? ACTIVE_BRAND : '';
+                const res = await fetch('/api/lead-radar/research-jobs/run-due', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ brand_name: active || undefined, limit: 25 })
+                });
+                const json = await res.json();
+                if (!json.success) {
+                    if (!silent) {
+                        showNotification(json.error || 'Failed to run due research', 'error');
+                    }
+                    return;
+                }
+                if (!silent) {
+                    showNotification(`Lead research complete: ${json.data.total_candidates_created || 0} new candidates`, 'success');
+                }
+                await this.loadLeadRadarOverview();
+            } catch (error) {
+                if (!silent) {
+                    showNotification('Failed to run due lead research', 'error');
+                }
+            }
         },
         
         async loadStatus() {

@@ -31,6 +31,7 @@
           <th>Score</th>
           <th>Priority</th>
           <th>Status</th>
+          <th>Assign</th>
           <th>Actions</th>
         </tr>
       </thead>
@@ -40,6 +41,24 @@
 </div>
 
 <script>
+const LEAD_STATUSES = ['researched', 'qualified', 'contacted', 'reply_received', 'meeting_scheduled', 'call_booked', 'proposal_sent', 'won', 'lost', 'do_not_contact'];
+
+async function saveLeadAssignment(leadId) {
+  const owner = document.getElementById(`lead-owner-${leadId}`).value.trim();
+  const status = document.getElementById(`lead-status-${leadId}`).value;
+  const res = await fetch(`/api/leads/${leadId}`, {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ owner, status })
+  });
+  const json = await res.json();
+  if (!json.success) {
+    alert(json.error || 'Failed to update lead');
+    return;
+  }
+  loadLeads();
+}
+
 async function loadLeads() {
   const q = new URLSearchParams();
   ['brand_name', 'region_id', 'owner', 'status', 'priority'].forEach(id => {
@@ -60,11 +79,25 @@ async function loadLeads() {
         <td>${lead.fit_score || 0}</td>
         <td>${lead.priority || ''}</td>
         <td>${lead.status || ''}${lead.is_do_not_contact ? ' (DNC)' : ''}</td>
+        <td>
+          <div class="flex gap-1">
+            <input id="lead-owner-${lead.id}" class="border rounded px-1 py-0.5 w-28" value="${lead.owner || ''}" placeholder="owner">
+            <select id="lead-status-${lead.id}" class="border rounded px-1 py-0.5">
+              ${LEAD_STATUSES.map(s => `<option value="${s}" ${lead.status === s ? 'selected' : ''}>${s}</option>`).join('')}
+            </select>
+            <button class="bg-indigo-600 text-white rounded px-2 py-0.5" onclick="saveLeadAssignment(${lead.id})">Save</button>
+          </div>
+        </td>
         <td><a href="/leads/${lead.id}" class="text-blue-600">Open</a></td>
       </tr>
     `;
   });
 }
+
+if (typeof ACTIVE_BRAND !== 'undefined' && ACTIVE_BRAND) {
+  document.getElementById('brand_name').value = ACTIVE_BRAND;
+}
+
 loadLeads();
 </script>
 {% endblock %}

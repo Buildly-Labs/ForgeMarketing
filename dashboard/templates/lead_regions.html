@@ -17,14 +17,66 @@
 </div>
 
 <script>
+let regionsCache = [];
+
 async function loadRegions() {
   const brand = document.getElementById('brand_name').value.trim();
   const url = '/api/leads/regions' + (brand ? ('?brand_name=' + encodeURIComponent(brand)) : '');
   const res = await fetch(url);
   const json = await res.json();
+  regionsCache = json.data || [];
   const wrap = document.getElementById('regions_list');
-  const rows = (json.data || []).map(r => `<div class="border-b py-2"><strong>${r.name}</strong> (${r.slug}) - owner: ${r.owner || 'unassigned'}</div>`);
+  const rows = regionsCache.map(r => `
+    <div class="border-b py-3 text-sm">
+      <div class="flex items-center justify-between gap-2">
+        <div>
+          <strong>${r.name}</strong> (${r.slug})
+          <div class="text-xs text-gray-600">countries: ${(r.countries || []).join(', ') || '-'} | brand: ${r.brand_name}</div>
+        </div>
+        <span class="text-xs ${r.is_active ? 'text-green-700' : 'text-gray-500'}">${r.is_active ? 'active' : 'inactive'}</span>
+      </div>
+      <div class="mt-2 flex gap-2">
+        <input id="region-owner-${r.id}" value="${r.owner || ''}" class="border rounded p-1 flex-1" placeholder="owner">
+        <button onclick="saveRegionOwner(${r.id})" class="bg-indigo-600 text-white rounded px-2 py-1 text-xs">Save Owner</button>
+      </div>
+    </div>
+  `);
   wrap.innerHTML = rows.join('') || '<p class="text-sm text-gray-600">No regions found.</p>';
+}
+
+async function saveRegionOwner(regionId) {
+  const row = regionsCache.find(r => r.id === regionId);
+  if (!row) return;
+
+  const owner = document.getElementById(`region-owner-${regionId}`).value.trim();
+  const payload = {
+    name: row.name,
+    slug: row.slug,
+    owner: owner,
+    countries: row.countries || [],
+    timezone_notes: row.timezone_notes || '',
+    primary_offer: row.primary_offer || '',
+    entry_price_min: row.entry_price_min || 0,
+    entry_price_max: row.entry_price_max || 0,
+    currency: row.currency || 'USD',
+    target_segments: row.target_segments || [],
+    preferred_channels: row.preferred_channels || [],
+    outreach_tone: row.outreach_tone || '',
+    local_notes: row.local_notes || '',
+    is_active: !!row.is_active
+  };
+
+  const res = await fetch(`/api/leads/regions/${regionId}`, {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  });
+  const json = await res.json();
+  if (!json.success) {
+    alert(json.error || 'Failed to update region');
+    return;
+  }
+  loadRegions();
 }
 
 async function createRegion() {
