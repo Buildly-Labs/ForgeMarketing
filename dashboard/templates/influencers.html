@@ -669,7 +669,8 @@ function influencerManager() {
                 
                 if (response.ok) {
                     const result = await response.json();
-                    alert(`✅ Successfully synced ${result.synced_count} influencers to contacts system!`);
+                    const queued = result.queued_outreach_count || 0;
+                    alert(`✅ Successfully synced ${result.synced_count} influencers to contacts system${queued ? ` and queued ${queued} outreach touch${queued === 1 ? '' : 'es'}` : ''}!`);
                 } else {
                     const error = await response.json();
                     alert(`❌ Failed to sync influencers: ${error.error}`);
@@ -698,7 +699,9 @@ function influencerManager() {
                 });
                 
                 if (response.ok) {
-                    alert(`${influencer.name} has been synced to CRM contacts!`);
+                    const result = await response.json();
+                    const queued = result.queued_outreach_count || 0;
+                    alert(`${influencer.name} has been synced to CRM contacts${queued ? ' and added to the outreach queue' : ''}!`);
                 } else {
                     alert('Failed to sync to CRM. Please try again.');
                 }

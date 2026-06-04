@@ -5299,53 +5299,47 @@ def api_sync_influencers_to_contacts():
         logger = logging.getLogger('dashboard')
         from automation.contacts_manager import UnifiedContactsManager
         
+        data = request.get_json(silent=True) or {}
+        queue_outreach = data.get('queue_outreach', True)
+        
         # Get all non-deleted influencers
         discovery = BrandInfluencerDiscovery()
         influencers = discovery.get_brand_influencers()
         
         contacts_manager = UnifiedContactsManager()
         synced_count = 0
+        queued_outreach_count = 0
         
         for influencer in influencers:
-            # Check if influencer already exists as contact by searching name
-            existing = contacts_manager.get_contacts(
-                search=influencer['name'],
-                contact_type='influencer',
-                brand=influencer['brand'],
-                limit=1
-            )
-            
-            if not existing:
-                # Parse social media links for better CRM integration
-                social_links = influencer.get('social_links', '')
-                parsed_links = []
-                social_platforms = {}
-                
-                if social_links:
-                    for link in social_links.split(','):
-                        if ':' in link:
-                            platform, url = link.split(':', 1)
-                            platform = platform.strip()
-                            url = url.strip()
-                            parsed_links.append(f"{platform.title()}: {url}")
-                            social_platforms[f'{platform}_url'] = url
-                
-                social_links_formatted = '\n'.join(parsed_links) if parsed_links else 'No social media links'
-                
-                # Create new contact from influencer data
-                contact_data = {
-                    'name': influencer['name'],
-                    'email': influencer.get('contact_email', ''),
-                    'contact_type': 'influencer',
-                    'brand': influencer['brand'],
-                    'website': influencer.get('website', ''),
-                    'notes': f"""Auto-synced from influencer discovery.
+            social_links = influencer.get('social_links', '')
+            parsed_links = []
+            social_platforms = {}
+            contact_payload = {}
+
+            if social_links:
+                for link in social_links.split(','):
+                    if ':' in link:
+                        platform, url = link.split(':', 1)
+                        platform = platform.strip().lower()
+                        url = url.strip()
+                        parsed_links.append(f"{platform.title()}: {url}")
+                        social_platforms[f'{platform}_url'] = url
+
+            social_links_formatted = '\n'.join(parsed_links) if parsed_links else 'No social media links'
+
+            contact_payload.update({
+                'name': influencer.get('name'),
+                'email': influencer.get('contact_email', ''),
+                'contact_type': 'influencer',
+                'brand': influencer.get('brand', ''),
+                'website_url': influencer.get('website', ''),
+                'notes': f"""Auto-synced from influencer discovery.
 
 📊 Influencer Stats:
-• Platform: {influencer['primary_platform']}
-• Followers: {influencer['total_reach']:,}
-• Engagement: {influencer['avg_engagement_rate']}%
-• Brand Alignment: {round(influencer['brand_alignment_score']*100)}%
+• Platform: {influencer.get('primary_platform', 'unknown')}
+• Followers: {influencer.get('total_reach', 0):,}
+• Engagement: {influencer.get('avg_engagement_rate', 0)}%
+• Brand Alignment: {round(influencer.get('brand_alignment_score', 0) * 100)}%
 • Niche: {influencer.get('niche', 'N/A')}
 
 📱 Social Media Profiles:
@@ -5354,25 +5348,41 @@ def api_sync_influencers_to_contacts():
 📝 Bio: {influencer.get('bio_summary', 'No bio available')}
 
 🗒️ Notes: {influencer.get('outreach_notes', 'None')}""",
-                    # Store social media specific data in custom fields
-                    'platform': influencer['primary_platform'],
-                    'followers_count': str(influencer['total_reach']),
-                    'engagement_rate': str(influencer['avg_engagement_rate']),
-                    'alignment_score': str(influencer['brand_alignment_score']),
-                    'niche': influencer.get('niche', ''),
-                    'bio_summary': influencer.get('bio_summary', ''),
-                    'social_links': social_links,
-                    **social_platforms  # Add individual platform URLs as separate fields
-                }
-                
-                contact_id = contacts_manager.create_contact(contact_data)
-                if contact_id:
-                    synced_count += 1
+                'platform': influencer.get('primary_platform', ''),
+                'followers_count': int(influencer.get('total_reach', 0) or 0),
+                'engagement_rate': float(influencer.get('avg_engagement_rate', 0) or 0),
+                'alignment_score': float(influencer.get('brand_alignment_score', 0) or 0),
+                'niche': influencer.get('niche', ''),
+                'bio_summary': influencer.get('bio_summary', ''),
+                'linkedin_url': influencer.get('website', '') if influencer.get('primary_platform') == 'linkedin' else '',
+                **social_platforms,
+            })
+
+            contact_result = contacts_manager.upsert_contact(contact_payload)
+            if contact_result.get('id'):
+                synced_count += 1
+
+                existing_contact = contacts_manager.get_contact(contact_result['id']) if queue_outreach else None
+                has_social_outbound = any(
+                    touch.get('touch_direction') == 'outbound' and touch.get('touch_type') == 'social_dm'
+                    for touch in (existing_contact or {}).get('touches', [])
+                )
+                if queue_outreach and (contact_result.get('created') or not has_social_outbound):
+                    contacts_manager.add_touch(contact_result['id'], {
+                        'touch_type': 'social_dm',
+                        'touch_direction': 'outbound',
+                        'subject': f"Queued outreach for {influencer.get('name', 'influencer')}",
+                        'message': influencer.get('outreach_notes') or contact_payload['notes'],
+                        'platform': influencer.get('primary_platform', 'social'),
+                        'status': 'queued'
+                    })
+                    queued_outreach_count += 1
         
         return jsonify({
             'success': True,
             'message': f'Synced {synced_count} influencers to contacts',
             'synced_count': synced_count,
+            'queued_outreach_count': queued_outreach_count,
             'total_influencers': len(influencers)
         })
         

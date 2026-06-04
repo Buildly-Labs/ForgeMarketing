@@ -331,7 +331,8 @@ class UnifiedContactsManager:
         """Create new contact"""
         with sqlite3.connect(self.db_path) as conn:
             # Prepare tags as JSON
-            tags = json.dumps(contact_data.get('tags', []))
+            tags_value = contact_data.get('tags', [])
+            tags = tags_value if isinstance(tags_value, str) else json.dumps(tags_value)
             
             cursor = conn.execute("""
                 INSERT INTO contacts 
@@ -363,6 +364,72 @@ class UnifiedContactsManager:
             ))
             
             return cursor.lastrowid
+
+    def upsert_contact(self, contact_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Create or update a contact using the best available identity fields."""
+        contact = dict(contact_data)
+        if contact.get('linkedin_url'):
+            contact['linkedin_url'] = self.normalize_linkedin_url(contact['linkedin_url'])
+
+        if 'tags' in contact and not isinstance(contact['tags'], str):
+            contact['tags'] = json.dumps(contact['tags'] or [])
+
+        brand = contact.get('brand') or ''
+        contact_type = contact.get('contact_type') or 'influencer'
+        search_fields = [
+            ('email', contact.get('email')),
+            ('linkedin_url', contact.get('linkedin_url')),
+            ('website_url', contact.get('website_url')),
+            ('twitter_handle', contact.get('twitter_handle')),
+            ('instagram_handle', contact.get('instagram_handle')),
+            ('youtube_channel', contact.get('youtube_channel')),
+            ('bluesky_handle', contact.get('bluesky_handle')),
+            ('tiktok_handle', contact.get('tiktok_handle')),
+        ]
+
+        with sqlite3.connect(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            contact_id = None
+            allowed_keys = {
+                'name', 'email', 'company', 'title', 'brand', 'contact_type', 'status', 'source',
+                'linkedin_url', 'twitter_handle', 'instagram_handle', 'youtube_channel', 'website_url',
+                'followers_count', 'engagement_rate', 'alignment_score', 'platform', 'tags', 'notes',
+                'phone', 'bluesky_handle', 'tiktok_handle'
+            }
+
+            for field, value in search_fields:
+                if not value:
+                    continue
+                row = conn.execute(
+                    f"SELECT id FROM contacts WHERE {field} = ? AND brand = ? LIMIT 1",
+                    (value, brand),
+                ).fetchone()
+                if row:
+                    contact_id = row['id']
+                    break
+
+            if not contact_id and contact.get('name'):
+                row = conn.execute(
+                    "SELECT id FROM contacts WHERE name = ? AND brand = ? AND contact_type = ? LIMIT 1",
+                    (contact['name'], brand, contact_type),
+                ).fetchone()
+                if row:
+                    contact_id = row['id']
+
+            if contact_id:
+                update_payload = {
+                    key: value for key, value in contact.items()
+                    if key in allowed_keys and value is not None
+                }
+                self.update_contact(contact_id, update_payload)
+                return {'id': contact_id, 'created': False}
+
+            payload = {key: value for key, value in contact.items() if key in allowed_keys and value is not None}
+            payload.setdefault('brand', brand)
+            payload.setdefault('contact_type', contact_type)
+            payload.setdefault('status', 'active')
+            payload.setdefault('source', 'discovery')
+            return {'id': self.create_contact(payload), 'created': True}
     
     def update_contact(self, contact_id: int, update_data: Dict[str, Any]) -> bool:
         """Update existing contact"""

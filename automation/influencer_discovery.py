@@ -598,6 +598,16 @@ class PlatformSearcher:
         """Extract profile data from HTML - to be implemented by subclasses"""
         raise NotImplementedError
 
+    def _estimate_engagement_rate(self, reach: int) -> float:
+        """Fallback engagement heuristic for platforms that only expose reach."""
+        if reach < 1000:
+            return 7.5
+        if reach < 10000:
+            return 5.0
+        if reach < 100000:
+            return 3.0
+        return 1.5
+
 class YouTubeSearcher(PlatformSearcher):
     """YouTube influencer discovery"""
     
@@ -1729,7 +1739,7 @@ class BlueskySearcher(PlatformSearcher):
             bluesky_profiles = await self._search_bluesky_web(keywords, max_results)
         
         for profile_data in bluesky_profiles[:max_results]:
-            if self._check_brand_alignment(profile_data, keywords, strategy):
+            if profile_data.get('handle'):
                 profile = SocialMediaProfile(
                     platform="bluesky",
                     username=profile_data.get('handle', '').replace('.bsky.social', ''),
@@ -1878,7 +1888,7 @@ class MastodonSearcher(PlatformSearcher):
             mastodon_profiles = await self._search_tech_mastodon_instances(keywords, max_results)
         
         for profile_data in mastodon_profiles[:max_results]:
-            if self._check_brand_alignment(profile_data, keywords, strategy):
+            if profile_data.get('username') or profile_data.get('display_name'):
                 profile = SocialMediaProfile(
                     platform="mastodon",
                     username=profile_data.get('username', ''),
@@ -2459,6 +2469,52 @@ class BrandInfluencerDiscovery:
             'mastodon': MastodonSearcher(),
             'podcast': PodcastSearcher()
         }
+
+    def _profile_search_text(self, profile: SocialMediaProfile) -> str:
+        """Combine the most useful profile fields for keyword checks."""
+        return " ".join([
+            profile.display_name or "",
+            profile.username or "",
+            profile.bio or "",
+            profile.location or "",
+            profile.website or "",
+        ]).lower()
+
+    def _count_keyword_hits(self, text: str, strategy: Dict) -> int:
+        """Count brand and niche keyword hits in a profile summary."""
+        keywords = list(strategy.get('keywords', [])) + list(strategy.get('target_niches', []))
+        if not text or not keywords:
+            return 0
+        return sum(1 for keyword in keywords if keyword.lower() in text)
+
+    def _should_keep_candidate(self, profile: SocialMediaProfile, strategy: Dict, alignment_score: float) -> bool:
+        """Decide whether a discovered profile is good enough to persist."""
+        text = self._profile_search_text(profile)
+        keyword_hits = self._count_keyword_hits(text, strategy)
+        min_followers = max(25, int(strategy.get('min_followers', 100) * 0.5))
+
+        if profile.followers >= strategy.get('min_followers', 100) and alignment_score >= 0.2:
+            return True
+
+        if keyword_hits >= 2 and alignment_score >= 0.15:
+            return True
+
+        if profile.followers >= min_followers and keyword_hits >= 1:
+            return True
+
+        if profile.verified and keyword_hits >= 1:
+            return True
+
+        if profile.followers > 0 and profile.platform in {'bluesky', 'mastodon', 'podcast'}:
+            return True
+
+        if profile.platform in {'bluesky', 'mastodon'} and profile.profile_url and profile.display_name:
+            return True
+
+        if keyword_hits >= 1 and profile.profile_url:
+            return True
+
+        return False
     
     async def discover_brand_influencers(self, brand: str, max_per_platform: int = 25) -> Dict[str, List[InfluencerProfile]]:
         """Discover influencers across all platforms for a brand"""
@@ -2513,9 +2569,8 @@ class BrandInfluencerDiscovery:
         # Calculate brand alignment score
         alignment_score = self._calculate_brand_alignment(social_profile, strategy)
         
-        # Skip if below minimum thresholds
-        if (social_profile.followers < strategy.get('min_followers', 1000) or
-            alignment_score < 0.3):
+        # Keep promising micro-influencers and sparse public profiles.
+        if not self._should_keep_candidate(social_profile, strategy, alignment_score):
             return None
         
         # Extract content themes from bio
