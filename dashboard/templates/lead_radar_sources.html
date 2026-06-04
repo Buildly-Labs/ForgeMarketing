@@ -1,13 +1,439 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="space-y-6">
-  <div class="bg-white rounded-lg shadow p-6">
-    <h1 class="text-2xl font-bold">Lead Radar Sources</h1>
-    <p class="text-sm text-gray-600">Configure approved/public/manual lead sources, then run automated research to queue candidates for review.</p>
+<div class="space-y-4" id="sourcesApp">
+
+  <!-- Header -->
+  <div class="bg-white rounded-lg shadow p-5">
+    <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+      <div>
+        <h1 class="text-2xl font-bold">Lead Radar — Sources</h1>
+        <p class="text-sm text-gray-600 mt-1">
+          Add research sources, set keywords, and run or schedule automated discovery.
+          Candidates go to your <a href="/lead-radar/candidates" class="text-blue-600 underline">Candidates queue</a> for human review before becoming leads.
+        </p>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <select id="brand_name" class="border rounded px-2 py-2 text-sm" onchange="onBrandChange()">
+          <option value="">— select brand —</option>
+        </select>
+        <button onclick="runDueSources()" class="bg-emerald-600 text-white rounded px-3 py-2 text-sm hover:bg-emerald-700">
+          <i class="fas fa-play mr-1"></i>Run Due Sources
+        </button>
+        <button onclick="seedSources()" class="bg-indigo-600 text-white rounded px-3 py-2 text-sm hover:bg-indigo-700">
+          <i class="fas fa-magic mr-1"></i>Bootstrap Sources
+        </button>
+        <button onclick="openAddModal()" class="bg-gray-900 text-white rounded px-3 py-2 text-sm hover:bg-gray-700">
+          <i class="fas fa-plus mr-1"></i>Add Source
+        </button>
+      </div>
+    </div>
   </div>
 
-  <div class="bg-white rounded-lg shadow p-4 grid grid-cols-1 md:grid-cols-3 gap-2">
-    <input id="brand_name" placeholder="brand_name" class="border rounded p-2" />
+  <div id="runSummary" class="hidden bg-emerald-50 border border-emerald-200 rounded p-3 text-sm text-emerald-800 whitespace-pre-line"></div>
+  <div id="errorStrip" class="hidden bg-red-50 border border-red-200 rounded p-3 text-sm text-red-800"></div>
+
+  <!-- Sources table -->
+  <div class="bg-white rounded-lg shadow overflow-hidden">
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead class="bg-gray-50">
+          <tr>
+            <th class="px-4 py-3 text-left font-medium text-gray-600">Source / Keywords</th>
+            <th class="px-4 py-3 text-left font-medium text-gray-600">Type</th>
+            <th class="px-4 py-3 text-left font-medium text-gray-600">Schedule</th>
+            <th class="px-4 py-3 text-left font-medium text-gray-600">Last Run</th>
+            <th class="px-4 py-3 text-left font-medium text-gray-600">Next Run</th>
+            <th class="px-4 py-3 text-left font-medium text-gray-600">Owner</th>
+            <th class="px-4 py-3 text-left font-medium text-gray-600">Actions</th>
+          </tr>
+        </thead>
+        <tbody id="sources_tbody">
+          <tr><td colspan="7" class="px-4 py-8 text-center text-gray-400"><i class="fas fa-spinner fa-spin mr-2"></i>Loading…</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="runLog" class="hidden bg-white rounded-lg shadow p-4">
+    <h3 class="font-semibold mb-2 text-sm">Run Log</h3>
+    <div id="runLogContent" class="font-mono text-xs text-gray-700 whitespace-pre-wrap max-h-64 overflow-y-auto"></div>
+  </div>
+</div>
+
+<!-- ── Add / Edit Source Modal ────────────────────────────────────────────── -->
+<div id="sourceModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50" style="display:none">
+  <div class="relative top-8 mx-auto p-5 border w-11/12 max-w-2xl shadow-lg rounded-md bg-white">
+    <div class="flex items-center justify-between pb-3 border-b">
+      <h3 class="text-lg font-semibold" id="modalTitle">Add Source</h3>
+      <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600 p-2"><i class="fas fa-times"></i></button>
+    </div>
+    <input type="hidden" id="sm_id">
+    <div class="mt-4 space-y-3">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Source Name <span class="text-red-500">*</span></label>
+          <input type="text" id="sm_name" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="e.g. Buildly — Hacker News">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Brand <span class="text-red-500">*</span></label>
+          <select id="sm_brand" class="w-full border rounded px-2 py-1.5 text-sm"></select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Source Type <span class="text-red-500">*</span></label>
+          <select id="sm_type" class="w-full border rounded px-2 py-1.5 text-sm" onchange="onTypeChange()">
+            <option value="hacker_news">Hacker News (free, no key)</option>
+            <option value="reddit">Reddit (free, no key)</option>
+            <option value="github">GitHub (free, no key)</option>
+            <option value="rss_feed">RSS Feed</option>
+            <option value="google_search">Web Search (DuckDuckGo)</option>
+            <option value="website_directory">Website / Directory</option>
+            <option value="product_hunt">Product Hunt Feed</option>
+            <option value="manual">Manual / Paste List</option>
+            <option value="linkedin_manual">LinkedIn Manual</option>
+            <option value="newsletter">Newsletter / Blog RSS</option>
+            <option value="csv_import">CSV Import</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Schedule</label>
+          <select id="sm_freq" class="w-full border rounded px-2 py-1.5 text-sm">
+            <option value="manual">Manual only</option>
+            <option value="daily">Daily</option>
+            <option value="weekly">Weekly</option>
+            <option value="monthly">Monthly</option>
+          </select>
+        </div>
+      </div>
+      <div id="sm_url_row">
+        <label class="block text-xs font-medium text-gray-700 mb-1">URL <span class="text-gray-400 font-normal">(required for RSS / directory)</span></label>
+        <input type="text" id="sm_url" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="https://…">
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-700 mb-1">
+          Keywords <span class="text-gray-400 font-normal">(comma-separated — what to search for)</span>
+          <span class="ml-2 text-indigo-600 text-xs cursor-pointer" onclick="showKeywordHelp()">? help</span>
+        </label>
+        <textarea id="sm_keywords" rows="3" class="w-full border rounded px-2 py-1.5 text-sm font-mono"
+                  placeholder="saas developers, api integration, workflow automation, backend startup"></textarea>
+        <div id="kw_hint" class="text-xs text-gray-500 mt-1"></div>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Owner</label>
+          <input type="text" id="sm_owner" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="Your name">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-700 mb-1">Region filter (optional)</label>
+          <select id="sm_region" class="w-full border rounded px-2 py-1.5 text-sm">
+            <option value="">Any region</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label class="block text-xs font-medium text-gray-700 mb-1">Notes</label>
+        <input type="text" id="sm_notes" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="What you're looking for with this source">
+      </div>
+    </div>
+    <div id="kw_help_box" class="hidden mt-3 p-3 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800">
+      <strong>How keywords work:</strong><br>
+      For <em>Hacker News</em>, <em>Reddit</em>, and <em>GitHub</em> they drive the search query directly (each keyword = one search).
+      For <em>RSS</em> and <em>Directory</em> they filter which items match.
+      Use specific terms your target leads would use: product names, pain points, job titles, tech stack.<br><br>
+      <strong>Examples:</strong> <code>api integration, low-code, developer tools</code> · <code>marketing automation saas</code> · <code>b2b startup cto hiring</code>
+    </div>
+    <div class="flex justify-between mt-4 pt-3 border-t">
+      <div class="flex gap-2">
+        <button onclick="closeModal()" class="bg-gray-200 text-gray-700 px-4 py-2 rounded text-sm">Cancel</button>
+        <button id="deleteBtn" onclick="deleteSource()" class="bg-red-100 text-red-700 px-4 py-2 rounded text-sm hover:bg-red-200" style="display:none">
+          <i class="fas fa-trash mr-1"></i>Deactivate
+        </button>
+      </div>
+      <div class="flex gap-2">
+        <button onclick="saveSource(false)" class="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700">
+          <i class="fas fa-save mr-1"></i>Save
+        </button>
+        <button onclick="saveSource(true)" class="bg-emerald-600 text-white px-4 py-2 rounded text-sm hover:bg-emerald-700">
+          <i class="fas fa-play mr-1"></i>Save &amp; Run Now
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const KW_HINTS = {
+  hacker_news: 'Searches HN Ask/Show/stories. Use technical terms your target leads write about.',
+  reddit: 'Searches Reddit posts. Use problem descriptions (e.g. "how to automate onboarding").',
+  github: 'Searches repo names/descriptions. Use tech stack terms (e.g. "python workflow api").',
+  rss_feed: 'Filters RSS items containing your keywords. Set the feed URL above.',
+  google_search: 'DuckDuckGo search for each keyword. Use full phrases like "best crm for developers".',
+  website_directory: 'Filters links on the page by keywords. Set URL to a directory or listing.',
+  product_hunt: 'Filters PH feed by keywords. Good for finding tools in your category.',
+  manual: 'No keywords needed — paste names/URLs directly when you run.',
+  linkedin_manual: 'Paste LinkedIn URLs. Keywords score the entries.',
+  newsletter: 'RSS URL of a newsletter. Keywords filter relevant items.',
+  csv_import: 'Upload CSV. Keywords used for scoring.',
+};
+
+let sources = [];
+
+document.addEventListener('DOMContentLoaded', () => {
+  populateBrandSelects();
+  if (typeof ACTIVE_BRAND !== 'undefined' && ACTIVE_BRAND) {
+    document.getElementById('brand_name').value = ACTIVE_BRAND;
+    document.getElementById('sm_brand').value = ACTIVE_BRAND;
+  }
+  loadSources();
+});
+
+function populateBrandSelects() {
+  ['brand_name','sm_brand'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const brands = (typeof USER_BRANDS !== 'undefined' && USER_BRANDS.length > 0) ? USER_BRANDS : [];
+    const active = (typeof ACTIVE_BRAND !== 'undefined') ? ACTIVE_BRAND : '';
+    brands.forEach(b => {
+      if (![...sel.options].some(o => o.value === b))
+        sel.appendChild(new Option(b, b, b === active, b === active));
+    });
+  });
+}
+
+function onBrandChange() { loadSources(); }
+
+function onTypeChange() {
+  const t = document.getElementById('sm_type').value;
+  document.getElementById('kw_hint').textContent = KW_HINTS[t] || '';
+  document.getElementById('sm_url_row').style.display =
+    ['rss_feed','website_directory','newsletter','product_hunt'].includes(t) ? '' : 'none';
+}
+
+function showKeywordHelp() {
+  document.getElementById('kw_help_box').classList.toggle('hidden');
+}
+
+function activeBrand() { return document.getElementById('brand_name').value.trim(); }
+
+async function loadSources() {
+  const brand = activeBrand();
+  const url = '/api/lead-radar/sources' + (brand ? '?brand_name='+encodeURIComponent(brand) : '');
+  const res = await fetch(url);
+  const json = await res.json();
+  sources = json.data || [];
+  renderSources();
+  if (brand) loadRegions(brand);
+}
+
+function renderSources() {
+  const tbody = document.getElementById('sources_tbody');
+  if (!sources.length) {
+    tbody.innerHTML = `<tr><td colspan="7" class="px-4 py-10 text-center text-gray-400">
+      No sources yet.<br>
+      <button onclick="seedSources()" class="mt-3 bg-indigo-600 text-white rounded px-4 py-2 text-sm">
+        <i class="fas fa-magic mr-1"></i>Bootstrap starter sources for this brand
+      </button>
+    </td></tr>`;
+    return;
+  }
+  tbody.innerHTML = sources.map(s => {
+    const kws = (s.query_keywords||[]).join(', ') || '<span class="text-red-400 font-medium">⚠ no keywords — add some!</span>';
+    const nextRun = s.next_run_at ? new Date(s.next_run_at).toLocaleDateString() : '—';
+    const lastRun = s.last_run_at ? new Date(s.last_run_at).toLocaleDateString() : 'Never';
+    const isDue = s.run_frequency !== 'manual' && (!s.next_run_at || new Date(s.next_run_at) <= new Date());
+    const badge = s.run_frequency === 'manual'
+      ? '<span class="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-xs">manual</span>'
+      : `<span class="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-xs">${s.run_frequency}</span>`;
+    return `<tr class="border-b hover:bg-gray-50">
+      <td class="px-4 py-3">
+        <div class="font-medium">${s.name}</div>
+        <div class="text-xs text-gray-500 mt-0.5">${kws}</div>
+        ${s.url ? `<div class="text-xs text-gray-400 truncate max-w-xs">${s.url}</div>` : ''}
+        ${s.notes ? `<div class="text-xs text-gray-400 italic">${s.notes}</div>` : ''}
+      </td>
+      <td class="px-4 py-3 text-xs text-gray-600 whitespace-nowrap">${s.source_type}</td>
+      <td class="px-4 py-3">${badge}</td>
+      <td class="px-4 py-3 text-xs ${s.last_run_at ? 'text-gray-600' : 'text-gray-400'}">${lastRun}</td>
+      <td class="px-4 py-3 text-xs ${isDue ? 'text-orange-600 font-semibold' : 'text-gray-500'}">${isDue && s.run_frequency!=='manual' ? '⏰ Due now' : nextRun}</td>
+      <td class="px-4 py-3 text-xs text-gray-600">${s.owner||'—'}</td>
+      <td class="px-4 py-3">
+        <div class="flex gap-1 flex-wrap">
+          <button onclick="runSource(${s.id})" class="bg-emerald-600 text-white rounded px-2 py-1 text-xs hover:bg-emerald-700" title="Run now"><i class="fas fa-play"></i></button>
+          <button onclick="openEditModal(${s.id})" class="bg-blue-600 text-white rounded px-2 py-1 text-xs hover:bg-blue-700" title="Edit"><i class="fas fa-edit"></i></button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function loadRegions(brand) {
+  const res = await fetch('/api/leads/regions?brand_name='+encodeURIComponent(brand));
+  const json = await res.json();
+  const sel = document.getElementById('sm_region');
+  const existing = sel.value;
+  sel.innerHTML = '<option value="">Any region</option>';
+  (json.data||[]).forEach(r => sel.appendChild(new Option(r.name, r.id)));
+  if (existing) sel.value = existing;
+}
+
+async function runSource(sourceId) {
+  setStatus('Running source '+sourceId+'…','info');
+  const res = await fetch('/api/lead-radar/research-jobs/run', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({lead_source_id: sourceId})
+  });
+  const json = await res.json();
+  if (!json.success) { setStatus(json.error||'Run failed','error'); return; }
+  const d = json.data;
+  setStatus(`✅ Done — ${d.candidates_created} candidates from ${d.results_count} items\n${d.run_log||''}`, 'success');
+  showRunLog([d]);
+  loadSources();
+}
+
+async function runDueSources() {
+  const brand = activeBrand();
+  setStatus('Running all due sources…','info');
+  const res = await fetch('/api/lead-radar/research-jobs/run-due', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({brand_name: brand||undefined, limit:25})
+  });
+  const json = await res.json();
+  if (!json.success) { setStatus(json.error||'Run failed','error'); return; }
+  const d = json.data;
+  const lines = (d.jobs||[]).map(j =>
+    `  • ${j.source_name||'Source '+j.lead_source_id}: ${j.status} — ${j.candidates_created} candidates (${j.results_count} items)`+
+    (j.error_message ? `\n    ⚠ ${j.error_message}` : '')
+  ).join('\n');
+  setStatus(`✅ ${d.sources_considered} sources run — ${d.total_candidates_created} new candidates\n${lines}`, 'success');
+  showRunLog(d.jobs||[]);
+  loadSources();
+}
+
+function showRunLog(jobs) {
+  const box = document.getElementById('runLog');
+  const content = document.getElementById('runLogContent');
+  content.textContent = (jobs||[]).map(j =>
+    `[${j.status}] ${j.source_name||'Source '+j.lead_source_id} — ${j.candidates_created} new, ${j.results_count} found`+
+    (j.error_message ? `\n  Error: ${j.error_message}` : '')+
+    (j.run_log ? `\n  ${j.run_log}` : '')
+  ).join('\n') || 'No output.';
+  box.classList.remove('hidden');
+}
+
+async function seedSources() {
+  const brand = activeBrand();
+  if (!brand) { setStatus('Select a brand first.','error'); return; }
+  setStatus('Creating starter sources for '+brand+'…','info');
+  const res = await fetch('/api/lead-radar/seed-sources', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({brand_name: brand})
+  });
+  const json = await res.json();
+  if (!json.success) { setStatus(json.error||'Failed','error'); return; }
+  const d = json.data;
+  setStatus(`✅ ${d.created} sources created, ${d.skipped} already existed.\nEdit keywords for each source then click Run!`, 'success');
+  loadSources();
+}
+
+function openAddModal() {
+  clearModal(false);
+  document.getElementById('modalTitle').textContent = 'Add Source';
+  document.getElementById('deleteBtn').style.display = 'none';
+  document.getElementById('sourceModal').style.display = '';
+  onTypeChange();
+}
+
+function openEditModal(sourceId) {
+  const s = sources.find(x => x.id === sourceId);
+  if (!s) return;
+  clearModal(false);
+  document.getElementById('modalTitle').textContent = 'Edit — '+s.name;
+  document.getElementById('sm_id').value = s.id;
+  document.getElementById('sm_name').value = s.name;
+  document.getElementById('sm_brand').value = s.brand_name;
+  document.getElementById('sm_type').value = s.source_type;
+  document.getElementById('sm_freq').value = s.run_frequency;
+  document.getElementById('sm_url').value = s.url||'';
+  document.getElementById('sm_keywords').value = (s.query_keywords||[]).join(', ');
+  document.getElementById('sm_owner').value = s.owner||'';
+  document.getElementById('sm_notes').value = s.notes||'';
+  if (s.region_id) document.getElementById('sm_region').value = s.region_id;
+  document.getElementById('deleteBtn').style.display = '';
+  document.getElementById('sourceModal').style.display = '';
+  onTypeChange();
+}
+
+function clearModal(all) {
+  ['sm_id','sm_name','sm_url','sm_keywords','sm_owner','sm_notes'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  document.getElementById('sm_type').value = 'hacker_news';
+  document.getElementById('sm_freq').value = 'daily';
+  document.getElementById('sm_region').value = '';
+  document.getElementById('kw_help_box').classList.add('hidden');
+  if (!all) {
+    // set brand to active brand
+    const b = activeBrand() || (typeof ACTIVE_BRAND !== 'undefined' ? ACTIVE_BRAND : '');
+    if (b) document.getElementById('sm_brand').value = b;
+  }
+}
+
+function closeModal() { document.getElementById('sourceModal').style.display = 'none'; }
+
+async function saveSource(runAfter) {
+  const id = document.getElementById('sm_id').value;
+  const brand = document.getElementById('sm_brand').value.trim();
+  const name = document.getElementById('sm_name').value.trim();
+  if (!brand) { setStatus('Select a brand.','error'); return; }
+  if (!name)  { setStatus('Source name is required.','error'); return; }
+  const keywords = document.getElementById('sm_keywords').value
+    .split(',').map(k=>k.trim()).filter(Boolean);
+  const freq = document.getElementById('sm_freq').value;
+  const regionVal = document.getElementById('sm_region').value;
+  const payload = {
+    brand_name: brand, name,
+    source_type: document.getElementById('sm_type').value,
+    url: document.getElementById('sm_url').value.trim(),
+    query_keywords: keywords,
+    run_frequency: freq,
+    owner: document.getElementById('sm_owner').value.trim(),
+    notes: document.getElementById('sm_notes').value.trim(),
+    region_id: regionVal ? parseInt(regionVal) : null,
+    queue_now: freq !== 'manual',
+    is_active: true,
+  };
+  const url = id ? `/api/lead-radar/sources/${id}` : '/api/lead-radar/sources';
+  const method = id ? 'PUT' : 'POST';
+  const res = await fetch(url, {method, headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+  const json = await res.json();
+  if (!json.success) { setStatus(json.error||'Save failed','error'); return; }
+  closeModal();
+  await loadSources();
+  setStatus(`✅ "${name}" saved.`, 'success');
+  if (runAfter) {
+    const sid = (json.data&&json.data.id) ? json.data.id : id;
+    if (sid) await runSource(parseInt(sid));
+  }
+}
+
+async function deleteSource() {
+  const id = document.getElementById('sm_id').value;
+  if (!id || !confirm('Deactivate this source?')) return;
+  await fetch(`/api/lead-radar/sources/${id}`, {method:'DELETE'});
+  closeModal();
+  await loadSources();
+  setStatus('Source deactivated.','success');
+}
+
+function setStatus(msg, type) {
+  const s = document.getElementById(type==='error'?'errorStrip':'runSummary');
+  const o = document.getElementById(type==='error'?'runSummary':'errorStrip');
+  s.textContent = msg; s.classList.remove('hidden'); o.classList.add('hidden');
+  if (type !== 'error') setTimeout(() => s.classList.add('hidden'), 12000);
+}
+
+document.addEventListener('keydown', e => { if (e.key==='Escape') closeModal(); });
+</script>
+{% endblock %}
     <input id="name" placeholder="source name" class="border rounded p-2" />
     <select id="source_type" class="border rounded p-2">
       <option>manual</option><option>google_search</option><option>rss_feed</option><option>website_directory</option><option>github</option><option>product_hunt</option><option>hacker_news</option><option>linkedin_manual</option><option>instagram_manual</option><option>reddit</option><option>youtube</option><option>newsletter</option><option>csv_import</option>

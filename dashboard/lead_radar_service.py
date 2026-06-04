@@ -426,6 +426,143 @@ def _candidate_duplicate(brand_name, item):
     return False
 
 
+def seed_sources_for_brand(brand_name: str) -> dict:
+    """Create a practical set of auto-research sources for a brand using its stored profile.
+
+    Safe to call multiple times — skips sources that already exist by name.
+    Returns {created: int, skipped: int, sources: list}.
+    """
+    brand = Brand.query.filter_by(name=brand_name).first()
+    if not brand:
+        return {"created": 0, "skipped": 0, "sources": [], "error": "Brand not found"}
+
+    # Pull identity signals from brand settings / advanced settings
+    description = (brand.description or "").strip()
+    display_name = (brand.display_name or brand_name).strip()
+    website_url = (brand.website_url or "").strip()
+
+    # Derive keywords from brand name, description and website domain
+    base_kw = [w for w in display_name.lower().split() if len(w) > 3 and w not in {"the","and","for","with","that","this"}]
+    if website_url:
+        from urllib.parse import urlparse
+        domain = urlparse(website_url).netloc.replace("www.", "").split(".")[0]
+        if domain and domain not in base_kw:
+            base_kw.insert(0, domain)
+
+    # Try to use brand advanced settings if present
+    from dashboard.models import BrandSettings
+    settings = BrandSettings.query.filter_by(brand_id=brand.id).first()
+    target_audience = ""
+    product_type = ""
+    if settings:
+        try:
+            adv = settings.get_advanced_settings() or {}
+            mp = adv.get("marketing_profile") or {}
+            target_audience = mp.get("target_audience", "")
+            product_type = mp.get("product_type", "")
+        except Exception:
+            pass
+
+    audience_kw = [w.strip() for w in (target_audience + " " + product_type).split()
+                   if len(w.strip()) > 3 and w.strip() not in {"that","this","with","and","for"}][:4]
+
+    all_kw = base_kw[:3] + audience_kw[:3]
+    if not all_kw:
+        all_kw = [brand_name]
+
+    templates = [
+        {
+            "name": f"{display_name} — Hacker News",
+            "source_type": "hacker_news",
+            "url": "",
+            "query_keywords": all_kw,
+            "run_frequency": "daily",
+            "notes": "Search HN for mentions, job posts, and Show HN projects relevant to the brand.",
+        },
+        {
+            "name": f"{display_name} — Reddit",
+            "source_type": "reddit",
+            "url": "",
+            "query_keywords": all_kw,
+            "run_frequency": "daily",
+            "notes": "Search Reddit for users asking about problems your brand solves.",
+        },
+        {
+            "name": f"{display_name} — GitHub",
+            "source_type": "github",
+            "url": "",
+            "query_keywords": all_kw[:2],
+            "run_frequency": "weekly",
+            "notes": "Find developers building in your problem space.",
+        },
+        {
+            "name": f"{display_name} — Product Hunt",
+            "source_type": "product_hunt",
+            "url": "https://www.producthunt.com/feed",
+            "query_keywords": all_kw[:2],
+            "run_frequency": "daily",
+            "notes": "New products in your category — potential partners or customers.",
+        },
+        {
+            "name": f"{display_name} — Web Search",
+            "source_type": "google_search",
+            "url": "",
+            "query_keywords": all_kw,
+            "run_frequency": "weekly",
+            "notes": "DuckDuckGo web search for leads matching your keywords.",
+        },
+        {
+            "name": f"{display_name} — Manual / Paste List",
+            "source_type": "manual",
+            "url": "",
+            "query_keywords": [],
+            "run_frequency": "manual",
+            "notes": "Paste names/URLs directly from LinkedIn or conference lists.",
+        },
+    ]
+
+    created = skipped = 0
+    sources = []
+    for tmpl in templates:
+        existing = LeadSource.query.filter_by(brand_name=brand_name, name=tmpl["name"]).first()
+        if existing:
+            skipped += 1
+            sources.append(_source_summary(existing))
+            continue
+
+        freq = tmpl["run_frequency"]
+        src = LeadSource(
+            brand_name=brand_name,
+            name=tmpl["name"],
+            source_type=tmpl["source_type"],
+            url=tmpl["url"],
+            query_keywords=tmpl["query_keywords"],
+            run_frequency=freq,
+            next_run_at=datetime.utcnow() if freq in {"daily", "weekly", "monthly"} else None,
+            is_active=True,
+            notes=tmpl["notes"],
+        )
+        db.session.add(src)
+        db.session.flush()
+        created += 1
+        sources.append(_source_summary(src))
+
+    db.session.commit()
+    return {"created": created, "skipped": skipped, "sources": sources}
+
+
+def _source_summary(source: LeadSource) -> dict:
+    return {
+        "id": source.id,
+        "name": source.name,
+        "source_type": source.source_type,
+        "run_frequency": source.run_frequency,
+        "query_keywords": source.query_keywords or [],
+        "last_run_at": source.last_run_at.isoformat() if source.last_run_at else None,
+        "next_run_at": source.next_run_at.isoformat() if source.next_run_at else None,
+    }
+
+
 def create_candidate_from_manual(lead_source, item, research_job_id=None):
     if _candidate_duplicate(lead_source.brand_name, item):
         return None

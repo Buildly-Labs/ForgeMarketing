@@ -36,6 +36,7 @@ from dashboard.lead_radar_service import (
     run_source_research_job,
     run_due_source_research_jobs,
     seed_buildly_defaults_if_present,
+    seed_sources_for_brand,
     update_source_performance,
     upsert_followup_task,
     validate_lead_payload,
@@ -696,6 +697,14 @@ def update_source(source_id):
     return jsonify({"success": True, "data": _source_to_dict(source)})
 
 
+@lead_api_bp.route("/api/lead-radar/sources/<int:source_id>", methods=["DELETE"])
+def delete_source(source_id):
+    source = LeadSource.query.get_or_404(source_id)
+    source.is_active = False
+    db.session.commit()
+    return jsonify({"success": True})
+
+
 @lead_api_bp.route("/api/lead-radar/research-jobs/run", methods=["POST"])
 def run_research_job():
     data = request.get_json() or {}
@@ -1107,4 +1116,15 @@ def lead_radar_login_overview():
 @lead_api_bp.route("/api/lead-radar/seed-defaults", methods=["POST"])
 def seed_defaults():
     result = seed_buildly_defaults_if_present()
+    return jsonify({"success": True, "data": result})
+
+
+@lead_api_bp.route("/api/lead-radar/seed-sources", methods=["POST"])
+def seed_sources():
+    """Auto-create starter research sources for a brand based on its profile."""
+    data = request.get_json() or {}
+    brand_name = (data.get("brand_name") or "").strip()
+    if not brand_name:
+        return jsonify({"success": False, "error": "brand_name is required"}), 400
+    result = seed_sources_for_brand(brand_name)
     return jsonify({"success": True, "data": result})
