@@ -28,6 +28,7 @@ class User(UserMixin, db.Model):
     is_admin = db.Column(db.Boolean, default=False)
     is_active_user = db.Column(db.Boolean, default=True)
     must_change_password = db.Column(db.Boolean, default=False)
+    region = db.Column(db.String(100), default='')
 
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -60,7 +61,10 @@ class User(UserMixin, db.Model):
             'id': self.id,
             'email': self.email,
             'display_name': self.display_name,
+            'region': self.region or '',
             'is_admin': self.is_admin,
+            'is_active': self.is_active_user,
+            'must_change_password': self.must_change_password,
             'brands': [ub.brand.name for ub in self.brand_memberships.all()],
             'last_login_at': self.last_login_at.isoformat() if self.last_login_at else None,
         }

@@ -28,6 +28,16 @@ sys.path.insert(0, str(project_root))
 
 class UnifiedContactsManager:
     """Manages all contacts across email, social media, and influencer channels"""
+
+    @staticmethod
+    def _normalize_optional_text(value: Any) -> Optional[str]:
+        """Convert blank strings to None so unique indexes don't collide on empty values."""
+        if value is None:
+            return None
+        if isinstance(value, str):
+            cleaned = value.strip()
+            return cleaned or None
+        return value
     
     def __init__(self):
         self.db_path = project_root / 'data' / 'unified_contacts.db'
@@ -330,6 +340,7 @@ class UnifiedContactsManager:
     def create_contact(self, contact_data: Dict[str, Any]) -> int:
         """Create new contact"""
         with sqlite3.connect(self.db_path) as conn:
+            normalized_email = self._normalize_optional_text(contact_data.get('email'))
             # Prepare tags as JSON
             tags_value = contact_data.get('tags', [])
             tags = tags_value if isinstance(tags_value, str) else json.dumps(tags_value)
@@ -343,7 +354,7 @@ class UnifiedContactsManager:
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 contact_data.get('name'),
-                contact_data.get('email'),
+                normalized_email,
                 contact_data.get('company'),
                 contact_data.get('title'),
                 contact_data.get('brand'),
@@ -368,13 +379,26 @@ class UnifiedContactsManager:
     def upsert_contact(self, contact_data: Dict[str, Any]) -> Dict[str, Any]:
         """Create or update a contact using the best available identity fields."""
         contact = dict(contact_data)
+        contact['email'] = self._normalize_optional_text(contact.get('email'))
+
         if contact.get('linkedin_url'):
             contact['linkedin_url'] = self.normalize_linkedin_url(contact['linkedin_url'])
+
+        for optional_key in [
+            'website_url',
+            'twitter_handle',
+            'instagram_handle',
+            'youtube_channel',
+            'bluesky_handle',
+            'tiktok_handle',
+            'linkedin_url',
+        ]:
+            contact[optional_key] = self._normalize_optional_text(contact.get(optional_key))
 
         if 'tags' in contact and not isinstance(contact['tags'], str):
             contact['tags'] = json.dumps(contact['tags'] or [])
 
-        brand = contact.get('brand') or ''
+        brand = (contact.get('brand') or '').strip()
         contact_type = contact.get('contact_type') or 'influencer'
         search_fields = [
             ('email', contact.get('email')),

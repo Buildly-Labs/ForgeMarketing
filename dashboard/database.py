@@ -95,6 +95,7 @@ class DatabaseManager:
         migrations = [
             # (table, column_name, column_sql_type)
             ('users', 'must_change_password', 'BOOLEAN DEFAULT 0'),
+            ('users', 'region', 'VARCHAR(100) DEFAULT ""'),
         ]
 
         for table, col, col_type in migrations:

@@ -1629,6 +1629,12 @@ def admin_settings():
                          config=dashboard.config,
                          title='Admin Panel')
 
+
+@app.route('/admin/users')
+def admin_users_page():
+    """User management page."""
+    return render_template('admin_users.html', title='User Management')
+
 @app.route('/automation')
 def automation():
     """Automation monitoring page"""

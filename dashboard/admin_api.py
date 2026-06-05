@@ -8,12 +8,79 @@ from functools import wraps
 from datetime import datetime
 from typing import Dict, Any, Tuple
 import logging
+import os
+import smtplib
+from email.message import EmailMessage
 
 from dashboard.models import db, Brand, BrandEmailConfig, BrandSettings, APICredentialLog, SystemConfig, User, UserBrand
 
 logger = logging.getLogger(__name__)
 
 admin_bp = Blueprint('admin', __name__, url_prefix='/api/admin')
+
+
+def _get_system_config_map() -> Dict[str, str]:
+    rows = SystemConfig.query.all()
+    return {row.key: (row.value or '') for row in rows}
+
+
+def _resolve_smtp_settings() -> Dict[str, Any]:
+    cfg = _get_system_config_map()
+    host = cfg.get('BREVO_SMTP_HOST') or os.getenv('BREVO_SMTP_HOST') or 'smtp-relay.brevo.com'
+    port_raw = cfg.get('BREVO_SMTP_PORT') or os.getenv('BREVO_SMTP_PORT') or '587'
+    try:
+        port = int(port_raw)
+    except Exception:
+        port = 587
+
+    username = cfg.get('BREVO_SMTP_LOGIN') or os.getenv('BREVO_SMTP_LOGIN') or os.getenv('BREVO_SMTP_USER') or ''
+    password = cfg.get('BREVO_SMTP_KEY') or os.getenv('BREVO_SMTP_KEY') or os.getenv('BREVO_SMTP_PASSWORD') or ''
+    from_email = cfg.get('FROM_EMAIL') or os.getenv('FROM_EMAIL') or username
+    from_name = cfg.get('FROM_NAME') or os.getenv('FROM_NAME') or 'First City Foundry'
+
+    return {
+        'host': host,
+        'port': port,
+        'username': username,
+        'password': password,
+        'from_email': from_email,
+        'from_name': from_name,
+    }
+
+
+def _send_user_welcome_email(user_email: str, display_name: str, temp_password: str,
+                             region: str, login_url: str, invited_by: str) -> Tuple[bool, str]:
+    smtp = _resolve_smtp_settings()
+    if not smtp['host'] or not smtp['from_email'] or not smtp['username'] or not smtp['password']:
+        return False, 'SMTP settings are incomplete (host/from_email/login/key required)'
+
+    safe_name = display_name or user_email
+    msg = EmailMessage()
+    msg['Subject'] = 'Your Marketing Hub account details'
+    msg['From'] = f"{smtp['from_name']} <{smtp['from_email']}>"
+    msg['To'] = user_email
+
+    text_body = f"""Hi {safe_name},
+
+Your account has been created for Marketing Hub.
+
+Login URL: {login_url}
+Email: {user_email}
+Temporary Password: {temp_password}
+Assigned Region: {region or 'Not specified'}
+
+Please sign in and change your password immediately.
+
+Provisioned by: {invited_by}
+"""
+    msg.set_content(text_body)
+
+    with smtplib.SMTP(smtp['host'], smtp['port'], timeout=20) as server:
+        server.starttls()
+        server.login(smtp['username'], smtp['password'])
+        server.send_message(msg)
+
+    return True, ''
 
 
 def admin_required(fn):
@@ -761,6 +828,9 @@ def create_user():
         is_admin (bool)
         brand_ids (list[int])  — brands to grant access to
         role (str)             — role for all assigned brands (default: editor)
+        region (str)           — user region assignment (e.g. northeast, emea)
+        send_welcome_email (bool) — send login details email (default: true)
+        login_url (str)        — login URL included in welcome email
     """
     try:
         data = request.get_json() or {}
@@ -773,11 +843,15 @@ def create_user():
         if User.query.filter_by(email=email).first():
             return jsonify({'success': False, 'error': 'A user with that email already exists'}), 409
 
+        region = (data.get('region') or '').strip()
+        send_welcome_email = bool(data.get('send_welcome_email', True))
+
         user = User(
             email=email,
             display_name=data.get('display_name', ''),
             is_admin=bool(data.get('is_admin', False)),
             must_change_password=bool(data.get('must_change_password', True)),
+            region=region,
         )
         user.set_password(password)
         db.session.add(user)
@@ -789,8 +863,28 @@ def create_user():
                 db.session.add(UserBrand(user_id=user.id, brand_id=bid, role=role))
 
         db.session.commit()
+
+        email_delivery = {'attempted': False, 'sent': False, 'error': ''}
+        if send_welcome_email:
+            email_delivery['attempted'] = True
+            login_url = (data.get('login_url') or '').strip()
+            if not login_url:
+                cfg = _get_system_config_map()
+                base_url = (cfg.get('WEBSITE_URL') or '').rstrip('/')
+                login_url = f"{base_url}/login" if base_url else '/login'
+            sent, err = _send_user_welcome_email(
+                user_email=user.email,
+                display_name=user.display_name,
+                temp_password=password,
+                region=user.region or '',
+                login_url=login_url,
+                invited_by=getattr(current_user, 'email', 'admin'),
+            )
+            email_delivery['sent'] = sent
+            email_delivery['error'] = err
+
         logger.info(f"User created: {email} by {current_user.email}")
-        return jsonify({'success': True, 'user': user.to_dict()}), 201
+        return jsonify({'success': True, 'user': user.to_dict(), 'welcome_email': email_delivery}), 201
 
     except Exception as e:
         db.session.rollback()
@@ -838,6 +932,8 @@ def update_user(user_id: int):
             user.email = new_email
         if 'display_name' in data:
             user.display_name = data['display_name']
+        if 'region' in data:
+            user.region = (data.get('region') or '').strip()
         if 'is_admin' in data:
             user.is_admin = bool(data['is_admin'])
         if 'is_active' in data:
