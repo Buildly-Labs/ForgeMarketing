@@ -13,12 +13,6 @@ cd "$PROJECT_ROOT/Producer"
 
 echo "Running producer database migrations..."
 
-echo "Applying Django core migrations (contenttypes/auth/admin/sessions)..."
-python manage.py migrate contenttypes --no-input
-python manage.py migrate auth --no-input
-python manage.py migrate admin --no-input
-python manage.py migrate sessions --no-input
-
 # Preflight repair for known production_ledger migration ordering issue:
 # 0006 recorded as applied while dependency 0005 is missing.
 python - <<'PY'
@@ -84,6 +78,12 @@ except Exception as exc:
     print(f"Migration preflight check skipped: {exc}")
     raise SystemExit(0)
 PY
+
+echo "Applying Django core migrations (contenttypes/auth/admin/sessions)..."
+python manage.py migrate contenttypes --no-input
+python manage.py migrate auth --no-input
+python manage.py migrate admin --no-input
+python manage.py migrate sessions --no-input
 
 # Historical compatibility fakes (safe to repeat; no-op when already applied).
 set +e

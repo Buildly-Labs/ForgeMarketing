@@ -1,9 +1,17 @@
 #!/usr/bin/env python3
 """Fail-fast schema verification for marketing auth-critical tables."""
 
+import sys
+from pathlib import Path
+
+from sqlalchemy import inspect
+
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(PROJECT_ROOT))
+
 from dashboard.app import app
 from dashboard.models import db
-from sqlalchemy import inspect
 
 
 REQUIRED_COLUMNS = {
