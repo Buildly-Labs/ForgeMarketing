@@ -58,6 +58,19 @@ else
     echo "$upgrade_output"
 fi
 
+# Lead Radar and other runtime tables are defined in SQLAlchemy models but are
+# not yet fully represented in Alembic revisions. Ensure they exist.
+python3 - <<'PY'
+from dashboard.app import app
+from dashboard.models import db
+from dashboard import lead_radar_models  # noqa: F401
+from dashboard import marketing_calendar_models  # noqa: F401
+
+with app.app_context():
+    db.create_all()
+    print("Ensured runtime SQLAlchemy tables exist (including Lead Radar).")
+PY
+
 python3 "$PROJECT_ROOT/ops/verify_marketing_schema.py"
 
 echo "Marketing database migrations complete."

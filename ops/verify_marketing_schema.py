@@ -28,6 +28,36 @@ REQUIRED_COLUMNS = {
         "updated_at",
         "last_login_at",
     },
+    "lead_sources": {
+        "id",
+        "brand_name",
+        "name",
+        "source_type",
+        "query_keywords",
+        "run_frequency",
+        "is_active",
+        "last_run_at",
+        "next_run_at",
+        "created_at",
+        "updated_at",
+    },
+    "lead_candidates": {
+        "id",
+        "brand_name",
+        "lead_source_id",
+        "status",
+        "created_at",
+        "updated_at",
+    },
+    "research_jobs": {
+        "id",
+        "lead_source_id",
+        "status",
+        "results_count",
+        "candidates_created",
+        "created_at",
+        "updated_at",
+    },
 }
 
 
