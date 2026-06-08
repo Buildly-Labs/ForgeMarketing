@@ -13,6 +13,12 @@ cd "$PROJECT_ROOT/Producer"
 
 echo "Running producer database migrations..."
 
+echo "Applying Django core migrations (contenttypes/auth/admin/sessions)..."
+python manage.py migrate contenttypes --no-input
+python manage.py migrate auth --no-input
+python manage.py migrate admin --no-input
+python manage.py migrate sessions --no-input
+
 # Preflight repair for known production_ledger migration ordering issue:
 # 0006 recorded as applied while dependency 0005 is missing.
 python - <<'PY'
@@ -41,6 +47,7 @@ MIGRATION_CHAIN = [
     "0004_add_media_platform_and_label",
     "0005_drop_episode_type_old",
     "0006_auto_20260416_2221",
+    "0007_fix_icon_column_charset",
 ]
 
 try:
@@ -108,7 +115,22 @@ if [[ $migrate_status -ne 0 ]]; then
         python manage.py migrate --no-input
     elif echo "$migrate_output" | grep -qi "0007_fix_icon_column_charset\|Executing DDL statements while in a transaction\|TransactionManagementError"; then
         echo "Detected transactional DDL failure in production_ledger.0007; faking migration and retrying."
+        # Keep dependency chain consistent when 0007 must be faked.
+        python manage.py migrate production_ledger 0006_auto_20260416_2221 --fake --no-input || true
         python manage.py migrate production_ledger 0007_fix_icon_column_charset --fake --no-input
+        python manage.py migrate --no-input
+    elif echo "$migrate_output" | grep -q "InconsistentMigrationHistory" \
+        && echo "$migrate_output" | grep -q "production_ledger\.0007_fix_icon_column_charset" \
+        && echo "$migrate_output" | grep -q "production_ledger\.0006_auto_20260416_2221"; then
+        echo "Detected 0007-before-0006 inconsistency during migrate; applying compatibility fix and retrying."
+        python manage.py migrate production_ledger 0006_auto_20260416_2221 --fake --no-input
+        python manage.py migrate --no-input
+    elif echo "$migrate_output" | grep -q "no such table: django_content_type"; then
+        echo "Detected missing django_content_type table; bootstrapping Django core migrations and retrying."
+        python manage.py migrate contenttypes --no-input
+        python manage.py migrate auth --no-input
+        python manage.py migrate admin --no-input
+        python manage.py migrate sessions --no-input
         python manage.py migrate --no-input
     else
         echo "$migrate_output"

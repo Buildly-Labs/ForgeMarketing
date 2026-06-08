@@ -6,6 +6,7 @@ PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$PROJECT_ROOT"
 
 export SKIP_STARTUP_DB_INIT=1
+BASELINE_REVISION="${MARKETING_BASELINE_REVISION:-0d6491da3ab7}"
 
 echo "Running marketing database migrations..."
 
@@ -31,8 +32,8 @@ status=$?
 set -e
 
 if [[ $status -eq 10 ]]; then
-    echo "Legacy schema detected without alembic_version; stamping current head."
-    python3 -m flask --app dashboard.app:app db stamp head
+    echo "Legacy schema detected without alembic_version; stamping baseline ${BASELINE_REVISION}."
+    python3 -m flask --app dashboard.app:app db stamp "$BASELINE_REVISION"
 elif [[ $status -ne 0 ]]; then
     echo "Failed to inspect schema state before migration."
     exit $status
@@ -56,5 +57,7 @@ if [[ $upgrade_status -ne 0 ]]; then
 else
     echo "$upgrade_output"
 fi
+
+python3 "$PROJECT_ROOT/ops/verify_marketing_schema.py"
 
 echo "Marketing database migrations complete."
