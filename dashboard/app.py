@@ -1288,21 +1288,29 @@ class MarketingDashboard:
             from dashboard.models import BrandAPICredential, BrandEmailConfig, SystemConfig
 
             ai_config = {cfg.key: cfg.value for cfg in SystemConfig.query.filter(SystemConfig.key.like('ai_%')).all()}
+            gemini_key_cfg = SystemConfig.query.filter_by(key='GEMINI_API_KEY').first()
             ai_provider = (ai_config.get('ai_provider') or '').strip().lower()
             has_db_ai = bool(ai_provider)
             has_openai_key = bool(ai_config.get('ai_openai_key') or os.getenv('OPENAI_API_KEY'))
+            has_gemini_key = bool((gemini_key_cfg.value if gemini_key_cfg else '') or os.getenv('GEMINI_API_KEY'))
             if ai_provider == 'openai':
                 status['ai']['configured'] = has_openai_key
+            elif ai_provider == 'gemini':
+                status['ai']['configured'] = has_gemini_key
             elif ai_provider == 'ollama':
                 status['ai']['configured'] = bool(ai_config.get('ai_ollama_url') or os.getenv('OLLAMA_HOST') or has_db_ai)
             else:
-                status['ai']['configured'] = has_db_ai or has_openai_key
+                status['ai']['configured'] = has_db_ai or has_openai_key or has_gemini_key
+
+            email_cfg = {cfg.key: cfg.value for cfg in SystemConfig.query.filter(SystemConfig.category == 'email').all()}
 
             status['email']['configured'] = (
                 BrandEmailConfig.query.count() > 0
                 or bool(os.getenv('EMAIL_API_KEY'))
                 or bool(os.getenv('MAILERSEND_API_TOKEN'))
                 or bool(os.getenv('BREVO_SMTP_USER') and os.getenv('BREVO_SMTP_PASSWORD'))
+                or bool(email_cfg.get('BREVO_SMTP_LOGIN') and email_cfg.get('BREVO_SMTP_KEY'))
+                or bool(email_cfg.get('BREVO_SMTP_HOST') and email_cfg.get('BREVO_SMTP_PORT'))
             )
 
             def _has_service_creds(service_name: str) -> bool:
@@ -1379,19 +1387,27 @@ class MarketingDashboard:
             ai_url = os.getenv('OLLAMA_HOST', 'http://localhost:11434')
             ai_provider = ''
             ai_openai_key = os.getenv('OPENAI_API_KEY', '')
+            ai_gemini_key = os.getenv('GEMINI_API_KEY', '')
             try:
                 from dashboard.models import SystemConfig
                 cfg = {c.key: c.value for c in SystemConfig.query.filter(SystemConfig.key.like('ai_%')).all()}
                 ai_provider = (cfg.get('ai_provider') or '').strip().lower()
                 ai_url = cfg.get('ai_ollama_url', ai_url)
                 ai_openai_key = cfg.get('ai_openai_key', ai_openai_key)
+                gem = SystemConfig.query.filter_by(key='GEMINI_API_KEY').first()
+                if gem and gem.value:
+                    ai_gemini_key = gem.value
             except Exception:
                 pass
 
             if ai_provider == 'openai':
                 # For OpenAI, treat saved key presence as configured/connected from a panel perspective.
                 return bool(ai_openai_key)
+            if ai_provider == 'gemini':
+                return bool(ai_gemini_key)
             if not ai_provider and ai_openai_key:
+                return True
+            if not ai_provider and ai_gemini_key:
                 return True
 
             try:
@@ -1416,6 +1432,26 @@ class MarketingDashboard:
     def test_platform_connection(self, platform, credentials, brand=None):
         """Test connection for specific platform"""
         try:
+            if credentials is None:
+                credentials = {}
+
+            # For non-AI/email platforms, fall back to stored DB credentials when
+            # the UI triggers a test without entering values again.
+            if platform in {'twitter', 'bluesky', 'instagram', 'linkedin'} and not credentials:
+                try:
+                    from dashboard.models import Brand, BrandAPICredential
+
+                    query = BrandAPICredential.query.filter_by(service=platform, is_active=True)
+                    if brand:
+                        b = Brand.query.filter_by(name=brand).first()
+                        if b:
+                            query = query.filter_by(brand_id=b.id)
+                    row = query.order_by(BrandAPICredential.updated_at.desc()).first()
+                    if row:
+                        credentials = row.get_credentials() or {}
+                except Exception:
+                    pass
+
             # Test AI connection
             if platform == 'ai':
                 if self.test_ai_connection():
@@ -2034,7 +2070,7 @@ def api_admin_credentials():
     """API endpoint for managing credentials"""
     if request.method == 'GET':
         try:
-            from dashboard.models import Brand, BrandEmailConfig, SystemConfig
+            from dashboard.models import Brand, BrandEmailConfig, SystemConfig, BrandAPICredential
 
             ai_config = {cfg.key: cfg.value for cfg in SystemConfig.query.filter(SystemConfig.key.like('ai_%')).all()}
             brands = Brand.query.filter_by(is_active=True).order_by(Brand.name).all()
@@ -2045,7 +2081,12 @@ def api_admin_credentials():
                 'provider': ai_config.get('ai_provider', ''),
                 'model': ai_config.get('ai_model', ''),
                 'url': ai_config.get('ai_ollama_url', ''),
-                'configured': bool(ai_config.get('ai_provider')),
+                'configured': bool(
+                    ai_config.get('ai_provider')
+                    or ai_config.get('ai_openai_key')
+                    or ai_config.get('GEMINI_API_KEY')
+                    or ai_config.get('ai_ollama_url')
+                ),
             }
             creds['email'] = {
                 'configured': len(email_configs) > 0,
@@ -2062,6 +2103,26 @@ def api_admin_credentials():
                 ],
             }
             creds['brands'] = [brand.name for brand in brands]
+
+            # Return sanitized social credential snapshots for UI visibility.
+            social_rows = (
+                BrandAPICredential.query.filter(
+                    BrandAPICredential.service.in_(['twitter', 'bluesky', 'linkedin', 'instagram'])
+                )
+                .order_by(BrandAPICredential.updated_at.desc())
+                .all()
+            )
+            brand_name_map = {b.id: b.name for b in brands}
+            creds['social'] = [
+                {
+                    'brand': brand_name_map.get(row.brand_id, ''),
+                    'service': row.service,
+                    'is_active': row.is_active,
+                    'is_verified': row.is_verified,
+                    'updated_at': row.updated_at.isoformat() if row.updated_at else None,
+                }
+                for row in social_rows
+            ]
 
             return jsonify({
                 'success': True,
@@ -2080,10 +2141,10 @@ def api_admin_credentials():
             if not credentials:
                 return jsonify({'error': 'No credentials provided'}), 400
 
+            from dashboard.models import SystemConfig, BrandAPICredential, Brand, db
+
             ai_config = credentials.get('ai', {})
             if ai_config.get('provider'):
-                from dashboard.models import SystemConfig, db
-
                 provider = ai_config.get('provider', '').strip().lower()
                 configs_to_save = [
                     ('ai_provider', provider, 'ai', 'AI provider type'),
@@ -2105,21 +2166,54 @@ def api_admin_credentials():
                         existing.description = desc
                     else:
                         db.session.add(SystemConfig(key=key, value=value, category=category, description=desc, updated_by='admin'))
-                db.session.commit()
+
+            def _resolve_brand_id(brand_name: str):
+                if not brand_name:
+                    first_brand = Brand.query.filter_by(is_active=True).order_by(Brand.id.asc()).first()
+                    return first_brand.id if first_brand else None
+                brand = Brand.query.filter_by(name=brand_name).first()
+                return brand.id if brand else None
+
+            # Save social credentials in DB so status checks and runtime read the same source.
+            social_platforms = ['twitter', 'bluesky', 'linkedin', 'instagram']
+            for platform in social_platforms:
+                creds = credentials.get(platform, {}) or {}
+                brand_name = (creds.get('brand') or '').strip()
+                brand_id = _resolve_brand_id(brand_name)
+                if not brand_id:
+                    continue
+
+                has_values = any(
+                    (str(v).strip() if isinstance(v, str) else bool(v))
+                    for k, v in creds.items()
+                    if k != 'brand'
+                )
+                if not has_values:
+                    continue
+
+                existing = BrandAPICredential.query.filter_by(brand_id=brand_id, service=platform).first()
+                payload = {k: v for k, v in creds.items() if k != 'brand'}
+                if existing:
+                    existing.set_credentials(payload)
+                    existing.credential_type = 'api_key'
+                    existing.is_active = True
+                else:
+                    row = BrandAPICredential(
+                        brand_id=brand_id,
+                        service=platform,
+                        credential_type='api_key',
+                        credentials='{}',
+                        is_active=True,
+                    )
+                    row.set_credentials(payload)
+                    db.session.add(row)
+
+            db.session.commit()
             
-            # Save credentials securely
-            result = dashboard.save_credentials(credentials)
-            
-            if result['success']:
-                return jsonify({
-                    'success': True,
-                    'message': 'Credentials saved successfully'
-                })
-            else:
-                return jsonify({
-                    'success': False,
-                    'error': result['error']
-                }), 500
+            return jsonify({
+                'success': True,
+                'message': 'Credentials saved successfully'
+            })
                 
         except Exception as e:
             return jsonify({
