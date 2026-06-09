@@ -1474,30 +1474,30 @@ class MarketingDashboard:
                     return {'success': False, 'error': 'Missing API key or secret'}
             
             elif platform == 'bluesky':
-                if credentials.get('username') and credentials.get('app_password'):
-                    # Try to actually test the connection
+                username = (credentials.get('username') or '').strip()
+                app_password = (credentials.get('app_password') or '').strip()
+                if username and app_password:
                     try:
-                        import asyncio
-                        from automation.social.social_media_manager import SocialMediaManager
-                        social_manager = SocialMediaManager()
-                        
-                        # Test the connection by attempting to authenticate
-                        test_result = asyncio.run(social_manager.post_to_bluesky(
-                            "Connection test - this should not actually post",
-                            brand or "test",
-                            dry_run=True
-                        ))
-                        
-                        if test_result.get('success') or 'dry_run' in str(test_result):
-                            return {'success': True, 'message': f'BlueSky connection successful{" for " + brand if brand else ""}'}
+                        resp = requests.post(
+                            'https://bsky.social/xrpc/com.atproto.server.createSession',
+                            json={'identifier': username, 'password': app_password},
+                            timeout=10,
+                        )
+                        if resp.status_code == 200:
+                            did = resp.json().get('did', '')
+                            return {'success': True, 'message': f'BlueSky authenticated as {username} (DID: {did}){" for " + brand if brand else ""}'}
                         else:
-                            return {'success': False, 'error': f'BlueSky authentication failed: {test_result.get("error", "Unknown error")}'}
-                            
-                    except Exception as e:
-                        # Fall back to basic validation if social manager fails
-                        return {'success': True, 'message': f'BlueSky credentials format valid{" for " + brand if brand else ""} (full test requires social manager)'}
+                            try:
+                                err_msg = resp.json().get('message') or resp.json().get('error') or f'HTTP {resp.status_code}'
+                            except Exception:
+                                err_msg = f'HTTP {resp.status_code}'
+                            return {'success': False, 'error': f'BlueSky authentication failed: {err_msg}'}
+                    except requests.exceptions.Timeout:
+                        return {'success': False, 'error': 'BlueSky API timed out (bsky.social unreachable)'}
+                    except requests.exceptions.RequestException as e:
+                        return {'success': False, 'error': f'BlueSky network error: {e}'}
                 else:
-                    return {'success': False, 'error': 'Missing username or app password'}
+                    return {'success': False, 'error': 'Missing username or app password — enter credentials then click Test, or save first'}
             
             elif platform == 'instagram':
                 if credentials.get('access_token'):
@@ -2298,20 +2298,41 @@ def api_test_connection(platform):
     """API endpoint to test specific platform connection"""
     try:
         data = request.get_json() or {}
-        
+
         # Handle AI and stored email tests without ad hoc credentials
         if platform == 'ai':
             result = dashboard.test_platform_connection('ai', {})
             return jsonify(result)
-        
-        # Handle credentials - either direct or nested under 'credentials'
-        credentials = data.get('credentials', data)  # Support both formats
-        
-        if platform != 'email' and not credentials:
-            return jsonify({'error': 'No credentials provided'}), 400
-        
-        brand = credentials.get('brand') or data.get('brand')  # Brand can be in either location
-        result = dashboard.test_platform_connection(platform, credentials, brand)
+
+        # Support both shapes: flat {username, brand, ...} and nested {credentials: {...}}
+        credentials = data.get('credentials') if isinstance(data.get('credentials'), dict) else data
+
+        brand = (credentials or {}).get('brand') or data.get('brand') or ''
+
+        # For social platforms: if caller sent an empty body, load stored DB credentials.
+        if platform in {'twitter', 'bluesky', 'linkedin', 'instagram'}:
+            has_useful_fields = any(
+                (str(v).strip() if isinstance(v, str) else bool(v))
+                for k, v in (credentials or {}).items()
+                if k not in {'brand'}
+            )
+            if not has_useful_fields:
+                try:
+                    from dashboard.models import Brand, BrandAPICredential
+                    q = BrandAPICredential.query.filter_by(service=platform, is_active=True)
+                    if brand:
+                        b = Brand.query.filter_by(name=brand).first()
+                        if b:
+                            q = q.filter_by(brand_id=b.id)
+                    row = q.order_by(BrandAPICredential.updated_at.desc()).first()
+                    if row:
+                        stored = row.get_credentials() or {}
+                        stored['brand'] = brand
+                        credentials = stored
+                except Exception:
+                    pass
+
+        result = dashboard.test_platform_connection(platform, credentials or {}, brand or None)
         return jsonify(result)
         
     except Exception as e:
