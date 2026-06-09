@@ -5932,3 +5932,17 @@ if __name__ == '__main__':
     print(f"🤖 AI Integration: {'✅ Available' if dashboard.ai_generator else '❌ Not Available'}")
     
     app.run(host=host, port=port, debug=debug)
+
+
+@app.errorhandler(404)
+def page_not_found(e):
+    if request.path.startswith('/api/'):
+        return jsonify({'error': 'Not found', 'path': request.path}), 404
+    return render_template('404.html', login_url='/login', marketing_url='/'), 404
+
+
+@app.errorhandler(500)
+def internal_server_error(e):
+    if request.path.startswith('/api/'):
+        return jsonify({'error': 'Internal server error'}), 500
+    return render_template('404.html', login_url='/login', marketing_url='/', is_500=True), 500

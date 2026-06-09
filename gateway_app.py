@@ -102,6 +102,7 @@ MARKETING_ROUTE_PREFIXES = {
     'automation',
     'brands',
     'campaigns',
+    'change-password',
     'contacts',
     'content-calendar',
     'email-reports',
@@ -111,11 +112,15 @@ MARKETING_ROUTE_PREFIXES = {
     'influencers',
     'lead-radar',
     'leads',
+    'login',
+    'logout',
     'marketing-calendar',
     'onboarding',
     'outreach',
     'reports',
+    'schedule',
     'settings',
+    'the-index',
 }
 
 
@@ -168,6 +173,24 @@ def marketing_deep_link_redirect(subpath):
 @app.route('/health')
 def health():
     return 'ok', 200
+
+
+@app.errorhandler(404)
+def not_found_gateway(e):
+    if request.path.startswith('/api/'):
+        return {'error': 'Not found', 'path': request.path}, 404
+    marketing_base = _normalize_base_path(MARKETING_URL)
+    login_url = f"{marketing_base}/login"
+    return render_template('404.html', login_url=login_url, marketing_url=MARKETING_URL), 404
+
+
+@app.errorhandler(500)
+def server_error_gateway(e):
+    if request.path.startswith('/api/'):
+        return {'error': 'Internal server error'}, 500
+    marketing_base = _normalize_base_path(MARKETING_URL)
+    login_url = f"{marketing_base}/login"
+    return render_template('404.html', login_url=login_url, marketing_url=MARKETING_URL, is_500=True), 500
 
 if __name__ == '__main__':
     port = int(os.getenv('GATEWAY_PORT', 5000))
