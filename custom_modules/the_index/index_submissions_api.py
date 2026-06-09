@@ -15,6 +15,7 @@ from typing import Any, Dict, Optional
 from uuid import uuid4
 import csv
 import io
+from functools import wraps
 
 from flask import Blueprint, jsonify, make_response, request, Response
 
@@ -401,6 +402,26 @@ def _to_row_dict(row: IndexSurveySubmission) -> Dict[str, Any]:
     }
 
 
+def _is_authenticated_request() -> bool:
+    try:
+        from flask_login import current_user
+
+        return bool(getattr(current_user, "is_authenticated", False))
+    except Exception:
+        return False
+
+
+def _require_read_auth_guard():
+    if request.method in {"POST", "OPTIONS"}:
+        return None
+    if _is_authenticated_request():
+        return None
+
+    request_id = getattr(request, "_index_request_id", None) or _get_request_id()
+    request._index_request_id = request_id
+    return _error(401, "Authentication required", request_id)
+
+
 def _build_filtered_query(
     source: str,
     email: str,
@@ -441,6 +462,11 @@ def _parse_ids_arg() -> list[str]:
 @index_submissions_bp.before_request
 def _capture_start_time():
     request._index_started_at = time.perf_counter()
+
+
+@index_submissions_bp.before_request
+def _enforce_read_auth():
+    return _require_read_auth_guard()
 
 
 @index_submissions_bp.after_request

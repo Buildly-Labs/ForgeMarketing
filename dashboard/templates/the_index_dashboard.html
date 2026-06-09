@@ -87,6 +87,15 @@
         <button @click="loadSubmissions()" class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">Apply</button>
         <button @click="resetFilters()" class="bg-gray-100 text-gray-800 px-4 py-2 rounded hover:bg-gray-200">Reset</button>
       </div>
+      <div class="flex flex-wrap gap-2">
+        <button @click="presetToday()" class="bg-blue-100 text-blue-700 px-3 py-2 rounded hover:bg-blue-200 text-sm">Today</button>
+        <button @click="presetThisWeek()" class="bg-blue-100 text-blue-700 px-3 py-2 rounded hover:bg-blue-200 text-sm">This Week</button>
+        <button @click="toggleHighPriority()"
+                :class="highPriorityOnly ? 'bg-amber-600 text-white' : 'bg-amber-100 text-amber-700'"
+                class="px-3 py-2 rounded hover:opacity-90 text-sm">
+          High Priority Only
+        </button>
+      </div>
       <div class="flex flex-wrap gap-2 md:ml-auto">
         <button @click="downloadFiltered('json')" class="bg-slate-700 text-white px-3 py-2 rounded hover:bg-slate-800 text-sm">Download Filtered JSON</button>
         <button @click="downloadFiltered('csv')" class="bg-slate-700 text-white px-3 py-2 rounded hover:bg-slate-800 text-sm">Download Filtered CSV</button>
@@ -95,7 +104,7 @@
       </div>
     </div>
 
-    <div class="mb-3 text-xs text-gray-600" x-text="selectedIds.length + ' selected from current list'"></div>
+    <div class="mb-3 text-xs text-gray-600" x-text="selectedIds.length + ' selected from current list (' + displayedSubmissions().length + ' visible)'"></div>
 
     <div class="overflow-x-auto">
       <table class="min-w-full text-sm">
@@ -116,7 +125,7 @@
           </tr>
         </thead>
         <tbody>
-          <template x-for="row in submissions" :key="row.id">
+          <template x-for="row in displayedSubmissions()" :key="row.id">
             <tr class="border-b border-gray-100 align-top">
               <td class="py-2 pr-3">
                 <input type="checkbox" :checked="isSelected(row.id)" @change="toggleSelected(row.id, $event.target.checked)">
@@ -147,7 +156,7 @@
       </table>
     </div>
 
-    <p x-show="submissions.length === 0" class="text-sm text-gray-500 mt-3">No submissions found for this filter set.</p>
+    <p x-show="displayedSubmissions().length === 0" class="text-sm text-gray-500 mt-3">No submissions found for this filter set.</p>
   </div>
 
   <div x-show="fullSubmissionOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40" x-cloak>
@@ -171,6 +180,7 @@ function theIndexDashboard() {
     selectedIds: [],
     fullSubmissionOpen: false,
     fullSubmission: null,
+    highPriorityOnly: false,
     filters: {
       limit: 50,
       source: '',
@@ -217,7 +227,41 @@ function theIndexDashboard() {
 
     resetFilters() {
       this.filters = { limit: 50, source: '', email: '', from: '', to: '' };
+      this.highPriorityOnly = false;
       this.loadSubmissions();
+    },
+
+    presetToday() {
+      const now = new Date();
+      const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0));
+      const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 23, 59, 59));
+      this.filters.from = start.toISOString();
+      this.filters.to = end.toISOString();
+      this.loadSubmissions();
+    },
+
+    presetThisWeek() {
+      const now = new Date();
+      const start = new Date(now.getTime() - (7 * 24 * 60 * 60 * 1000));
+      this.filters.from = start.toISOString();
+      this.filters.to = now.toISOString();
+      this.loadSubmissions();
+    },
+
+    toggleHighPriority() {
+      this.highPriorityOnly = !this.highPriorityOnly;
+      if (!this.highPriorityOnly) {
+        return;
+      }
+      this.selectedIds = this.selectedIds.filter(id => {
+        const row = this.submissions.find(r => r.id === id);
+        return (row?.request_meta?.index_scoring?.tier || '') === 'high_priority';
+      });
+    },
+
+    displayedSubmissions() {
+      if (!this.highPriorityOnly) return this.submissions;
+      return this.submissions.filter(r => (r?.request_meta?.index_scoring?.tier || '') === 'high_priority');
     },
 
     openSubmission(row) {
@@ -239,15 +283,20 @@ function theIndexDashboard() {
     },
 
     allVisibleSelected() {
-      if (this.submissions.length === 0) return false;
-      return this.submissions.every(r => this.selectedIds.includes(r.id));
+      const visible = this.displayedSubmissions();
+      if (visible.length === 0) return false;
+      return visible.every(r => this.selectedIds.includes(r.id));
     },
 
     toggleSelectAll(checked) {
+      const visible = this.displayedSubmissions();
       if (checked) {
-        this.selectedIds = this.submissions.map(r => r.id);
+        const incoming = visible.map(r => r.id);
+        const merged = new Set([...this.selectedIds, ...incoming]);
+        this.selectedIds = Array.from(merged);
       } else {
-        this.selectedIds = [];
+        const visibleIds = new Set(visible.map(r => r.id));
+        this.selectedIds = this.selectedIds.filter(id => !visibleIds.has(id));
       }
     },
 
