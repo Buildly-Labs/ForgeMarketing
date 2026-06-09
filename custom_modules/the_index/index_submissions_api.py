@@ -13,8 +13,10 @@ import time
 from threading import Lock
 from typing import Any, Dict, Optional
 from uuid import uuid4
+import csv
+import io
 
-from flask import Blueprint, jsonify, make_response, request
+from flask import Blueprint, jsonify, make_response, request, Response
 
 from dashboard.models import db
 from custom_modules.the_index.models import IndexSurveySubmission
@@ -399,6 +401,43 @@ def _to_row_dict(row: IndexSurveySubmission) -> Dict[str, Any]:
     }
 
 
+def _build_filtered_query(
+    source: str,
+    email: str,
+    from_dt: Optional[datetime],
+    to_dt: Optional[datetime],
+):
+    query = IndexSurveySubmission.query
+    if source:
+        query = query.filter(IndexSurveySubmission.source == source)
+    if email:
+        query = query.filter(IndexSurveySubmission.contact_email.ilike(f"%{email}%"))
+    if from_dt:
+        query = query.filter(IndexSurveySubmission.submitted_at >= from_dt)
+    if to_dt:
+        query = query.filter(IndexSurveySubmission.submitted_at <= to_dt)
+    return query
+
+
+def _parse_ids_arg() -> list[str]:
+    values = request.args.getlist("ids")
+    parsed: list[str] = []
+    for raw in values:
+        for part in (raw or "").split(","):
+            cleaned = _sanitize_string(part).strip()
+            if cleaned:
+                parsed.append(cleaned)
+    # Preserve order, dedupe.
+    seen = set()
+    unique = []
+    for item in parsed:
+        if item in seen:
+            continue
+        seen.add(item)
+        unique.append(item)
+    return unique
+
+
 @index_submissions_bp.before_request
 def _capture_start_time():
     request._index_started_at = time.perf_counter()
@@ -428,6 +467,11 @@ def options_index_submissions():
 
 @index_submissions_bp.route("/index-submissions/summary", methods=["OPTIONS"])
 def options_index_submissions_summary():
+    return _apply_cors(make_response("", 204))
+
+
+@index_submissions_bp.route("/index-submissions/export", methods=["OPTIONS"])
+def options_index_submissions_export():
     return _apply_cors(make_response("", 204))
 
 
@@ -590,15 +634,7 @@ def list_index_submissions():
     except Exception:
         return _error(400, "Invalid from/to date format", request_id)
 
-    query = IndexSurveySubmission.query
-    if source:
-        query = query.filter(IndexSurveySubmission.source == source)
-    if email:
-        query = query.filter(IndexSurveySubmission.contact_email.ilike(f"%{email}%"))
-    if from_dt:
-        query = query.filter(IndexSurveySubmission.submitted_at >= from_dt)
-    if to_dt:
-        query = query.filter(IndexSurveySubmission.submitted_at <= to_dt)
+    query = _build_filtered_query(source, email, from_dt, to_dt)
 
     total = query.count()
     rows = query.order_by(IndexSurveySubmission.submitted_at.desc()).limit(limit).all()
@@ -658,6 +694,101 @@ def summary_index_submissions():
         }
     )
     return _apply_cors(make_response(response, 200))
+
+
+@index_submissions_bp.route("/index-submissions/<submission_id>", methods=["GET"])
+def get_index_submission(submission_id: str):
+    request_id = _get_request_id()
+    request._index_request_id = request_id
+
+    row = IndexSurveySubmission.query.get(submission_id)
+    if not row:
+        return _error(404, "Submission not found", request_id)
+
+    return _apply_cors(make_response(jsonify({"submission": _to_row_dict(row)}), 200))
+
+
+@index_submissions_bp.route("/index-submissions/export", methods=["GET"])
+def export_index_submissions():
+    request_id = _get_request_id()
+    request._index_request_id = request_id
+
+    fmt = _sanitize_string(request.args.get("format") or "json").lower()
+    if fmt not in {"json", "csv"}:
+        return _error(400, "format must be json or csv", request_id)
+
+    source = _sanitize_string(request.args.get("source") or "")[:255]
+    email = _sanitize_string(request.args.get("email") or "")[:255]
+    from_raw = request.args.get("from")
+    to_raw = request.args.get("to")
+
+    try:
+        from_dt = _parse_iso_date(from_raw)
+        to_dt = _parse_iso_date(to_raw)
+    except Exception:
+        return _error(400, "Invalid from/to date format", request_id)
+
+    ids = _parse_ids_arg()
+    max_rows = 10000
+
+    if ids:
+        rows = (
+            IndexSurveySubmission.query.filter(IndexSurveySubmission.id.in_(ids))
+            .order_by(IndexSurveySubmission.submitted_at.desc())
+            .limit(max_rows)
+            .all()
+        )
+    else:
+        rows = (
+            _build_filtered_query(source, email, from_dt, to_dt)
+            .order_by(IndexSurveySubmission.submitted_at.desc())
+            .limit(max_rows)
+            .all()
+        )
+
+    payload = [_to_row_dict(row) for row in rows]
+    stamp = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+
+    if fmt == "json":
+        body = json.dumps(payload, ensure_ascii=True)
+        resp = Response(body, mimetype="application/json")
+        resp.headers["Content-Disposition"] = f"attachment; filename=index-submissions-{stamp}.json"
+        return _apply_cors(resp)
+
+    output = io.StringIO()
+    writer = csv.DictWriter(
+        output,
+        fieldnames=[
+            "id",
+            "submitted_at",
+            "source",
+            "submitted_page",
+            "contact_email",
+            "company_name",
+            "answers_json",
+            "reporting_json",
+            "request_meta_json",
+        ],
+    )
+    writer.writeheader()
+    for row in payload:
+        writer.writerow(
+            {
+                "id": row.get("id", ""),
+                "submitted_at": row.get("submitted_at", ""),
+                "source": row.get("source", ""),
+                "submitted_page": row.get("submitted_page", ""),
+                "contact_email": row.get("contact_email", ""),
+                "company_name": row.get("company_name", ""),
+                "answers_json": json.dumps(row.get("answers", {}), ensure_ascii=True),
+                "reporting_json": json.dumps(row.get("reporting", {}), ensure_ascii=True),
+                "request_meta_json": json.dumps(row.get("request_meta", {}), ensure_ascii=True),
+            }
+        )
+
+    resp = Response(output.getvalue(), mimetype="text/csv")
+    resp.headers["Content-Disposition"] = f"attachment; filename=index-submissions-{stamp}.csv"
+    return _apply_cors(resp)
 
 
 @index_submissions_bp.route("/the-index", methods=["GET"])
