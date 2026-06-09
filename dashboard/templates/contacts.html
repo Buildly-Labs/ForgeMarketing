@@ -28,6 +28,14 @@
                         class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700">
                     <i class="fas fa-user-plus mr-2"></i>Add Contact
                 </button>
+                <button onclick="exportContactsCsv(false)"
+                        class="bg-slate-700 text-white px-4 py-2 rounded-lg hover:bg-slate-800">
+                    <i class="fas fa-file-export mr-2"></i>Export Filtered CSV
+                </button>
+                <button onclick="exportContactsCsv(true)"
+                        class="bg-slate-500 text-white px-4 py-2 rounded-lg hover:bg-slate-600">
+                    <i class="fas fa-database mr-2"></i>Export All CSV
+                </button>
                 <button onclick="importExistingData()"
                         class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700">
                     <i class="fas fa-download mr-2"></i>Import Data
@@ -78,6 +86,23 @@
     <!-- Filters -->
     <div class="bg-white rounded-lg p-6 card-shadow">
         <h3 class="text-lg font-semibold mb-4">Filters</h3>
+        <div class="mb-4 flex flex-wrap gap-2">
+            <button type="button" id="chip_responded" onclick="toggleQuickFilter('responded')" class="px-3 py-1.5 rounded-full text-xs border border-gray-300 text-gray-700 hover:bg-gray-50">
+                Responded
+            </button>
+            <button type="button" id="chip_external" onclick="toggleQuickFilter('external')" class="px-3 py-1.5 rounded-full text-xs border border-gray-300 text-gray-700 hover:bg-gray-50">
+                Has External Trace
+            </button>
+            <button type="button" id="chip_class_warm_lead" onclick="setClassificationChip('warm_lead')" class="px-3 py-1.5 rounded-full text-xs border border-orange-300 text-orange-800 bg-orange-50 hover:bg-orange-100">
+                Warm Lead
+            </button>
+            <button type="button" id="chip_class_media" onclick="setClassificationChip('media')" class="px-3 py-1.5 rounded-full text-xs border border-purple-300 text-purple-800 bg-purple-50 hover:bg-purple-100">
+                Media
+            </button>
+            <button type="button" id="chip_class_do_not_contact" onclick="setClassificationChip('do_not_contact')" class="px-3 py-1.5 rounded-full text-xs border border-red-300 text-red-800 bg-red-50 hover:bg-red-100">
+                Do Not Contact
+            </button>
+        </div>
         <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Brand</label>
@@ -105,9 +130,24 @@
                 </select>
             </div>
             <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Classification</label>
+                <select id="classificationFilter" onchange="loadContacts()" class="w-full border rounded-lg px-3 py-2">
+                    <option value="">All</option>
+                    <option value="warm_lead">Warm Lead</option>
+                    <option value="cold_lead">Cold Lead</option>
+                    <option value="advocate">Advocate</option>
+                    <option value="partner_prospect">Partner Prospect</option>
+                    <option value="media">Media</option>
+                    <option value="customer">Customer</option>
+                    <option value="alumni">Alumni</option>
+                    <option value="do_not_contact">Do Not Contact</option>
+                    <option value="other">Other</option>
+                </select>
+            </div>
+            <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Search</label>
-                <input type="text" id="searchFilter" oninput="debounceLoadContacts()" 
-                       placeholder="Name, email, company..." 
+                <input type="text" id="searchFilter" oninput="debounceLoadContacts()"
+                       placeholder="Name, email, company..."
                        class="w-full border rounded-lg px-3 py-2">
             </div>
             <div class="flex items-end">
@@ -128,9 +168,10 @@
             <table class="min-w-full divide-y divide-gray-200">
                 <thead class="bg-gray-50">
                     <tr>
-                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Contact</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Contact / Activity</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Brand</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Classification / Tags</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Social Links</th>
                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
@@ -426,9 +467,29 @@
                 </select>
             </div>
             <div>
-                <label class="text-xs font-medium text-gray-700">Notes / Response</label>
-                <textarea id="touch_notes" rows="3" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="Notes or response details..."></textarea>
+                <label class="text-xs font-medium text-gray-700">Notes / Message</label>
+                <textarea id="touch_notes" rows="2" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="Notes or message details..."></textarea>
             </div>
+            <details class="border rounded p-2">
+                <summary class="text-xs font-medium text-gray-700 cursor-pointer">External Trace <span class="text-gray-400 font-normal">(outside-app interactions)</span></summary>
+                <div class="mt-2 space-y-2">
+                    <div>
+                        <label class="text-xs text-gray-600"><i class="fas fa-external-link-alt mr-1"></i>External URL <span class="text-gray-400">(tweet, LinkedIn post, email thread, etc.)</span></label>
+                        <input type="url" id="touch_external_url" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="https://...">
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-600"><i class="fas fa-hashtag mr-1"></i>Reference ID <span class="text-gray-400">(thread ID, ticket #, DM ref)</span></label>
+                        <input type="text" id="touch_external_ref" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="e.g. tweet-1234567890, ticket-42">
+                    </div>
+                </div>
+            </details>
+            <details id="touch_response_section" class="border border-emerald-200 rounded p-2 bg-emerald-50">
+                <summary class="text-xs font-medium text-emerald-800 cursor-pointer"><i class="fas fa-reply mr-1"></i>Log Response <span class="text-gray-400 font-normal">(if they already replied)</span></summary>
+                <div class="mt-2 space-y-2">
+                    <textarea id="touch_response_text" rows="2" class="w-full border rounded px-2 py-1.5 text-sm bg-white" placeholder="What did they say?"></textarea>
+                    <input type="datetime-local" id="touch_responded_at" class="w-full border rounded px-2 py-1.5 text-sm bg-white">
+                </div>
+            </details>
         </div>
         <div class="flex justify-end space-x-3 mt-4 pt-3 border-t">
             <button onclick="closeTouchModal()" class="bg-gray-300 text-gray-700 px-4 py-2 rounded">Cancel</button>
@@ -439,15 +500,44 @@
     </div>
 </div>
 
+<!-- ── Log Response Modal ──────────────────────────────────────────────────────── -->
+<div id="respondModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50" style="display:none;">
+    <div class="relative top-20 mx-auto p-5 border w-11/12 max-w-sm shadow-lg rounded-md bg-white">
+        <div class="flex items-center justify-between pb-3 border-b">
+            <h3 class="text-lg font-semibold text-emerald-700"><i class="fas fa-reply mr-2"></i>Log Response</h3>
+            <button onclick="closeRespondModal()" class="text-gray-400 hover:text-gray-600 p-2"><i class="fas fa-times"></i></button>
+        </div>
+        <input type="hidden" id="respond_touch_id">
+        <div class="mt-4 space-y-3">
+            <div>
+                <label class="text-xs font-medium text-gray-700">Response Text <span class="text-red-500">*</span></label>
+                <textarea id="respond_text" rows="4" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="What did the contact say?"></textarea>
+            </div>
+            <div>
+                <label class="text-xs font-medium text-gray-700">Response Date/Time</label>
+                <input type="datetime-local" id="respond_at" class="w-full border rounded px-2 py-1.5 text-sm">
+            </div>
+        </div>
+        <div class="flex justify-end space-x-3 mt-4 pt-3 border-t">
+            <button onclick="closeRespondModal()" class="bg-gray-300 text-gray-700 px-4 py-2 rounded">Cancel</button>
+            <button onclick="submitResponse()" class="bg-emerald-600 text-white px-4 py-2 rounded hover:bg-emerald-700">
+                <i class="fas fa-save mr-2"></i>Save Response
+            </button>
+        </div>
+    </div>
+</div>
+
 <script>
 // Global variables
 let selectedContact = null;
 let loadTimeout;
+let quickFilters = { responded: false, external: false };
 
 // Initialize when DOM is ready
 document.addEventListener('DOMContentLoaded', function() {
     console.log('\u2705 CRM Contacts loaded with vanilla JavaScript');
     populateBrandSelects();
+    updateQuickFilterChips();
     loadStats();
     loadContacts();
 });
@@ -471,6 +561,26 @@ function closeAddContactModal() {
     document.getElementById('addContactModal').style.display = 'none';
 }
 
+const CLASSIFICATION_LABELS = {
+  warm_lead:'Warm Lead', cold_lead:'Cold Lead', advocate:'Advocate',
+  partner_prospect:'Partner Prospect', media:'Media', customer:'Customer',
+  alumni:'Alumni', do_not_contact:'Do Not Contact', other:'Other'
+};
+const CLASSIFICATION_COLORS = {
+  warm_lead:'bg-orange-100 text-orange-800', cold_lead:'bg-blue-100 text-blue-800',
+  advocate:'bg-green-100 text-green-800', partner_prospect:'bg-indigo-100 text-indigo-800',
+  media:'bg-purple-100 text-purple-800', customer:'bg-teal-100 text-teal-800',
+  alumni:'bg-gray-100 text-gray-700', do_not_contact:'bg-red-100 text-red-800',
+  other:'bg-gray-100 text-gray-600'
+};
+
+function classificationBadge(c) {
+  if (!c) return '';
+  const label = CLASSIFICATION_LABELS[c] || c;
+  const color = CLASSIFICATION_COLORS[c] || 'bg-gray-100 text-gray-600';
+  return `<span class="inline-flex px-1.5 py-0.5 text-xs rounded-full ${color} capitalize">${label}</span>`;
+}
+
 function populateContactModal() {
     if (!selectedContact) return;
     const c = selectedContact;
@@ -483,17 +593,38 @@ function populateContactModal() {
         c.tiktok_handle   ? `<span><i class="fab fa-tiktok"></i> ${c.tiktok_handle}</span>` : '',
         c.website_url     ? `<a href="${c.website_url}" target="_blank" class="text-gray-600 hover:underline"><i class="fas fa-globe"></i> Website</a>` : '',
     ].filter(Boolean).join('\n');
+    const tagChips = (c.tags||[]).map(t =>
+        `<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 text-xs">${t}</span>`
+    ).join(' ');
     const touches = c.touches || [];
     const touchHtml = touches.length
-        ? touches.map(t => `
-            <div class="text-xs border-b py-1.5">
+        ? touches.map(t => {
+            const hasResponse = t.response_text && t.response_text.trim();
+            const externalLink = t.external_url
+                ? `<a href="${t.external_url}" target="_blank" class="text-blue-600 text-xs hover:underline"><i class="fas fa-external-link-alt mr-1"></i>View external</a>`
+                : '';
+            const extRef = t.external_ref ? `<span class="text-gray-400 text-xs">ref: ${t.external_ref}</span>` : '';
+            const responseBlock = hasResponse
+                ? `<div class="mt-1 p-1.5 bg-emerald-50 border border-emerald-200 rounded text-xs text-emerald-800">
+                       <i class="fas fa-reply mr-1"></i><strong>Response:</strong> ${t.response_text}
+                       ${t.responded_at ? `<span class="text-emerald-600 ml-1">(${new Date(t.responded_at).toLocaleDateString()})</span>` : ''}
+                   </div>`
+                : `<button onclick="openRespondModal(${t.id})" class="text-xs text-emerald-700 hover:underline mt-0.5"><i class="fas fa-reply mr-1"></i>Log response</button>`;
+            return `<div class="text-xs border-b py-1.5">
                 <div class="flex justify-between">
                     <span class="font-medium capitalize">${t.touch_type || 'note'}</span>
                     <span class="text-gray-400">${t.created_at ? new Date(t.created_at).toLocaleDateString() : ''}</span>
                 </div>
                 <div class="text-gray-600">${t.subject || ''}</div>
-                <div class="text-gray-500">${t.platform || ''} \u00b7 ${t.touch_direction || ''} \u00b7 ${t.status || ''}</div>
-            </div>`).join('')
+                <div class="flex flex-wrap gap-2 text-gray-500">
+                    ${t.platform ? `<span>${t.platform}</span>` : ''}
+                    <span class="capitalize">${t.touch_direction || ''}</span>
+                    <span class="capitalize">${t.status || ''}</span>
+                    ${externalLink}${extRef}
+                </div>
+                ${responseBlock}
+            </div>`;
+          }).join('')
         : '<p class="text-gray-500 text-sm">No touch history yet.</p>';
     const content = document.getElementById('contactModalContent');
     content.innerHTML = `
@@ -507,11 +638,13 @@ function populateContactModal() {
                     <div><strong>Title:</strong> ${c.title || 'N/A'}</div>
                     <div><strong>Brand:</strong> <span class="capitalize">${c.brand || 'N/A'}</span></div>
                     <div><strong>Type:</strong> <span class="capitalize">${c.contact_type || 'N/A'}</span></div>
+                    <div><strong>Classification:</strong> ${classificationBadge(c.classification) || '<span class="text-gray-400">none</span>'}</div>
                     <div><strong>Source:</strong> <span class="text-gray-600">${c.source || 'N/A'}</span></div>
                     <div><strong>Status:</strong> <span class="capitalize">${c.status || 'N/A'}</span></div>
                     ${c.phone ? `<div><strong>Phone:</strong> ${c.phone}</div>` : ''}
                     ${c.followers_count ? `<div><strong>Followers:</strong> ${formatNumber(c.followers_count)}</div>` : ''}
                 </div>
+                ${tagChips ? `<div class="mt-2 flex flex-wrap gap-1">${tagChips}</div>` : ''}
                 ${socialHtml ? `<div class="mt-3"><h5 class="font-medium mb-2 text-sm">Social Profiles</h5><div class="space-y-1 text-sm">${socialHtml}</div></div>` : ''}
             </div>
             <div>
@@ -521,7 +654,7 @@ function populateContactModal() {
                         <i class="fas fa-plus mr-1"></i>Add Touch
                     </button>
                 </div>
-                <div class="max-h-64 overflow-y-auto">${touchHtml}</div>
+                <div class="max-h-96 overflow-y-auto">${touchHtml}</div>
             </div>
         </div>
     `;
@@ -691,6 +824,38 @@ function clearFilters() {
     document.getElementById('typeFilter').value = '';
     document.getElementById('statusFilter').value = '';
     document.getElementById('searchFilter').value = '';
+    const cf = document.getElementById('classificationFilter'); if (cf) cf.value = '';
+    quickFilters = { responded: false, external: false };
+    updateQuickFilterChips();
+    loadContacts();
+}
+
+function updateQuickFilterChips() {
+    const responded = document.getElementById('chip_responded');
+    const external = document.getElementById('chip_external');
+    if (responded) {
+        responded.className = quickFilters.responded
+            ? 'px-3 py-1.5 rounded-full text-xs border border-emerald-300 text-emerald-800 bg-emerald-50'
+            : 'px-3 py-1.5 rounded-full text-xs border border-gray-300 text-gray-700 hover:bg-gray-50';
+    }
+    if (external) {
+        external.className = quickFilters.external
+            ? 'px-3 py-1.5 rounded-full text-xs border border-sky-300 text-sky-800 bg-sky-50'
+            : 'px-3 py-1.5 rounded-full text-xs border border-gray-300 text-gray-700 hover:bg-gray-50';
+    }
+}
+
+function toggleQuickFilter(kind) {
+    if (kind === 'responded') quickFilters.responded = !quickFilters.responded;
+    if (kind === 'external') quickFilters.external = !quickFilters.external;
+    updateQuickFilterChips();
+    loadContacts();
+}
+
+function setClassificationChip(value) {
+    const sel = document.getElementById('classificationFilter');
+    if (!sel) return;
+    sel.value = sel.value === value ? '' : value;
     loadContacts();
 }
 
@@ -729,11 +894,15 @@ async function loadContacts() {
         const type = document.getElementById('typeFilter').value;
         const status = document.getElementById('statusFilter').value;
         const search = document.getElementById('searchFilter').value;
-        
+        const classification = (document.getElementById('classificationFilter')||{}).value || '';
+
         if (brand) params.append('brand', brand);
         if (type) params.append('contact_type', type);
         if (status) params.append('status', status);
         if (search) params.append('search', search);
+        if (classification) params.append('classification', classification);
+        if (quickFilters.responded) params.append('responded', '1');
+        if (quickFilters.external) params.append('has_external_trace', '1');
         
         const response = await fetch(`/api/contacts?${params}`);
         if (response.ok) {
@@ -765,37 +934,62 @@ function displayContacts(contacts) {
     
     tbody.innerHTML = contacts.map(contact => {
         const socialLinks = extractSocialLinks(contact.notes || '');
-        const socialLinksHtml = socialLinks.map(link => 
-            `<a href="${link.url}" target="_blank" title="View ${link.platform} profile" class="hover:scale-110 transition-transform mr-2">
-                <i class="${getPlatformIcon(link.platform)} text-sm"></i>
-            </a>`
-        ).join('');
-        
+        const socialLinksHtml = [
+            contact.linkedin_url  ? `<a href="${contact.linkedin_url}" target="_blank" title="LinkedIn" class="mr-1"><i class="fab fa-linkedin text-blue-700"></i></a>` : '',
+            contact.twitter_handle ? `<a href="https://twitter.com/${(contact.twitter_handle||'').replace('@','')}" target="_blank" title="Twitter/X" class="mr-1"><i class="fab fa-twitter text-sky-500"></i></a>` : '',
+            contact.instagram_handle ? `<a href="https://instagram.com/${(contact.instagram_handle||'').replace('@','')}" target="_blank" title="Instagram" class="mr-1"><i class="fab fa-instagram text-pink-600"></i></a>` : '',
+            contact.website_url ? `<a href="${contact.website_url}" target="_blank" title="Website" class="mr-1"><i class="fas fa-globe text-gray-500"></i></a>` : '',
+            ...socialLinks.map(l => `<a href="${l.url}" target="_blank" title="${l.platform}" class="mr-1"><i class="${getPlatformIcon(l.platform)} text-sm"></i></a>`)
+        ].filter(Boolean).join('');
+        const tagChips = (contact.tags||[]).slice(0,3).map(t =>
+            `<span class="inline-flex px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-800 text-xs">${t}</span>`
+        ).join(' ');
+        const lastExternal = contact.last_external_trace;
+        const lastResponse = contact.last_response;
+        const externalSummary = lastExternal
+            ? `<div class="mt-1 text-xs text-gray-500">
+                   <span class="font-medium text-gray-600">Last external:</span>
+                   ${lastExternal.external_url
+                       ? `<a href="${lastExternal.external_url}" target="_blank" class="text-blue-600 hover:underline">${lastExternal.platform || 'link'}</a>`
+                       : `<span>${lastExternal.platform || 'ref'}</span>`}
+                   ${lastExternal.external_ref ? `<span class="text-gray-400">(${lastExternal.external_ref})</span>` : ''}
+               </div>`
+            : '';
+        const responseSummary = lastResponse
+            ? `<div class="mt-1 text-xs text-emerald-700">
+                   <span class="font-medium">Latest response:</span>
+                   ${(lastResponse.response_text || '').slice(0, 70)}${(lastResponse.response_text || '').length > 70 ? '...' : ''}
+               </div>`
+            : '';
         return `
             <tr class="hover:bg-gray-50 cursor-pointer" onclick="viewContactById('${contact.id}')">
                 <td class="px-6 py-4">
-                    <div>
-                        <div class="text-sm font-medium text-gray-900">${contact.name}</div>
-                        <div class="text-sm text-gray-500">${contact.email || contact.company || 'No email'}</div>
-                    </div>
+                    <div class="text-sm font-medium text-gray-900">${contact.name}</div>
+                    <div class="text-sm text-gray-500">${contact.email || contact.company || 'No email'}</div>
+                    ${externalSummary}
+                    ${responseSummary}
                 </td>
                 <td class="px-6 py-4">
-                    <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800 capitalize">
-                        ${contact.brand}
-                    </span>
+                    <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800 capitalize">${contact.brand}</span>
                 </td>
                 <td class="px-6 py-4">
                     <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full capitalize
-                        ${contact.contact_type === 'email' ? 'bg-blue-100 text-blue-800' : 
-                          contact.contact_type === 'social' ? 'bg-purple-100 text-purple-800' : 
+                        ${contact.contact_type === 'email' ? 'bg-blue-100 text-blue-800' :
+                          contact.contact_type === 'social' ? 'bg-purple-100 text-purple-800' :
                           'bg-orange-100 text-orange-800'}">
                         ${contact.contact_type}
                     </span>
                 </td>
                 <td class="px-6 py-4">
+                    <div class="flex flex-col gap-1">
+                        ${contact.classification ? classificationBadge(contact.classification) : '<span class="text-gray-300 text-xs">—</span>'}
+                        ${tagChips ? `<div class="flex flex-wrap gap-1 mt-0.5">${tagChips}</div>` : ''}
+                    </div>
+                </td>
+                <td class="px-6 py-4">
                     <span class="inline-flex px-2 py-1 text-xs font-semibold rounded-full capitalize
-                        ${contact.status === 'active' ? 'bg-green-100 text-green-800' : 
-                          contact.status === 'inactive' ? 'bg-gray-100 text-gray-800' : 
+                        ${contact.status === 'active' ? 'bg-green-100 text-green-800' :
+                          contact.status === 'inactive' ? 'bg-gray-100 text-gray-800' :
                           'bg-red-100 text-red-800'}">
                         ${contact.status}
                     </span>
@@ -805,12 +999,8 @@ function displayContacts(contacts) {
                     ${contact.followers_count ? `<div class="text-xs text-gray-500 mt-1">👥 ${formatNumber(contact.followers_count)}</div>` : ''}
                 </td>
                 <td class="px-6 py-4">
-                    <button onclick="event.stopPropagation(); editContact('${contact.id}')" class="text-indigo-600 hover:text-indigo-900 mr-2">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                    <button onclick="event.stopPropagation(); deleteContact('${contact.id}', '${contact.name}')" class="text-red-600 hover:text-red-900">
-                        <i class="fas fa-trash"></i>
-                    </button>
+                    <button onclick="event.stopPropagation(); editContact('${contact.id}')" class="text-indigo-600 hover:text-indigo-900 mr-2" title="Edit"><i class="fas fa-edit"></i></button>
+                    <button onclick="event.stopPropagation(); deleteContact('${contact.id}', '${contact.name}')" class="text-red-600 hover:text-red-900" title="Delete"><i class="fas fa-trash"></i></button>
                 </td>
             </tr>
         `;
@@ -906,13 +1096,53 @@ function populateBrandSelects() {
 }
 
 // ── Add / Edit Contact form ───────────────────────────────────────────────
+// ── Tag chip editor ──────────────────────────────────────────────────────────
+let _cfTags = [];
+
+function renderTagChips() {
+    const container = document.getElementById('cf_tags_chips');
+    if (!container) return;
+    container.innerHTML = _cfTags.map((t, i) =>
+        `<span class="inline-flex items-center px-2 py-0.5 rounded-full bg-blue-100 text-blue-800 text-xs">
+            ${t}
+            <button type="button" onclick="removeTag(${i})" class="ml-1 text-blue-500 hover:text-blue-800">&times;</button>
+        </span>`
+    ).join('');
+    document.getElementById('cf_tags_json').value = JSON.stringify(_cfTags);
+}
+
+function addTag(value) {
+    const tag = value.trim().replace(/,$/, '').trim();
+    if (tag && !_cfTags.includes(tag)) {
+        _cfTags.push(tag);
+        renderTagChips();
+    }
+    const inp = document.getElementById('cf_tags_input');
+    if (inp) inp.value = '';
+}
+
+function removeTag(index) {
+    _cfTags.splice(index, 1);
+    renderTagChips();
+}
+
+function handleTagInput(event) {
+    if (event.key === 'Enter' || event.key === ',') {
+        event.preventDefault();
+        addTag(event.target.value);
+    }
+}
+
 function resetContactForm() {
     ['cf_name','cf_email','cf_company','cf_title','cf_source','cf_phone',
      'cf_linkedin_url','cf_twitter','cf_instagram','cf_youtube','cf_bluesky',
-     'cf_tiktok','cf_website','cf_notes'].forEach(id => {
+     'cf_tiktok','cf_website','cf_notes','cf_tags_input'].forEach(id => {
         const el = document.getElementById(id); if (el) el.value = '';
     });
     const f = document.getElementById('cf_followers'); if (f) f.value = '';
+    const cls = document.getElementById('cf_classification'); if (cls) cls.value = '';
+    _cfTags = [];
+    renderTagChips();
     document.getElementById('editContactId').value = '';
     const h3 = document.querySelector('#addContactModal h3');
     if (h3) h3.textContent = 'Add New Contact';
@@ -938,6 +1168,9 @@ function openEditContactModal(contact) {
     set('cf_website', contact.website_url);
     set('cf_followers', contact.followers_count);
     set('cf_notes', contact.notes);
+    set('cf_classification', contact.classification || '');
+    _cfTags = Array.isArray(contact.tags) ? [...contact.tags] : [];
+    renderTagChips();
     document.getElementById('addContactModal').style.display = 'block';
 }
 
@@ -946,6 +1179,9 @@ async function saveContact() {
     const brand = (document.getElementById('cf_brand').value || '').trim();
     if (!name)  { showNotification('Name is required.',  'error'); return; }
     if (!brand) { showNotification('Brand is required.', 'error'); return; }
+    // Flush any pending tag input
+    const tagInputEl = document.getElementById('cf_tags_input');
+    if (tagInputEl && tagInputEl.value.trim()) addTag(tagInputEl.value);
     const editId = document.getElementById('editContactId').value;
     const payload = {
         name, brand,
@@ -965,6 +1201,8 @@ async function saveContact() {
         website_url:      (document.getElementById('cf_website').value  || '').trim(),
         followers_count:  parseInt(document.getElementById('cf_followers').value) || 0,
         notes:            (document.getElementById('cf_notes').value    || '').trim(),
+        classification:   (document.getElementById('cf_classification').value || '').trim(),
+        tags:             _cfTags,
     };
     try {
         const url    = editId ? `/api/contacts/${editId}` : '/api/contacts';
@@ -988,7 +1226,10 @@ const DB_FIELD_LABELS = {
     linkedin_url:'LinkedIn URL', twitter_handle:'Twitter/X', instagram_handle:'Instagram',
     youtube_channel:'YouTube', bluesky_handle:'Bluesky', tiktok_handle:'TikTok',
     website_url:'Website', phone:'Phone', followers_count:'Followers',
-    engagement_rate:'Engagement Rate', notes:'Notes', tags:'Tags'
+    engagement_rate:'Engagement Rate', notes:'Notes', tags:'Tags',
+    classification:'Classification', touch_subject:'Touch Subject', touch_platform:'Touch Platform',
+    touch_message:'Touch Message', external_url:'External URL', external_ref:'External Reference',
+    response_text:'Response Text', responded_at:'Responded At'
 };
 let impState = {};
 
@@ -1090,22 +1331,50 @@ async function importConfirm() {
     } catch(e) { showNotification('Import failed: ' + e.message, 'error'); }
 }
 
+function exportContactsCsv(allRows) {
+    const params = new URLSearchParams();
+    if (!allRows) {
+        const brand = document.getElementById('brandFilter').value;
+        const type = document.getElementById('typeFilter').value;
+        const status = document.getElementById('statusFilter').value;
+        const search = document.getElementById('searchFilter').value;
+        const classification = (document.getElementById('classificationFilter') || {}).value || '';
+        if (brand) params.append('brand', brand);
+        if (type) params.append('contact_type', type);
+        if (status) params.append('status', status);
+        if (search) params.append('search', search);
+        if (classification) params.append('classification', classification);
+        if (quickFilters.responded) params.append('responded', '1');
+        if (quickFilters.external) params.append('has_external_trace', '1');
+    }
+    window.location.href = `/api/contacts/export?${params.toString()}`;
+}
+
 // ── Touch Modal ─────────────────────────────────────────────────────────────
 function closeTouchModal() {
     document.getElementById('touchModal').style.display = 'none';
-    ['touch_subject','touch_notes'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+    ['touch_subject','touch_notes','touch_external_url','touch_external_ref',
+     'touch_response_text'].forEach(id => { const el=document.getElementById(id); if(el) el.value=''; });
+    const rat = document.getElementById('touch_responded_at'); if (rat) rat.value = '';
 }
 
 async function saveTouch() {
     const contactId = document.getElementById('touchContactId').value;
     if (!contactId) return;
+    const responseText = (document.getElementById('touch_response_text').value||'').trim();
+    const respondedAt  = (document.getElementById('touch_responded_at').value||'').trim();
+    const direction    = document.getElementById('touch_direction').value;
     const payload = {
         touch_type:      document.getElementById('touch_type').value,
-        touch_direction: document.getElementById('touch_direction').value,
+        touch_direction: direction,
         subject:         (document.getElementById('touch_subject').value||'').trim(),
         platform:        document.getElementById('touch_platform').value,
         message:         (document.getElementById('touch_notes').value||'').trim(),
-        status:          'sent',
+        status:          responseText ? 'replied' : (direction === 'inbound' ? 'received' : 'sent'),
+        external_url:    (document.getElementById('touch_external_url').value||'').trim() || null,
+        external_ref:    (document.getElementById('touch_external_ref').value||'').trim() || null,
+        response_text:   responseText || null,
+        responded_at:    respondedAt || null,
     };
     try {
         const res  = await fetch(`/api/contacts/${contactId}/touches`, {
@@ -1116,10 +1385,52 @@ async function saveTouch() {
             showNotification('Touch recorded.', 'success');
             closeTouchModal();
             loadStats();
+            // Refresh open contact modal if any
+            if (selectedContact) viewContactById(selectedContact.id);
         } else {
             showNotification(data.error || 'Failed to save touch.', 'error');
         }
     } catch(e) { showNotification('Error saving touch.', 'error'); }
+}
+
+// ── Respond Modal ─────────────────────────────────────────────────────────
+function openRespondModal(touchId) {
+    document.getElementById('respond_touch_id').value = touchId;
+    const now = new Date();
+    const local = now.getFullYear() + '-' +
+        String(now.getMonth()+1).padStart(2,'0') + '-' +
+        String(now.getDate()).padStart(2,'0') + 'T' +
+        String(now.getHours()).padStart(2,'0') + ':' +
+        String(now.getMinutes()).padStart(2,'0');
+    document.getElementById('respond_at').value = local;
+    document.getElementById('respond_text').value = '';
+    document.getElementById('respondModal').style.display = 'block';
+}
+
+function closeRespondModal() {
+    document.getElementById('respondModal').style.display = 'none';
+}
+
+async function submitResponse() {
+    const touchId      = document.getElementById('respond_touch_id').value;
+    const responseText = (document.getElementById('respond_text').value||'').trim();
+    const respondedAt  = (document.getElementById('respond_at').value||'').trim();
+    if (!responseText) { showNotification('Enter the response text.', 'error'); return; }
+    try {
+        const res  = await fetch(`/api/contacts/touches/${touchId}/respond`, {
+            method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({response_text: responseText, responded_at: respondedAt||null})
+        });
+        const data = await res.json();
+        if (data.success) {
+            showNotification('Response logged.', 'success');
+            closeRespondModal();
+            loadStats();
+            if (selectedContact) viewContactById(selectedContact.id);
+        } else {
+            showNotification(data.error || 'Failed to log response.', 'error');
+        }
+    } catch(e) { showNotification('Error logging response.', 'error'); }
 }
 </script>
 {% endblock %}

@@ -4,7 +4,7 @@ Unified Marketing Automation Dashboard
 Main web interface for managing all brand marketing activities
 """
 
-from flask import Flask, render_template, request, jsonify, redirect, url_for, send_from_directory, abort, session
+from flask import Flask, render_template, request, jsonify, redirect, url_for, send_from_directory, abort, session, Response
 import asyncio
 import json
 import yaml
@@ -5680,6 +5680,9 @@ def api_list_contacts():
         contact_type = request.args.get('contact_type') 
         status = request.args.get('status')
         search = request.args.get('search')
+        classification = request.args.get('classification')
+        responded_only = request.args.get('responded') in {'1', 'true', 'yes'}
+        has_external_trace = request.args.get('has_external_trace') in {'1', 'true', 'yes'}
         limit = int(request.args.get('limit', 100))
         offset = int(request.args.get('offset', 0))
         
@@ -5688,8 +5691,11 @@ def api_list_contacts():
             contact_type=contact_type,
             status=status,
             search=search,
+            classification=classification or None,
+            responded_only=responded_only,
+            has_external_trace=has_external_trace,
             limit=limit,
-            offset=offset
+            offset=offset,
         )
         
         return jsonify(contacts)
@@ -5699,6 +5705,34 @@ def api_list_contacts():
             'success': False,
             'error': str(e)
         }), 500
+
+
+@app.route('/api/contacts/export')
+def api_export_contacts_csv():
+    """Export filtered contacts as CSV, including classification/tags/latest trace/latest response."""
+    if not CONTACTS_SYSTEM_AVAILABLE:
+        return jsonify({'error': 'Contacts system not available'}), 503
+
+    try:
+        manager = UnifiedContactsManager()
+        csv_text = manager.export_contacts_csv(
+            brand=request.args.get('brand') or None,
+            contact_type=request.args.get('contact_type') or None,
+            status=request.args.get('status') or None,
+            search=request.args.get('search') or None,
+            classification=request.args.get('classification') or None,
+            responded_only=request.args.get('responded') in {'1', 'true', 'yes'},
+            has_external_trace=request.args.get('has_external_trace') in {'1', 'true', 'yes'},
+        )
+        return Response(
+            csv_text,
+            mimetype='text/csv',
+            headers={
+                'Content-Disposition': 'attachment; filename=contacts_export.csv'
+            },
+        )
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/contacts/stats')
 def api_contacts_stats():
@@ -5896,29 +5930,99 @@ def api_import_contacts_csv():
 
 @app.route('/api/contacts/<int:contact_id>/touches', methods=['POST'])
 def api_add_touch(contact_id):
-    """Add touch/interaction to contact"""
+    """Add touch/interaction to contact.
+
+    Supports optional fields for tracing external interactions:
+      external_url  – URL of the post, thread, or conversation (e.g. LinkedIn post, tweet)
+      external_ref  – Platform-specific ID/thread reference
+      responded_at  – ISO datetime when the contact replied (if already known)
+    """
     if not CONTACTS_SYSTEM_AVAILABLE:
         return jsonify({'error': 'Contacts system not available'}), 503
-    
+
     try:
         manager = UnifiedContactsManager()
         touch_data = request.get_json()
-        
+
         if not touch_data:
             return jsonify({'error': 'No touch data provided'}), 400
-        
+
         touch_id = manager.add_touch(contact_id, touch_data)
-        
+
         return jsonify({
             'success': True,
             'touch_id': touch_id
         }), 201
-        
+
     except Exception as e:
         return jsonify({
             'success': False,
             'error': str(e)
         }), 500
+
+
+@app.route('/api/contacts/touches/<int:touch_id>/respond', methods=['POST'])
+def api_log_response(touch_id):
+    """Record a contact's response against an existing outbound touch.
+
+    Body: { "response_text": "...", "responded_at": "2026-06-09T14:00:00" (optional) }
+    """
+    if not CONTACTS_SYSTEM_AVAILABLE:
+        return jsonify({'error': 'Contacts system not available'}), 503
+
+    try:
+        data = request.get_json() or {}
+        response_text = (data.get('response_text') or '').strip()
+        if not response_text:
+            return jsonify({'error': 'response_text is required'}), 400
+
+        manager = UnifiedContactsManager()
+        ok = manager.log_response(
+            touch_id,
+            response_text,
+            responded_at=data.get('responded_at'),
+        )
+        if not ok:
+            return jsonify({'error': 'Touch not found'}), 404
+
+        return jsonify({'success': True, 'touch_id': touch_id})
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/contacts/<int:contact_id>/tags', methods=['PATCH'])
+def api_patch_contact_tags(contact_id):
+    """Set the full tags list and/or classification for a contact.
+
+    Body: { "tags": ["tag1", "tag2"], "classification": "warm_lead" }
+    """
+    if not CONTACTS_SYSTEM_AVAILABLE:
+        return jsonify({'error': 'Contacts system not available'}), 503
+
+    try:
+        data = request.get_json() or {}
+        update: dict = {}
+        if 'tags' in data:
+            tags = data['tags']
+            if not isinstance(tags, list):
+                return jsonify({'error': 'tags must be a list'}), 400
+            update['tags'] = tags
+        if 'classification' in data:
+            update['classification'] = str(data['classification']).strip()
+
+        if not update:
+            return jsonify({'error': 'Provide tags and/or classification'}), 400
+
+        manager = UnifiedContactsManager()
+        ok = manager.update_contact(contact_id, update)
+        if not ok:
+            return jsonify({'error': 'Contact not found'}), 404
+
+        return jsonify({'success': True})
+
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.errorhandler(404)
 def page_not_found(e):

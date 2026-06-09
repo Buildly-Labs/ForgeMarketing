@@ -19,6 +19,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Tuple
 import json
+import csv
+import io
 import re
 import sys
 
@@ -129,12 +131,26 @@ class UnifiedContactsManager:
             """)
             # Idempotently add columns introduced after the initial schema
             for col, defn in [
-                ('phone',          'TEXT DEFAULT ""'),
-                ('bluesky_handle', 'TEXT DEFAULT ""'),
-                ('tiktok_handle',  'TEXT DEFAULT ""'),
+                ('phone',           'TEXT DEFAULT ""'),
+                ('bluesky_handle',  'TEXT DEFAULT ""'),
+                ('tiktok_handle',   'TEXT DEFAULT ""'),
+                # classification: warm_lead, cold_lead, advocate, partner_prospect,
+                #                  media, do_not_contact, customer, alumni, other
+                ('classification',  'TEXT DEFAULT ""'),
             ]:
                 try:
                     conn.execute(f'ALTER TABLE contacts ADD COLUMN {col} {defn}')
+                except Exception:
+                    pass  # Column already exists
+
+            # Idempotently add columns to contact_touches
+            for col, defn in [
+                ('external_url',   'TEXT DEFAULT ""'),   # URL of the external interaction
+                ('external_ref',   'TEXT DEFAULT ""'),   # Thread ID, ticket #, etc.
+                ('responded_at',   'TIMESTAMP'),          # When the contact replied
+            ]:
+                try:
+                    conn.execute(f'ALTER TABLE contact_touches ADD COLUMN {col} {defn}')
                 except Exception:
                     pass  # Column already exists
 
@@ -248,7 +264,10 @@ class UnifiedContactsManager:
                       instagram_handle, youtube_channel, website, bio_summary, created_at))
     
     def get_contacts(self, brand: str = None, contact_type: str = None, 
-                    status: str = None, search: str = None, 
+                    status: str = None, search: str = None,
+                    classification: str = None,
+                    responded_only: bool = False,
+                    has_external_trace: bool = False,
                     limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
         """Get filtered list of contacts"""
         
@@ -256,7 +275,9 @@ class UnifiedContactsManager:
             SELECT c.*, 
                    COUNT(ct.id) as total_touches,
                    MAX(ct.created_at) as last_touch_at,
-                   COUNT(CASE WHEN ct.touch_direction = 'inbound' THEN 1 END) as response_count
+                   COUNT(CASE WHEN ct.touch_direction = 'inbound' THEN 1 END) as response_count,
+                   MAX(CASE WHEN COALESCE(ct.external_url, '') != '' THEN ct.created_at END) as last_external_touch_at,
+                   MAX(CASE WHEN COALESCE(ct.response_text, '') != '' THEN COALESCE(ct.responded_at, ct.created_at) END) as last_response_at
             FROM contacts c
             LEFT JOIN contact_touches ct ON c.id = ct.contact_id
             WHERE 1=1
@@ -279,6 +300,16 @@ class UnifiedContactsManager:
             query += " AND (c.name LIKE ? OR c.email LIKE ? OR c.company LIKE ?)"
             search_term = f"%{search}%"
             params.extend([search_term, search_term, search_term])
+
+        if classification:
+            query += " AND c.classification = ?"
+            params.append(classification)
+
+        if responded_only:
+            query += " AND EXISTS (SELECT 1 FROM contact_touches ct2 WHERE ct2.contact_id = c.id AND COALESCE(ct2.response_text, '') != '')"
+
+        if has_external_trace:
+            query += " AND EXISTS (SELECT 1 FROM contact_touches ct3 WHERE ct3.contact_id = c.id AND (COALESCE(ct3.external_url, '') != '' OR COALESCE(ct3.external_ref, '') != ''))"
         
         query += " GROUP BY c.id ORDER BY c.updated_at DESC LIMIT ? OFFSET ?"
         params.extend([limit, offset])
@@ -298,6 +329,39 @@ class UnifiedContactsManager:
                         contact['tags'] = []
                 else:
                     contact['tags'] = []
+
+                # Attach the latest external trace if one exists.
+                last_external = conn.execute(
+                    """
+                    SELECT external_url, external_ref, platform, subject, created_at
+                    FROM contact_touches
+                    WHERE contact_id = ?
+                      AND (COALESCE(external_url, '') != '' OR COALESCE(external_ref, '') != '')
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                    """,
+                    (contact['id'],),
+                ).fetchone()
+                if last_external:
+                    contact['last_external_trace'] = dict(last_external)
+                else:
+                    contact['last_external_trace'] = None
+
+                last_response = conn.execute(
+                    """
+                    SELECT response_text, responded_at, platform, subject, created_at
+                    FROM contact_touches
+                    WHERE contact_id = ?
+                      AND COALESCE(response_text, '') != ''
+                    ORDER BY COALESCE(responded_at, created_at) DESC
+                    LIMIT 1
+                    """,
+                    (contact['id'],),
+                ).fetchone()
+                if last_response:
+                    contact['last_response'] = dict(last_response)
+                else:
+                    contact['last_response'] = None
                 
                 contacts.append(contact)
             
@@ -350,8 +414,8 @@ class UnifiedContactsManager:
                 (name, email, company, title, brand, contact_type, source, status,
                  linkedin_url, twitter_handle, instagram_handle, youtube_channel,
                  website_url, followers_count, engagement_rate, alignment_score,
-                 platform, tags, notes)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 platform, tags, notes, classification)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 contact_data.get('name'),
                 normalized_email,
@@ -371,7 +435,8 @@ class UnifiedContactsManager:
                 contact_data.get('alignment_score', 0.0),
                 contact_data.get('platform'),
                 tags,
-                contact_data.get('notes')
+                contact_data.get('notes'),
+                contact_data.get('classification', ''),
             ))
             
             return cursor.lastrowid
@@ -418,7 +483,7 @@ class UnifiedContactsManager:
                 'name', 'email', 'company', 'title', 'brand', 'contact_type', 'status', 'source',
                 'linkedin_url', 'twitter_handle', 'instagram_handle', 'youtube_channel', 'website_url',
                 'followers_count', 'engagement_rate', 'alignment_score', 'platform', 'tags', 'notes',
-                'phone', 'bluesky_handle', 'tiktok_handle'
+                'phone', 'bluesky_handle', 'tiktok_handle', 'classification',
             }
 
             for field, value in search_fields:
@@ -486,13 +551,17 @@ class UnifiedContactsManager:
             return cursor.rowcount > 0
     
     def add_touch(self, contact_id: int, touch_data: Dict[str, Any]) -> int:
-        """Add interaction/touch to contact"""
+        """Add interaction/touch to contact.
+
+        Accepts optional `external_url`, `external_ref`, and `responded_at` to
+        trace interactions that happened outside the app.
+        """
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.execute("""
                 INSERT INTO contact_touches 
                 (contact_id, touch_type, touch_direction, subject, message,
-                 platform, status, response_text)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                 platform, status, response_text, external_url, external_ref, responded_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 contact_id,
                 touch_data.get('touch_type'),
@@ -501,15 +570,43 @@ class UnifiedContactsManager:
                 touch_data.get('message'),
                 touch_data.get('platform'),
                 touch_data.get('status'),
-                touch_data.get('response_text')
+                touch_data.get('response_text'),
+                touch_data.get('external_url'),
+                touch_data.get('external_ref'),
+                touch_data.get('responded_at'),
             ))
-            
+
             # Update last contact time
             conn.execute("""
                 UPDATE contacts SET last_contact_at = CURRENT_TIMESTAMP WHERE id = ?
             """, (contact_id,))
-            
+
             return cursor.lastrowid
+
+    def log_response(self, touch_id: int, response_text: str, responded_at: str = None) -> bool:
+        """Record a contact's response against an existing outbound touch."""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute("""
+                UPDATE contact_touches
+                SET response_text = ?,
+                    responded_at  = COALESCE(?, CURRENT_TIMESTAMP),
+                    status        = 'replied'
+                WHERE id = ?
+            """, (response_text, responded_at, touch_id))
+
+            if cursor.rowcount == 0:
+                return False
+
+            # Propagate last_contact_at to the parent contact
+            row = conn.execute(
+                "SELECT contact_id FROM contact_touches WHERE id = ?", (touch_id,)
+            ).fetchone()
+            if row:
+                conn.execute(
+                    "UPDATE contacts SET last_contact_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (row[0],),
+                )
+            return True
     
     def get_contact_stats(self, brand: str = None) -> Dict[str, Any]:
         """Get contact statistics"""
@@ -579,9 +676,26 @@ class UnifiedContactsManager:
         'phone':            ['phone', 'phone number', 'phone_number', 'mobile', 'telephone', 'cell'],
         'notes':            ['notes', 'note', 'comments', 'description', 'bio', 'about'],
         'tags':             ['tags', 'tag', 'labels', 'categories', 'category', 'industry'],
+        'classification':   ['classification', 'class', 'segment', 'lead class', 'contact classification'],
         'bluesky_handle':   ['bluesky', 'bsky', 'bluesky handle', 'bluesky_handle'],
         'tiktok_handle':    ['tiktok', 'tik tok', 'tiktok handle', 'tiktok_handle'],
+        'touch_subject':    ['touch subject', 'last touch subject', 'interaction subject', 'subject'],
+        'touch_platform':   ['touch platform', 'interaction platform', 'platform'],
+        'touch_message':    ['touch message', 'interaction notes', 'interaction message', 'message'],
+        'external_url':     ['external url', 'external link', 'thread url', 'post url', 'conversation url'],
+        'external_ref':     ['external ref', 'external reference', 'thread id', 'reference id', 'ticket id'],
+        'response_text':    ['response', 'response text', 'reply', 'reply text', 'last response'],
+        'responded_at':     ['responded at', 'response date', 'reply date', 'replied at'],
     }
+
+    @staticmethod
+    def _split_tags(value: str) -> list[str]:
+        if not value:
+            return []
+        if isinstance(value, list):
+            return [str(v).strip() for v in value if str(v).strip()]
+        parts = re.split(r'[|,;]+', str(value))
+        return [part.strip() for part in parts if part.strip()]
 
     @staticmethod
     def auto_detect_mapping(headers: list) -> dict:
@@ -695,6 +809,8 @@ class UnifiedContactsManager:
                             contact[db_field] = float(val.replace('%', '').strip())
                         except ValueError:
                             pass
+                    elif db_field == 'tags':
+                        contact[db_field] = self._split_tags(val)
                     else:
                         contact[db_field] = val
 
@@ -716,12 +832,114 @@ class UnifiedContactsManager:
                         contact['linkedin_url']
                     )
 
-                self.create_contact(contact)
+                touch_payload = {
+                    'touch_type': 'manual',
+                    'touch_direction': 'inbound' if contact.get('response_text') else 'outbound',
+                    'subject': contact.get('touch_subject') or '',
+                    'platform': contact.get('touch_platform') or 'other',
+                    'message': contact.get('touch_message') or '',
+                    'status': 'replied' if contact.get('response_text') else 'sent',
+                    'response_text': contact.get('response_text') or None,
+                    'external_url': contact.get('external_url') or None,
+                    'external_ref': contact.get('external_ref') or None,
+                    'responded_at': contact.get('responded_at') or None,
+                }
+
+                for transient_key in [
+                    'touch_subject', 'touch_platform', 'touch_message',
+                    'external_url', 'external_ref', 'response_text', 'responded_at',
+                ]:
+                    contact.pop(transient_key, None)
+
+                contact_id = self.create_contact(contact)
+
+                if any([
+                    touch_payload['subject'],
+                    touch_payload['message'],
+                    touch_payload['external_url'],
+                    touch_payload['external_ref'],
+                    touch_payload['response_text'],
+                ]):
+                    self.add_touch(contact_id, touch_payload)
                 imported += 1
             except Exception as exc:
                 errors.append(f"Row {i + 2}: {exc}")
 
         return {'imported': imported, 'skipped': skipped, 'errors': errors[:20]}
+
+    def export_contacts_csv(self, brand: str = None, contact_type: str = None,
+                            status: str = None, search: str = None,
+                            classification: str = None,
+                            responded_only: bool = False,
+                            has_external_trace: bool = False) -> str:
+        """Export filtered contacts as CSV including tags, classification, and latest trace/response fields."""
+        contacts = self.get_contacts(
+            brand=brand,
+            contact_type=contact_type,
+            status=status,
+            search=search,
+            classification=classification,
+            responded_only=responded_only,
+            has_external_trace=has_external_trace,
+            limit=50000,
+            offset=0,
+        )
+
+        buffer = io.StringIO()
+        writer = csv.DictWriter(
+            buffer,
+            fieldnames=[
+                'id', 'name', 'email', 'company', 'title', 'brand', 'contact_type', 'classification',
+                'status', 'source', 'phone', 'linkedin_url', 'twitter_handle', 'instagram_handle',
+                'youtube_channel', 'bluesky_handle', 'tiktok_handle', 'website_url', 'followers_count',
+                'tags', 'notes', 'total_touches', 'response_count', 'last_touch_at',
+                'last_external_touch_at', 'last_response_at',
+                'last_external_platform', 'last_external_subject', 'last_external_url', 'last_external_ref',
+                'last_response_platform', 'last_response_subject', 'last_response_text',
+            ],
+        )
+        writer.writeheader()
+
+        for contact in contacts:
+            last_external = contact.get('last_external_trace') or {}
+            last_response = contact.get('last_response') or {}
+            writer.writerow({
+                'id': contact.get('id'),
+                'name': contact.get('name', ''),
+                'email': contact.get('email', ''),
+                'company': contact.get('company', ''),
+                'title': contact.get('title', ''),
+                'brand': contact.get('brand', ''),
+                'contact_type': contact.get('contact_type', ''),
+                'classification': contact.get('classification', ''),
+                'status': contact.get('status', ''),
+                'source': contact.get('source', ''),
+                'phone': contact.get('phone', ''),
+                'linkedin_url': contact.get('linkedin_url', ''),
+                'twitter_handle': contact.get('twitter_handle', ''),
+                'instagram_handle': contact.get('instagram_handle', ''),
+                'youtube_channel': contact.get('youtube_channel', ''),
+                'bluesky_handle': contact.get('bluesky_handle', ''),
+                'tiktok_handle': contact.get('tiktok_handle', ''),
+                'website_url': contact.get('website_url', ''),
+                'followers_count': contact.get('followers_count', 0),
+                'tags': ', '.join(contact.get('tags') or []),
+                'notes': contact.get('notes', ''),
+                'total_touches': contact.get('total_touches', 0),
+                'response_count': contact.get('response_count', 0),
+                'last_touch_at': contact.get('last_touch_at', ''),
+                'last_external_touch_at': contact.get('last_external_touch_at', ''),
+                'last_response_at': contact.get('last_response_at', ''),
+                'last_external_platform': last_external.get('platform', ''),
+                'last_external_subject': last_external.get('subject', ''),
+                'last_external_url': last_external.get('external_url', ''),
+                'last_external_ref': last_external.get('external_ref', ''),
+                'last_response_platform': last_response.get('platform', ''),
+                'last_response_subject': last_response.get('subject', ''),
+                'last_response_text': last_response.get('response_text', ''),
+            })
+
+        return buffer.getvalue()
 
 
 def main():
