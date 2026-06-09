@@ -234,6 +234,20 @@ app.register_blueprint(admin_bp)
 app.register_blueprint(marketing_calendar_bp)
 app.register_blueprint(lead_api_bp)
 
+# Load The Index custom module locally. Keep this isolated and optional.
+THE_INDEX_MODULE_ENABLED = os.getenv('ENABLE_THE_INDEX_MODULE', 'true').lower() in {'1', 'true', 'yes'}
+if THE_INDEX_MODULE_ENABLED:
+    try:
+        from custom_modules.the_index.api import the_index_bp
+        from custom_modules.the_index.index_submissions_api import index_submissions_bp
+        from custom_modules.the_index import models as the_index_models  # noqa: F401
+
+        app.register_blueprint(the_index_bp)
+        app.register_blueprint(index_submissions_bp)
+        logger.info("✅ The Index custom module enabled")
+    except Exception as e:
+        logger.warning(f"⚠️  The Index custom module not loaded: {e}")
+
 
 def _get_user_brand_context():
     """Return user-scoped brand list and active brand from DB/session."""
