@@ -13,6 +13,7 @@ PROJECT_ROOT = Path(__file__).parent
 sys.path.insert(0, str(PROJECT_ROOT))
 
 from flask import Flask, render_template, redirect, session, g, request
+from flask import make_response
 from flask_login import LoginManager, current_user, login_required
 
 # Load .env
@@ -138,11 +139,20 @@ def index():
                            user=current_user)
 
 
-@app.route('/<path:subpath>')
+@app.route('/<path:subpath>', methods=['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'])
 def marketing_deep_link_redirect(subpath):
     """Redirect top-level marketing deep links into /marketing/... namespace."""
     if not _is_marketing_owned_path(subpath):
         return 'Not Found', 404
+
+    if request.method == 'OPTIONS':
+        response = make_response('', 204)
+        response.headers['Allow'] = 'GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS'
+        response.headers['Access-Control-Allow-Headers'] = request.headers.get('Access-Control-Request-Headers', 'Content-Type, X-Request-ID')
+        response.headers['Access-Control-Allow-Origin'] = request.headers.get('Origin', '*')
+        response.headers['Vary'] = 'Origin'
+        return response
 
     marketing_base = _normalize_base_path(MARKETING_URL)
     target = f"{marketing_base}/{subpath}"
@@ -151,7 +161,9 @@ def marketing_deep_link_redirect(subpath):
     if query_string:
         target = f"{target}?{query_string}"
 
-    return redirect(target, code=302)
+    # Preserve method and request body for API form posts and webhooks.
+    redirect_code = 302 if request.method in {'GET', 'HEAD'} else 307
+    return redirect(target, code=redirect_code)
 
 @app.route('/health')
 def health():

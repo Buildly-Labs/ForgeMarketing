@@ -6,6 +6,9 @@ from collections import defaultdict, deque
 from datetime import date, datetime, timezone
 import hashlib
 import logging
+import os
+from pathlib import Path
+import json
 import time
 from threading import Lock
 from typing import Any, Dict, Optional
@@ -39,6 +42,11 @@ MAX_JSON_DEPTH = 8
 POST_RATE_LIMIT_PER_MINUTE = 60
 _rate_lock = Lock()
 _rate_windows: Dict[str, deque] = {}
+
+STRICT_INDEX_VALIDATION = os.getenv("THE_INDEX_STRICT_VALIDATION", "false").lower() in {"1", "true", "yes"}
+
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
+_SPOOL_PATH = _PROJECT_ROOT / "data" / "the_index_spool.jsonl"
 
 RESERVED_PAYLOAD_KEYS = {
     "source",
@@ -263,6 +271,18 @@ def _score_index_submission(answers: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _spool_submission(record: Dict[str, Any]) -> bool:
+    """Best-effort disk spool used only when DB write fails."""
+    try:
+        _SPOOL_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with _SPOOL_PATH.open("a", encoding="utf-8") as fp:
+            fp.write(json.dumps(record, ensure_ascii=True) + "\n")
+        return True
+    except Exception as exc:
+        logger.error("the_index spool_failed error=%s", exc)
+        return False
+
+
 def _error(status: int, message: str, request_id: str):
     response = jsonify({"ok": False, "error": message, "request_id": request_id})
     return _apply_cors(make_response(response, status))
@@ -458,7 +478,7 @@ def create_index_submission():
         company_name=company_name,
         answers=answers,
     )
-    if validation_errors:
+    if validation_errors and STRICT_INDEX_VALIDATION:
         response = jsonify(
             {
                 "ok": False,
@@ -469,10 +489,28 @@ def create_index_submission():
         )
         return _apply_cors(make_response(response, 400))
 
-    index_scoring = _score_index_submission(answers) if source == "first_city_foundry_index" else None
+    index_scoring = None
+    scoring_error = None
+    if source == "first_city_foundry_index":
+        try:
+            index_scoring = _score_index_submission(answers)
+        except Exception as exc:
+            scoring_error = str(exc)
+            logger.warning("the_index scoring_failed request_id=%s error=%s", request_id, exc)
 
     submission_uuid = uuid4().hex
     now_utc = datetime.utcnow()
+
+    request_meta = {
+        "client_ip": client_ip,
+        "request_id": request_id,
+        "client_fingerprint": hashlib.sha256(f"{client_ip}:{contact_email}".encode("utf-8")).hexdigest()[:24],
+        "index_scoring": index_scoring,
+    }
+    if validation_errors:
+        request_meta["validation_warnings"] = validation_errors
+    if scoring_error:
+        request_meta["scoring_warning"] = "index scoring unavailable for this submission"
 
     row = IndexSurveySubmission(
         id=submission_uuid,
@@ -483,20 +521,51 @@ def create_index_submission():
         company_name=company_name,
         answers=answers,
         reporting=reporting,
-        request_meta={
-            "client_ip": client_ip,
-            "request_id": request_id,
-            "client_fingerprint": hashlib.sha256(f"{client_ip}:{contact_email}".encode("utf-8")).hexdigest()[:24],
-            "index_scoring": index_scoring,
-        },
+        request_meta=request_meta,
     )
 
-    db.session.add(row)
-    db.session.commit()
+    try:
+        db.session.add(row)
+        db.session.commit()
+        submitted_at_iso = now_utc.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
+        payload_out: Dict[str, Any] = {"ok": True, "submission_id": submission_uuid, "submitted_at": submitted_at_iso}
+        if validation_errors:
+            payload_out["warnings"] = ["submission accepted with validation warnings"]
+            payload_out["validation_warnings"] = validation_errors
+        if scoring_error:
+            payload_out["warnings"] = payload_out.get("warnings", []) + ["scoring unavailable"]
+        return _apply_cors(make_response(jsonify(payload_out), 201))
+    except Exception as exc:
+        db.session.rollback()
+        logger.error("the_index db_write_failed request_id=%s error=%s", request_id, exc)
 
-    submitted_at_iso = now_utc.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z")
-    response = jsonify({"ok": True, "submission_id": submission_uuid, "submitted_at": submitted_at_iso})
-    return _apply_cors(make_response(response, 201))
+        spooled = _spool_submission(
+            {
+                "id": submission_uuid,
+                "submitted_at": now_utc.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z"),
+                "source": source,
+                "submitted_page": submitted_page,
+                "contact_email": contact_email,
+                "company_name": company_name,
+                "answers": answers,
+                "reporting": reporting,
+                "request_meta": request_meta,
+            }
+        )
+
+        if spooled:
+            response = jsonify(
+                {
+                    "ok": True,
+                    "queued": True,
+                    "submission_id": submission_uuid,
+                    "submitted_at": now_utc.replace(tzinfo=timezone.utc).isoformat().replace("+00:00", "Z"),
+                    "warnings": ["database temporarily unavailable; submission queued"],
+                }
+            )
+            return _apply_cors(make_response(response, 202))
+
+        return _error(503, "Submission temporarily unavailable", request_id)
 
 
 @index_submissions_bp.route("/index-submissions", methods=["GET"])

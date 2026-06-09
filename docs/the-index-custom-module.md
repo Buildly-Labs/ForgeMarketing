@@ -42,12 +42,22 @@ Public endpoint behavior:
 - Basic POST rate limiting (per-client IP, in-memory).
 - Request metadata stored with `client_ip` and `request_id`.
 - Server logs include `request_id`, status, method/path, and latency.
+- Resilient ingest path (fail-open):
+  - Validation is warning-only by default for `first_city_foundry_index`.
+  - Strict mode can be enabled with `THE_INDEX_STRICT_VALIDATION=true`.
+  - If DB write fails, payload is spooled to `data/the_index_spool.jsonl` and API returns `202` queued response.
 
 Field-level contract and validation:
 
 - For `source=first_city_foundry_index`, server enforces required fields, enum values, and conditional `other` companion fields.
 - Deterministic scoring metadata is generated and stored under `request_meta.index_scoring`.
 - Validation failures return HTTP 400 with `validation_errors` array.
+
+Validation mode note:
+
+- Default mode is non-blocking to protect form completion rates.
+- In default mode, validation issues are returned as warnings and persisted in `request_meta.validation_warnings`.
+- In strict mode (`THE_INDEX_STRICT_VALIDATION=true`), invalid payloads return HTTP 400.
 
 JSON Schema reference:
 
