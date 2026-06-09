@@ -5920,20 +5920,6 @@ def api_add_touch(contact_id):
             'error': str(e)
         }), 500
 
-if __name__ == '__main__':
-    # Get configuration
-    host = os.getenv('HOST', dashboard.config['dashboard'].get('host', '0.0.0.0'))
-    port = int(os.getenv('PORT', dashboard.config['dashboard'].get('port', 8002)))
-    debug = os.getenv('DEBUG', 'false').lower() == 'true'
-    
-    print(f"🚀 Starting Marketing Automation Dashboard")
-    print(f"📊 URL: http://{host}:{port}")
-    print(f"🎨 Brands: {', '.join(dashboard.brands)}")
-    print(f"🤖 AI Integration: {'✅ Available' if dashboard.ai_generator else '❌ Not Available'}")
-    
-    app.run(host=host, port=port, debug=debug)
-
-
 @app.errorhandler(404)
 def page_not_found(e):
     if request.path.startswith('/api/'):
@@ -5943,6 +5929,27 @@ def page_not_found(e):
 
 @app.errorhandler(500)
 def internal_server_error(e):
+    try:
+        from error_issue_reporter import report_server_error
+
+        report_server_error(e, request.path, request.method, component='dashboard')
+    except Exception:
+        pass
+
     if request.path.startswith('/api/'):
         return jsonify({'error': 'Internal server error'}), 500
     return render_template('404.html', login_url='/login', marketing_url='/', is_500=True), 500
+
+
+if __name__ == '__main__':
+    # Get configuration
+    host = os.getenv('HOST', dashboard.config['dashboard'].get('host', '0.0.0.0'))
+    port = int(os.getenv('PORT', dashboard.config['dashboard'].get('port', 8002)))
+    debug = os.getenv('DEBUG', 'false').lower() == 'true'
+
+    print(f"🚀 Starting Marketing Automation Dashboard")
+    print(f"📊 URL: http://{host}:{port}")
+    print(f"🎨 Brands: {', '.join(dashboard.brands)}")
+    print(f"🤖 AI Integration: {'✅ Available' if dashboard.ai_generator else '❌ Not Available'}")
+
+    app.run(host=host, port=port, debug=debug)

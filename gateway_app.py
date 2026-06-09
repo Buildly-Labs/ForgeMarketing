@@ -186,6 +186,13 @@ def not_found_gateway(e):
 
 @app.errorhandler(500)
 def server_error_gateway(e):
+    try:
+        from error_issue_reporter import report_server_error
+
+        report_server_error(e, request.path, request.method, component='gateway')
+    except Exception:
+        pass
+
     if request.path.startswith('/api/'):
         return {'error': 'Internal server error'}, 500
     marketing_base = _normalize_base_path(MARKETING_URL)
