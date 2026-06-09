@@ -49,6 +49,219 @@ RESERVED_PAYLOAD_KEYS = {
     "reporting",
 }
 
+INDEX_REQUIRED_TEXT_FIELDS = {
+    "contact_name_role",
+    "ai_visibility_usage",
+    "operational_bottleneck",
+    "biggest_operational_challenge",
+}
+
+INDEX_REQUIRED_ENUM_FIELDS = {
+    "operating_years": {"0_2_years", "3_5_years", "6_10_years", "10_plus_years"},
+    "funding_pathway": {"bootstrapped", "angel_seed", "vc_series_a_plus", "traditional_debt", "private_equity"},
+    "team_size": {"1_5", "6_15", "16_50", "51_150", "150_plus"},
+    "annual_revenue_band": {"under_500k", "500k_1m", "1m_3m", "3m_5m", "5m_10m", "10m_plus", "prefer_not_to_say"},
+    "backend_operations_state": {"manual_heavy", "siloed_tech", "automated_integrated", "ai_native"},
+    "ai_budget_allocation": {"none", "testing", "active", "significant", "ai_first"},
+    "decision_process": {"gut_instinct", "old_reports", "real_time_dashboards", "predictive_analytics"},
+    "profitability_report_time": {"minutes", "hours", "days", "cannot_track"},
+    "metrics_tracking": {"manual_spreadsheets", "automated_rarely_used", "daily_dashboard", "predictive_alerts", "not_systematic"},
+    "first_scale_investment": {"hiring", "marketing", "operational_architecture", "product_development"},
+    "margin_trend": {"margins_shrank", "margins_flat", "margins_expanded", "revenue_not_grown"},
+    "manual_effort_area": {
+        "lead_gen_sales",
+        "client_onboarding_project_management",
+        "fulfillment_service_delivery",
+        "back_office_admin_invoicing",
+        "mostly_automated",
+    },
+    "founder_absence_resilience": {"halt", "run_but_growth_stops", "run_smoothly", "continue_growing"},
+    "knowledge_systematization": {"in_heads", "scattered_docs", "documented_sops", "integrated_ai_workflows"},
+    "valuation_awareness": {"formal_12_months", "formal_older", "rough_idea", "no_idea", "not_interested"},
+    "strategic_goal": {"build_to_sell", "pass_down", "lifestyle_business", "public_vc_scale"},
+    "podcast_interest": {"yes_guest", "maybe", "ask_again", "no_thanks"},
+}
+
+INDEX_REQUIRED_ARRAY_ENUM_FIELDS = {
+    "ai_margin_uses": {
+        "customer_acquisition",
+        "sales_pipeline",
+        "customer_onboarding",
+        "service_delivery",
+        "invoicing_payments",
+        "customer_support",
+        "reporting_data_analysis",
+        "not_yet",
+        "other",
+    },
+    "podcast_topics": {
+        "ai_operations",
+        "scaling_1m_5m",
+        "founder_extraction",
+        "valuation_systems",
+        "bootstrapped_vs_vc",
+        "other",
+    },
+    "report_opt_in": {"yes_send_report"},
+}
+
+
+def _is_non_empty_string(value: Any) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def _validate_basic_email(value: str) -> bool:
+    return "@" in value and "." in value.split("@")[-1]
+
+
+def _validate_index_source_contract(
+    source: str,
+    contact_email: str,
+    company_name: str,
+    answers: Dict[str, Any],
+) -> list[str]:
+    """Validate strict field contract for first_city_foundry_index submissions."""
+    if source != "first_city_foundry_index":
+        return []
+
+    errors: list[str] = []
+
+    if not company_name:
+        errors.append("company_name is required")
+    if not contact_email:
+        errors.append("contact_email is required")
+    elif not _validate_basic_email(contact_email):
+        errors.append("contact_email must be a valid email")
+
+    for field in sorted(INDEX_REQUIRED_TEXT_FIELDS):
+        value = answers.get(field)
+        if not _is_non_empty_string(value):
+            errors.append(f"{field} is required")
+
+    for field, allowed in INDEX_REQUIRED_ENUM_FIELDS.items():
+        value = answers.get(field)
+        if not _is_non_empty_string(value):
+            errors.append(f"{field} is required")
+            continue
+        if value not in allowed:
+            errors.append(f"{field} must be one of: {', '.join(sorted(allowed))}")
+
+    for field, allowed in INDEX_REQUIRED_ARRAY_ENUM_FIELDS.items():
+        value = answers.get(field)
+        if not isinstance(value, list) or len(value) == 0:
+            errors.append(f"{field} must be a non-empty array")
+            continue
+        if len(value) > MAX_ARRAY_ITEMS:
+            errors.append(f"{field} has too many items")
+            continue
+        for item in value:
+            if item not in allowed:
+                errors.append(f"{field} contains invalid value: {item}")
+
+    ai_margin_uses = answers.get("ai_margin_uses") if isinstance(answers.get("ai_margin_uses"), list) else []
+    podcast_topics = answers.get("podcast_topics") if isinstance(answers.get("podcast_topics"), list) else []
+
+    if "other" in ai_margin_uses and not _is_non_empty_string(answers.get("ai_margin_uses_other")):
+        errors.append("ai_margin_uses_other is required when ai_margin_uses includes 'other'")
+
+    if "other" in podcast_topics and not _is_non_empty_string(answers.get("podcast_topics_other")):
+        errors.append("podcast_topics_other is required when podcast_topics includes 'other'")
+
+    return errors
+
+
+def _score_index_submission(answers: Dict[str, Any]) -> Dict[str, Any]:
+    """Generate deterministic scoring metadata for dashboard ranking."""
+    score_maps = {
+        "backend_operations_state": {
+            "manual_heavy": 20,
+            "siloed_tech": 45,
+            "automated_integrated": 75,
+            "ai_native": 95,
+        },
+        "ai_budget_allocation": {
+            "none": 10,
+            "testing": 35,
+            "active": 60,
+            "significant": 80,
+            "ai_first": 95,
+        },
+        "decision_process": {
+            "gut_instinct": 20,
+            "old_reports": 40,
+            "real_time_dashboards": 75,
+            "predictive_analytics": 95,
+        },
+        "profitability_report_time": {
+            "cannot_track": 10,
+            "days": 30,
+            "hours": 65,
+            "minutes": 95,
+        },
+        "metrics_tracking": {
+            "not_systematic": 15,
+            "manual_spreadsheets": 25,
+            "automated_rarely_used": 50,
+            "daily_dashboard": 75,
+            "predictive_alerts": 95,
+        },
+        "founder_absence_resilience": {
+            "halt": 15,
+            "run_but_growth_stops": 40,
+            "run_smoothly": 75,
+            "continue_growing": 95,
+        },
+        "knowledge_systematization": {
+            "in_heads": 10,
+            "scattered_docs": 35,
+            "documented_sops": 70,
+            "integrated_ai_workflows": 95,
+        },
+        "margin_trend": {
+            "revenue_not_grown": 20,
+            "margins_shrank": 30,
+            "margins_flat": 55,
+            "margins_expanded": 85,
+        },
+    }
+
+    readiness_fields = [
+        "backend_operations_state",
+        "ai_budget_allocation",
+        "decision_process",
+        "profitability_report_time",
+        "metrics_tracking",
+        "founder_absence_resilience",
+        "knowledge_systematization",
+    ]
+    margin_fields = ["margin_trend"]
+
+    readiness_scores = [score_maps[field].get(answers.get(field), 0) for field in readiness_fields]
+    margin_scores = [score_maps[field].get(answers.get(field), 0) for field in margin_fields]
+
+    readiness = int(sum(readiness_scores) / len(readiness_scores)) if readiness_scores else 0
+    margin = int(sum(margin_scores) / len(margin_scores)) if margin_scores else 0
+
+    ai_uses = answers.get("ai_margin_uses") if isinstance(answers.get("ai_margin_uses"), list) else []
+    breadth_bonus = min(len([v for v in ai_uses if v != "other"]) * 3, 15)
+
+    total_score = min(100, int((readiness * 0.7) + (margin * 0.2) + breadth_bonus))
+
+    tier = "explore"
+    if total_score >= 80:
+        tier = "high_priority"
+    elif total_score >= 60:
+        tier = "qualified"
+
+    return {
+        "version": "index-v1",
+        "readiness": readiness,
+        "margin": margin,
+        "breadth_bonus": breadth_bonus,
+        "total_score": total_score,
+        "tier": tier,
+    }
+
 
 def _error(status: int, message: str, request_id: str):
     response = jsonify({"ok": False, "error": message, "request_id": request_id})
@@ -239,6 +452,25 @@ def create_index_submission():
         if len(answers) >= MAX_ANSWER_KEYS:
             break
 
+    validation_errors = _validate_index_source_contract(
+        source=source,
+        contact_email=contact_email,
+        company_name=company_name,
+        answers=answers,
+    )
+    if validation_errors:
+        response = jsonify(
+            {
+                "ok": False,
+                "error": "Validation failed",
+                "request_id": request_id,
+                "validation_errors": validation_errors,
+            }
+        )
+        return _apply_cors(make_response(response, 400))
+
+    index_scoring = _score_index_submission(answers) if source == "first_city_foundry_index" else None
+
     submission_uuid = uuid4().hex
     now_utc = datetime.utcnow()
 
@@ -255,6 +487,7 @@ def create_index_submission():
             "client_ip": client_ip,
             "request_id": request_id,
             "client_fingerprint": hashlib.sha256(f"{client_ip}:{contact_email}".encode("utf-8")).hexdigest()[:24],
+            "index_scoring": index_scoring,
         },
     )
 
@@ -356,3 +589,10 @@ def summary_index_submissions():
         }
     )
     return _apply_cors(make_response(response, 200))
+
+
+@index_submissions_bp.route("/the-index", methods=["GET"])
+def the_index_dashboard_page():
+    from flask import render_template
+
+    return render_template("the_index_dashboard.html", title="The Index")

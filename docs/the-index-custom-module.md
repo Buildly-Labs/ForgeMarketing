@@ -43,6 +43,16 @@ Public endpoint behavior:
 - Request metadata stored with `client_ip` and `request_id`.
 - Server logs include `request_id`, status, method/path, and latency.
 
+Field-level contract and validation:
+
+- For `source=first_city_foundry_index`, server enforces required fields, enum values, and conditional `other` companion fields.
+- Deterministic scoring metadata is generated and stored under `request_meta.index_scoring`.
+- Validation failures return HTTP 400 with `validation_errors` array.
+
+JSON Schema reference:
+
+- `docs/the-index-submission-schema.json`
+
 ## Quick test
 
 ```bash

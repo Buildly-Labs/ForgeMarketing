@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="space-y-6" x-data="theIndexDashboard()" x-init="init()">
+  <div class="rounded-xl bg-gradient-to-r from-indigo-600 via-sky-600 to-cyan-500 text-white p-6 shadow-lg">
+    <h1 class="text-3xl font-bold">The Index</h1>
+    <p class="mt-2 text-sm sm:text-base text-white/90">Registration and survey intake rollup for firstcityfoundry.com with attribution visibility.</p>
+    <div class="mt-4 flex flex-wrap gap-2">
+      <button @click="loadAll()" class="px-3 py-2 rounded bg-white/20 hover:bg-white/30 text-sm">Refresh</button>
+      <button @click="copyApiExamples()" class="px-3 py-2 rounded bg-white/20 hover:bg-white/30 text-sm">Copy API URLs</button>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <div class="bg-white rounded-lg p-4 shadow border border-gray-100">
+      <p class="text-xs uppercase text-gray-500">Total Submissions</p>
+      <p class="text-3xl font-semibold text-gray-900" x-text="summary.total || 0">0</p>
+    </div>
+    <div class="bg-white rounded-lg p-4 shadow border border-gray-100">
+      <p class="text-xs uppercase text-gray-500">Today</p>
+      <p class="text-3xl font-semibold text-gray-900" x-text="summary.today || 0">0</p>
+    </div>
+    <div class="bg-white rounded-lg p-4 shadow border border-gray-100">
+      <p class="text-xs uppercase text-gray-500">Latest Source</p>
+      <p class="text-xl font-semibold text-gray-900 truncate" x-text="latestSource()">-</p>
+    </div>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+    <div class="bg-white rounded-lg p-4 shadow border border-gray-100">
+      <h2 class="font-semibold text-gray-800 mb-3">By Source</h2>
+      <template x-for="row in dictEntries(summary.by_source)" :key="'src-' + row.key">
+        <div class="flex justify-between text-sm border-b border-gray-100 py-1">
+          <span class="text-gray-700 truncate mr-2" x-text="row.key"></span>
+          <span class="font-medium text-gray-900" x-text="row.value"></span>
+        </div>
+      </template>
+      <p x-show="dictEntries(summary.by_source).length === 0" class="text-sm text-gray-500">No source data yet.</p>
+    </div>
+
+    <div class="bg-white rounded-lg p-4 shadow border border-gray-100">
+      <h2 class="font-semibold text-gray-800 mb-3">UTM Source</h2>
+      <template x-for="row in dictEntries(summary.utm?.source)" :key="'utm-src-' + row.key">
+        <div class="flex justify-between text-sm border-b border-gray-100 py-1">
+          <span class="text-gray-700 truncate mr-2" x-text="row.key"></span>
+          <span class="font-medium text-gray-900" x-text="row.value"></span>
+        </div>
+      </template>
+      <p x-show="dictEntries(summary.utm?.source).length === 0" class="text-sm text-gray-500">No UTM source data yet.</p>
+    </div>
+
+    <div class="bg-white rounded-lg p-4 shadow border border-gray-100">
+      <h2 class="font-semibold text-gray-800 mb-3">UTM Campaign</h2>
+      <template x-for="row in dictEntries(summary.utm?.campaign)" :key="'utm-cmp-' + row.key">
+        <div class="flex justify-between text-sm border-b border-gray-100 py-1">
+          <span class="text-gray-700 truncate mr-2" x-text="row.key"></span>
+          <span class="font-medium text-gray-900" x-text="row.value"></span>
+        </div>
+      </template>
+      <p x-show="dictEntries(summary.utm?.campaign).length === 0" class="text-sm text-gray-500">No UTM campaign data yet.</p>
+    </div>
+  </div>
+
+  <div class="bg-white rounded-lg p-4 shadow border border-gray-100">
+    <div class="flex flex-col md:flex-row md:items-end gap-3 mb-4">
+      <div>
+        <label class="block text-xs uppercase text-gray-500 mb-1">Limit</label>
+        <input type="number" min="1" max="500" x-model.number="filters.limit" class="border rounded px-3 py-2 w-28">
+      </div>
+      <div>
+        <label class="block text-xs uppercase text-gray-500 mb-1">Source</label>
+        <input type="text" x-model="filters.source" placeholder="first_city_foundry_index" class="border rounded px-3 py-2 w-56">
+      </div>
+      <div>
+        <label class="block text-xs uppercase text-gray-500 mb-1">Email Contains</label>
+        <input type="text" x-model="filters.email" placeholder="name@example.com" class="border rounded px-3 py-2 w-56">
+      </div>
+      <div>
+        <label class="block text-xs uppercase text-gray-500 mb-1">From (ISO)</label>
+        <input type="text" x-model="filters.from" placeholder="2026-06-01T00:00:00Z" class="border rounded px-3 py-2 w-56">
+      </div>
+      <div>
+        <label class="block text-xs uppercase text-gray-500 mb-1">To (ISO)</label>
+        <input type="text" x-model="filters.to" placeholder="2026-06-08T23:59:59Z" class="border rounded px-3 py-2 w-56">
+      </div>
+      <div class="flex gap-2">
+        <button @click="loadSubmissions()" class="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700">Apply</button>
+        <button @click="resetFilters()" class="bg-gray-100 text-gray-800 px-4 py-2 rounded hover:bg-gray-200">Reset</button>
+      </div>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead>
+          <tr class="border-b border-gray-200 text-left text-xs uppercase text-gray-500">
+            <th class="py-2 pr-3">Submitted</th>
+            <th class="py-2 pr-3">Source</th>
+            <th class="py-2 pr-3">Email</th>
+            <th class="py-2 pr-3">Company</th>
+            <th class="py-2 pr-3">Page</th>
+            <th class="py-2 pr-3">UTM</th>
+          </tr>
+        </thead>
+        <tbody>
+          <template x-for="row in submissions" :key="row.id">
+            <tr class="border-b border-gray-100 align-top">
+              <td class="py-2 pr-3 whitespace-nowrap" x-text="formatDate(row.submitted_at)"></td>
+              <td class="py-2 pr-3" x-text="row.source || '-' "></td>
+              <td class="py-2 pr-3" x-text="row.contact_email || '-' "></td>
+              <td class="py-2 pr-3" x-text="row.company_name || '-' "></td>
+              <td class="py-2 pr-3" x-text="row.submitted_page || '-' "></td>
+              <td class="py-2 pr-3 text-xs text-gray-600">
+                <div><span class="font-semibold">src:</span> <span x-text="row.reporting?.utm?.source || '-' "></span></div>
+                <div><span class="font-semibold">med:</span> <span x-text="row.reporting?.utm?.medium || '-' "></span></div>
+                <div><span class="font-semibold">cmp:</span> <span x-text="row.reporting?.utm?.campaign || '-' "></span></div>
+              </td>
+            </tr>
+          </template>
+        </tbody>
+      </table>
+    </div>
+
+    <p x-show="submissions.length === 0" class="text-sm text-gray-500 mt-3">No submissions found for this filter set.</p>
+  </div>
+</div>
+
+<script>
+function theIndexDashboard() {
+  return {
+    summary: {},
+    submissions: [],
+    filters: {
+      limit: 50,
+      source: '',
+      email: '',
+      from: '',
+      to: '',
+    },
+
+    async init() {
+      await this.loadAll();
+    },
+
+    async loadAll() {
+      await Promise.all([this.loadSummary(), this.loadSubmissions()]);
+    },
+
+    async loadSummary() {
+      try {
+        const res = await fetch('/api/index-submissions/summary');
+        const data = await res.json();
+        this.summary = data || {};
+      } catch (err) {
+        showNotification('Failed to load The Index summary', 'error');
+      }
+    },
+
+    async loadSubmissions() {
+      const params = new URLSearchParams();
+      if (this.filters.limit) params.set('limit', this.filters.limit);
+      if (this.filters.source) params.set('source', this.filters.source);
+      if (this.filters.email) params.set('email', this.filters.email);
+      if (this.filters.from) params.set('from', this.filters.from);
+      if (this.filters.to) params.set('to', this.filters.to);
+
+      try {
+        const res = await fetch('/api/index-submissions?' + params.toString());
+        const data = await res.json();
+        this.submissions = data.submissions || [];
+      } catch (err) {
+        showNotification('Failed to load The Index submissions', 'error');
+      }
+    },
+
+    resetFilters() {
+      this.filters = { limit: 50, source: '', email: '', from: '', to: '' };
+      this.loadSubmissions();
+    },
+
+    latestSource() {
+      if (!this.summary.by_source) return '-';
+      const entries = Object.entries(this.summary.by_source);
+      if (entries.length === 0) return '-';
+      entries.sort((a, b) => b[1] - a[1]);
+      return entries[0][0] || '-';
+    },
+
+    dictEntries(value) {
+      if (!value || typeof value !== 'object') return [];
+      return Object.entries(value)
+        .map(([key, val]) => ({ key, value: val }))
+        .sort((a, b) => b.value - a.value);
+    },
+
+    formatDate(value) {
+      if (!value) return '-';
+      const d = new Date(value);
+      if (isNaN(d.getTime())) return value;
+      return d.toLocaleString();
+    },
+
+    copyApiExamples() {
+      const base = window.location.origin;
+      const text = [
+        base + '/api/index-submissions',
+        base + '/api/index-submissions?limit=50',
+        base + '/api/index-submissions/summary',
+      ].join('\n');
+
+      navigator.clipboard.writeText(text).then(() => {
+        showNotification('Copied The Index API URLs', 'success');
+      }).catch(() => {
+        showNotification('Could not copy to clipboard', 'warning');
+      });
+    },
+  }
+}
+</script>
+{% endblock %}

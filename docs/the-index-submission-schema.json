@@ -1,0 +1,256 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://firstcityfoundry.com/schemas/the-index-submission.json",
+  "title": "The Index Submission",
+  "type": "object",
+  "required": [
+    "source",
+    "submitted_page",
+    "company_name",
+    "contact_email",
+    "contact_name_role",
+    "operating_years",
+    "funding_pathway",
+    "team_size",
+    "annual_revenue_band",
+    "backend_operations_state",
+    "ai_budget_allocation",
+    "decision_process",
+    "profitability_report_time",
+    "metrics_tracking",
+    "ai_visibility_usage",
+    "first_scale_investment",
+    "margin_trend",
+    "manual_effort_area",
+    "ai_margin_uses",
+    "founder_absence_resilience",
+    "knowledge_systematization",
+    "valuation_awareness",
+    "strategic_goal",
+    "operational_bottleneck",
+    "podcast_interest",
+    "podcast_topics",
+    "biggest_operational_challenge",
+    "report_opt_in",
+    "reporting"
+  ],
+  "properties": {
+    "source": {
+      "type": "string",
+      "const": "first_city_foundry_index"
+    },
+    "submitted_page": {
+      "type": "string"
+    },
+    "turnstile_token": {
+      "type": "string"
+    },
+    "company_name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "contact_name_role": {
+      "type": "string",
+      "minLength": 1
+    },
+    "contact_email": {
+      "type": "string",
+      "format": "email",
+      "minLength": 3
+    },
+    "operating_years": {
+      "type": "string",
+      "enum": ["0_2_years", "3_5_years", "6_10_years", "10_plus_years"]
+    },
+    "funding_pathway": {
+      "type": "string",
+      "enum": ["bootstrapped", "angel_seed", "vc_series_a_plus", "traditional_debt", "private_equity"]
+    },
+    "team_size": {
+      "type": "string",
+      "enum": ["1_5", "6_15", "16_50", "51_150", "150_plus"]
+    },
+    "annual_revenue_band": {
+      "type": "string",
+      "enum": ["under_500k", "500k_1m", "1m_3m", "3m_5m", "5m_10m", "10m_plus", "prefer_not_to_say"]
+    },
+    "backend_operations_state": {
+      "type": "string",
+      "enum": ["manual_heavy", "siloed_tech", "automated_integrated", "ai_native"]
+    },
+    "ai_budget_allocation": {
+      "type": "string",
+      "enum": ["none", "testing", "active", "significant", "ai_first"]
+    },
+    "decision_process": {
+      "type": "string",
+      "enum": ["gut_instinct", "old_reports", "real_time_dashboards", "predictive_analytics"]
+    },
+    "profitability_report_time": {
+      "type": "string",
+      "enum": ["minutes", "hours", "days", "cannot_track"]
+    },
+    "metrics_tracking": {
+      "type": "string",
+      "enum": ["manual_spreadsheets", "automated_rarely_used", "daily_dashboard", "predictive_alerts", "not_systematic"]
+    },
+    "ai_visibility_usage": {
+      "type": "string",
+      "minLength": 1
+    },
+    "first_scale_investment": {
+      "type": "string",
+      "enum": ["hiring", "marketing", "operational_architecture", "product_development"]
+    },
+    "margin_trend": {
+      "type": "string",
+      "enum": ["margins_shrank", "margins_flat", "margins_expanded", "revenue_not_grown"]
+    },
+    "manual_effort_area": {
+      "type": "string",
+      "enum": ["lead_gen_sales", "client_onboarding_project_management", "fulfillment_service_delivery", "back_office_admin_invoicing", "mostly_automated"]
+    },
+    "ai_margin_uses": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "enum": ["customer_acquisition", "sales_pipeline", "customer_onboarding", "service_delivery", "invoicing_payments", "customer_support", "reporting_data_analysis", "not_yet", "other"]
+      }
+    },
+    "ai_margin_uses_other": {
+      "type": "string"
+    },
+    "founder_absence_resilience": {
+      "type": "string",
+      "enum": ["halt", "run_but_growth_stops", "run_smoothly", "continue_growing"]
+    },
+    "knowledge_systematization": {
+      "type": "string",
+      "enum": ["in_heads", "scattered_docs", "documented_sops", "integrated_ai_workflows"]
+    },
+    "valuation_awareness": {
+      "type": "string",
+      "enum": ["formal_12_months", "formal_older", "rough_idea", "no_idea", "not_interested"]
+    },
+    "strategic_goal": {
+      "type": "string",
+      "enum": ["build_to_sell", "pass_down", "lifestyle_business", "public_vc_scale"]
+    },
+    "operational_bottleneck": {
+      "type": "string",
+      "minLength": 1
+    },
+    "podcast_interest": {
+      "type": "string",
+      "enum": ["yes_guest", "maybe", "ask_again", "no_thanks"]
+    },
+    "podcast_topics": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "enum": ["ai_operations", "scaling_1m_5m", "founder_extraction", "valuation_systems", "bootstrapped_vs_vc", "other"]
+      }
+    },
+    "podcast_topics_other": {
+      "type": "string"
+    },
+    "biggest_operational_challenge": {
+      "type": "string",
+      "minLength": 1
+    },
+    "report_opt_in": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "enum": ["yes_send_report"]
+      }
+    },
+    "reporting": {
+      "type": "object",
+      "properties": {
+        "submitted_page": { "type": "string" },
+        "referrer": { "type": "string" },
+        "user_agent": { "type": "string" },
+        "language": { "type": "string" },
+        "timezone": { "type": "string" },
+        "screen": {
+          "type": "object",
+          "properties": {
+            "width": { "type": ["number", "null"] },
+            "height": { "type": ["number", "null"] }
+          }
+        },
+        "viewport": {
+          "type": "object",
+          "properties": {
+            "width": { "type": ["number", "null"] },
+            "height": { "type": ["number", "null"] }
+          }
+        },
+        "utm": {
+          "type": "object",
+          "properties": {
+            "source": { "type": "string" },
+            "medium": { "type": "string" },
+            "campaign": { "type": "string" },
+            "term": { "type": "string" },
+            "content": { "type": "string" }
+          }
+        },
+        "timing": {
+          "type": "object",
+          "properties": {
+            "ms_since_page_load": { "type": ["number", "null"] },
+            "ms_since_form_ready": { "type": ["number", "null"] }
+          }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "ai_margin_uses": {
+            "contains": {
+              "const": "other"
+            }
+          }
+        }
+      },
+      "then": {
+        "required": ["ai_margin_uses_other"],
+        "properties": {
+          "ai_margin_uses_other": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "podcast_topics": {
+            "contains": {
+              "const": "other"
+            }
+          }
+        }
+      },
+      "then": {
+        "required": ["podcast_topics_other"],
+        "properties": {
+          "podcast_topics_other": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  ],
+  "additionalProperties": true
+}
