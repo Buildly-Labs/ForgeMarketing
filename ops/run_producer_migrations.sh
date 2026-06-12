@@ -59,6 +59,7 @@ HISTORICAL_MIGRATIONS = [
     "0015_platformcomment",
     "0016_orgapikey",
     "0017_background_task",
+    "0018_alter_orgapikey_options_and_more",
 ]
 
 try:
