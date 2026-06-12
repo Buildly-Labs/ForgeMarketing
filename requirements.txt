@@ -27,6 +27,7 @@ jinja2>=3.1.2
 
 # Additional dashboard dependencies
 gunicorn>=21.2.0  # Production WSGI server
+gevent>=23.9.1    # Async worker class for gunicorn (prevents blocking on AI calls)
 
 # Data processing and analysis
 pandas>=2.1.0

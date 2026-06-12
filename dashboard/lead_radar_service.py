@@ -5,6 +5,7 @@ import io
 from collections import Counter
 from datetime import datetime, timedelta
 
+from sqlalchemy import case as _sa_case
 from dashboard.models import Brand, db
 from dashboard.marketing_calendar_models import (
     MarketingCalendar,
@@ -961,7 +962,12 @@ def run_due_source_research_jobs(brand_name=None, source_id=None, limit=25):
             | (LeadSource.next_run_at <= now)
         )
 
-    sources = q.order_by(LeadSource.next_run_at.asc().nullsfirst(), LeadSource.updated_at.desc()).limit(limit).all()
+    # MySQL doesn't support NULLS FIRST syntax — use case() to sort NULLs first
+    sources = q.order_by(
+        _sa_case((LeadSource.next_run_at.is_(None), 0), else_=1).asc(),
+        LeadSource.next_run_at.asc(),
+        LeadSource.updated_at.desc(),
+    ).limit(limit).all()
 
     jobs = []
     for source in sources:
