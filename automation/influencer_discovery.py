@@ -324,43 +324,57 @@ def _normalize_brand_key(value: str) -> str:
 
 
 def _load_dashboard_brand(brand_key: str) -> Optional[Dict[str, str]]:
-    """Load a dashboard brand directly from the SQLite brand catalog."""
+    """Load a dashboard brand from the SQLite catalog (dev) or SQLAlchemy Brand model (production)."""
     db_path = project_root / 'data' / 'marketing_dashboard.db'
-    if not db_path.exists():
-        return None
 
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    try:
-        rows = conn.execute(
-            """
-            SELECT name, display_name, description, website_url
-            FROM brands
-            WHERE is_active = 1
-            """
-        ).fetchall()
-
+    def _match_brand_row(row_dict: Dict[str, str]) -> bool:
         requested_raw = (brand_key or '').strip().lower()
         requested_normalized = _normalize_brand_key(brand_key)
+        row_name = (row_dict.get('name') or '').strip()
+        row_display = (row_dict.get('display_name') or '').strip()
+        candidates = {
+            row_name.lower(),
+            row_display.lower(),
+            _normalize_brand_key(row_name),
+            _normalize_brand_key(row_display),
+        }
+        return requested_raw in candidates or requested_normalized in candidates
 
-        for row in rows:
-            row_dict = dict(row)
-            row_name = (row_dict.get('name') or '').strip()
-            row_display = (row_dict.get('display_name') or '').strip()
-
-            candidates = {
-                row_name.lower(),
-                row_display.lower(),
-                _normalize_brand_key(row_name),
-                _normalize_brand_key(row_display),
-            }
-
-            if requested_raw in candidates or requested_normalized in candidates:
-                return row_dict
-
+    # --- Local SQLite path (development) ---
+    if db_path.exists():
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        try:
+            rows = conn.execute(
+                "SELECT name, display_name, description, website_url FROM brands WHERE is_active = 1"
+            ).fetchall()
+            for row in rows:
+                row_dict = dict(row)
+                if _match_brand_row(row_dict):
+                    return row_dict
+        finally:
+            conn.close()
         return None
-    finally:
-        conn.close()
+
+    # --- SQLAlchemy path (production / PostgreSQL) ---
+    try:
+        from dashboard.models import Brand
+        from dashboard.app import app
+        with app.app_context():
+            brands = Brand.query.filter_by(is_active=True).all()
+            for b in brands:
+                row_dict = {
+                    'name': b.name,
+                    'display_name': b.display_name,
+                    'description': b.description or '',
+                    'website_url': b.website_url or '',
+                }
+                if _match_brand_row(row_dict):
+                    return row_dict
+        return None
+    except Exception as e:
+        logger.warning(f"_load_dashboard_brand SQLAlchemy fallback failed: {e}")
+        return None
 
 
 def _build_dashboard_brand_keywords(brand_row: Dict[str, str]) -> List[str]:

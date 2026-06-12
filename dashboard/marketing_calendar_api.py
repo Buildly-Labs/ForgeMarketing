@@ -38,7 +38,19 @@ def _resolve_ai_runtime_config():
 
         cfg['url'] = (stored.get('ai_do_agent_url') or stored.get('ai_ollama_url') or cfg['url']).strip()
         cfg['model'] = (stored.get('ai_model') or cfg['model']).strip()
-        cfg['token'] = (stored.get('ai_do_agent_token') or cfg['token']).strip()
+        # Support both DigitalOcean agent token and OpenAI key under the generic 'token' field
+        cfg['token'] = (
+            stored.get('ai_do_agent_token')
+            or stored.get('ai_openai_key')
+            or os.getenv('OPENAI_API_KEY', '')
+            or cfg['token']
+        ).strip()
+
+        # When provider is openai, point url at the standard OpenAI chat completions endpoint
+        if provider == 'openai' and not stored.get('ai_do_agent_url'):
+            cfg['url'] = 'https://api.openai.com/v1/chat/completions'
+        if not cfg['model'] and provider == 'openai':
+            cfg['model'] = 'gpt-4o'
     except Exception:
         pass
 
@@ -1621,7 +1633,7 @@ def _generate_single_content(brand, ai_url, ai_model, content_type, platform, to
     prompt = type_prompts.get(content_type, type_prompts['social_post'])
 
     try:
-        if ai_provider in {'do_agent', 'digitalocean'}:
+        if ai_provider in {'do_agent', 'digitalocean', 'openai'}:
             content, _ = _call_do_agent_chat(ai_url, prompt, model=ai_model, token=ai_token)
         else:
             resp = ext_requests.post(f'{ai_url}/api/generate', json={
@@ -1664,7 +1676,7 @@ Example: [{{"task_name":"LinkedIn thought leadership","platform":"LINKEDIN","tas
 Return ONLY the JSON array, no extra text."""
 
     try:
-        if ai_provider in {'do_agent', 'digitalocean'}:
+        if ai_provider in {'do_agent', 'digitalocean', 'openai'}:
             raw, _ = _call_do_agent_chat(ai_url, prompt, model=ai_model, token=ai_token)
         else:
             resp = ext_requests.post(f'{ai_url}/api/generate', json={

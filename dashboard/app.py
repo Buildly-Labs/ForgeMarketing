@@ -113,7 +113,7 @@ except ImportError as e:
 # Import outreach automation system
 try:
     from automation.multi_brand_outreach import MultiBrandOutreachCampaign, BRAND_DISCOVERY_STRATEGIES
-    from automation.unified_analytics import UnifiedOutreachAnalytics
+    from automation.unified_analytics import UnifiedAnalytics as UnifiedOutreachAnalytics
     from automation.real_analytics_dashboard import RealAnalyticsDashboard
     from automation.campaign_report_generator import CampaignReportGenerator
     print("✅ Multi-brand outreach system loaded successfully")
@@ -1837,6 +1837,55 @@ def api_status():
             'social': dynamic_env['social']['missing_vars'],
             'google_ads': dynamic_env['google_ads']['missing_vars']
         }
+    }
+
+    core_dependencies = {
+        'contacts_system_available': bool(globals().get('CONTACTS_SYSTEM_AVAILABLE', False)),
+        'influencer_system_available': bool(globals().get('INFLUENCER_SYSTEM_AVAILABLE', False)),
+        'the_index_module_enabled': bool(globals().get('THE_INDEX_MODULE_ENABLED', False)),
+    }
+
+    contacts_count = None
+    contacts_error = None
+    if core_dependencies['contacts_system_available']:
+        try:
+            from automation.contacts_manager import UnifiedContactsManager
+
+            contacts_count = len(UnifiedContactsManager().get_contacts(limit=1_000_000))
+        except Exception as exc:
+            contacts_error = str(exc)
+
+    influencer_count = None
+    influencer_error = None
+    if core_dependencies['influencer_system_available']:
+        try:
+            discovery = BrandInfluencerDiscovery()
+            influencer_count = len(discovery.get_brand_influencers())
+        except Exception as exc:
+            influencer_error = str(exc)
+
+    core_dependencies['contacts_db_healthy'] = contacts_error is None
+    core_dependencies['influencer_db_healthy'] = influencer_error is None
+    core_dependencies['contacts_total'] = contacts_count
+    core_dependencies['influencer_total'] = influencer_count
+    core_dependencies['contacts_error'] = contacts_error
+    core_dependencies['influencer_error'] = influencer_error
+
+    core_ready = all([
+        ai_available,
+        core_dependencies['contacts_system_available'],
+        core_dependencies['contacts_db_healthy'],
+        core_dependencies['influencer_system_available'],
+        core_dependencies['influencer_db_healthy'],
+    ])
+
+    status['core_dependencies'] = core_dependencies
+    status['system_ready'] = core_ready
+    status['readiness_summary'] = {
+        'ai_available': ai_available,
+        'contacts_ready': core_dependencies['contacts_system_available'] and core_dependencies['contacts_db_healthy'],
+        'influencer_ready': core_dependencies['influencer_system_available'] and core_dependencies['influencer_db_healthy'],
+        'the_index_enabled': core_dependencies['the_index_module_enabled'],
     }
     
     return jsonify(status)
@@ -5226,7 +5275,11 @@ def serve_brand_dashboard(brand):
 
 # Try to import influencer modules
 try:
-    from automation.influencer_discovery import BrandInfluencerDiscovery, BRAND_INFLUENCER_STRATEGIES
+    from automation.influencer_discovery import (
+        BrandInfluencerDiscovery,
+        BRAND_INFLUENCER_STRATEGIES,
+        ensure_brand_strategy,
+    )
     from automation.influencer_report_generator import InfluencerReportGenerator
     INFLUENCER_SYSTEM_AVAILABLE = True
 except ImportError as e:
@@ -5242,6 +5295,19 @@ def api_discover_influencers(brand):
     try:
         data = request.get_json() or {}
         max_per_platform = data.get('max_per_platform', 5)
+
+        strategy = ensure_brand_strategy(brand)
+        if not strategy:
+            return jsonify({
+                'success': False,
+                'brand': brand,
+                'error': 'No influencer discovery strategy configured for this brand.',
+                'hints': [
+                    'Ensure the brand exists and is active in the dashboard brand catalog.',
+                    'Add brand keywords/description so dynamic strategy generation has signals.',
+                    'Try the normalized brand key (lowercase with underscores).',
+                ],
+            }), 422
         
         async def run_discovery():
             discovery = BrandInfluencerDiscovery()
@@ -5253,11 +5319,31 @@ def api_discover_influencers(brand):
         # Calculate summary
         total_discovered = sum(len(influencers) for influencers in results.values())
         platforms_used = len([p for p, influencers in results.items() if influencers])
+
+        if total_discovered == 0:
+            return jsonify({
+                'success': False,
+                'brand': brand,
+                'brand_name': strategy.get('name', brand),
+                'results': {platform: len(influencers) for platform, influencers in results.items()},
+                'error': 'Discovery completed but found zero influencer candidates.',
+                'hints': [
+                    'Increase max_per_platform and retry discovery.',
+                    'Broaden brand keywords and target niches for this brand.',
+                    'Verify outbound HTTP access for platform scraping/APIs in this environment.',
+                ],
+                'summary': {
+                    'total_discovered': total_discovered,
+                    'platforms_searched': len(results),
+                    'platforms_with_results': platforms_used,
+                    'discovery_time': datetime.now().isoformat(),
+                },
+            }), 424
         
         return jsonify({
             'success': True,
             'brand': brand,
-            'brand_name': BRAND_INFLUENCER_STRATEGIES.get(brand, {}).get('name', brand),
+            'brand_name': strategy.get('name') or BRAND_INFLUENCER_STRATEGIES.get(brand, {}).get('name', brand),
             'results': {platform: len(influencers) for platform, influencers in results.items()},
             'summary': {
                 'total_discovered': total_discovered,
