@@ -470,8 +470,8 @@ def seed_sources_for_brand(brand_name: str) -> dict:
     audience_kw = [w.strip() for w in (target_audience + " " + product_type).split()
                    if len(w.strip()) > 3 and w.strip() not in {"that","this","with","and","for"}][:4]
     all_kw = base_kw[:3] + audience_kw[:3]
-    if not all_kw:
-        all_kw = [brand_name]
+    if not all_kw or all(kw == brand_name.lower() for kw in all_kw):
+        all_kw = ["software", "saas", "startup"] + base_kw[:1]
 
     templates = [
         {
@@ -596,7 +596,7 @@ def seed_startup_sources_for_brand(brand_name: str) -> dict:
         return {"created": 0, "skipped": 0, "sources": [], "error": "Brand not found"}
 
     display_name = (brand.display_name or brand_name).strip()
-    all_kw = [brand_name.lower()]
+    all_kw = []
 
     # Pull target audience / product type from brand settings
     from dashboard.models import BrandSettings
@@ -605,15 +605,30 @@ def seed_startup_sources_for_brand(brand_name: str) -> dict:
         try:
             adv = settings.get_advanced_settings() or {}
             mp = adv.get("marketing_profile") or {}
-            extra_words = " ".join([mp.get("target_audience", ""), mp.get("product_type", "")])
+            extra_words = " ".join([mp.get("target_audience", ""), mp.get("product_type", ""), mp.get("industry", "")])
             extra = [
                 w.strip().lower() for w in extra_words.split()
                 if len(w.strip()) > 3 and w.strip().lower() not in
-                   {"that", "this", "with", "and", "for", "the", "are", "have"}
+                   {"that", "this", "with", "and", "for", "the", "are", "have", "from", "their", "they"}
             ]
-            all_kw.extend(extra[:3])
+            all_kw.extend(extra[:4])
         except Exception:
             pass
+
+    # Fall back to brand description words if settings are sparse
+    if len(all_kw) < 2:
+        desc = (brand.description or "").strip()
+        desc_words = [
+            w.strip().lower() for w in desc.split()
+            if len(w.strip()) > 4 and w.strip().lower() not in
+               {"that", "this", "with", "and", "for", "the", "are", "have", "from", "their"}
+        ]
+        all_kw.extend(desc_words[:3])
+
+    # Always ensure there are useful keywords — never search for the brand's own name
+    # as it won't match other companies in external directories.
+    if len(all_kw) < 2:
+        all_kw = ["software", "saas", "startup"]
 
     templates = [
         {
@@ -715,8 +730,8 @@ def seed_startup_sources_for_brand(brand_name: str) -> dict:
                    if len(w.strip()) > 3 and w.strip() not in {"that","this","with","and","for"}][:4]
 
     all_kw = base_kw[:3] + audience_kw[:3]
-    if not all_kw:
-        all_kw = [brand_name]
+    if not all_kw or all(kw == brand_name.lower() for kw in all_kw):
+        all_kw = ["software", "saas", "startup"] + base_kw[:1]
 
     templates = [
         {

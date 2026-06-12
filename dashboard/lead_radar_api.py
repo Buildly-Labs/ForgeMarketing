@@ -747,6 +747,14 @@ def run_due_research_jobs():
         limit=int(data.get("limit", 25) or 25),
     )
 
+    # Build a source_id → name lookup for the jobs we ran
+    source_ids = [j.lead_source_id for j in summary["jobs"]]
+    source_names = {}
+    if source_ids:
+        from dashboard.lead_radar_models import LeadSource as _LS
+        for src in _LS.query.filter(_LS.id.in_(source_ids)).all():
+            source_names[src.id] = src.name
+
     return jsonify({
         "success": True,
         "data": {
@@ -760,6 +768,7 @@ def run_due_research_jobs():
                 {
                     "id": j.id,
                     "lead_source_id": j.lead_source_id,
+                    "source_name": source_names.get(j.lead_source_id, f"Source {j.lead_source_id}"),
                     "status": j.status,
                     "results_count": j.results_count,
                     "candidates_created": j.candidates_created,

@@ -25,6 +25,9 @@
         <button onclick="runDueStartupSources()" class="bg-emerald-600 text-white rounded px-3 py-2 text-sm hover:bg-emerald-700">
           <i class="fas fa-play mr-1"></i>Run Due Sources
         </button>
+        <button onclick="runAllStartupSources()" class="bg-green-600 text-white rounded px-3 py-2 text-sm hover:bg-green-700">
+          <i class="fas fa-sync mr-1"></i>Run All Now
+        </button>
         <a href="/lead-radar/sources" class="bg-gray-100 text-gray-700 rounded px-3 py-2 text-sm hover:bg-gray-200">
           <i class="fas fa-cog mr-1"></i>All Sources
         </a>
@@ -333,7 +336,55 @@ async function runSingleSource(sourceId) {
   const json = await res.json();
   if (!json.success) { setStatus(json.error || 'Run failed', 'error'); return; }
   const d = json.data;
-  setStatus(`✅ Done — ${d.candidates_created} candidates from ${d.results_count} items.\n${d.run_log||''}`, 'success');
+  if (d.status === 'failed') {
+    setStatus(`⚠ Source failed: ${d.error_message || 'unknown error'}\n${d.run_log || ''}`, 'error');
+  } else if (d.results_count === 0) {
+    setStatus(`○ Ran OK — 0 items returned from external API.\n${d.run_log || ''}\n\nTip: Check that the source keywords match real industry terms, not just your brand name.`, 'info');
+  } else {
+    setStatus(`✅ Done — ${d.candidates_created} candidates from ${d.results_count} items.\n${d.run_log||''}`, 'success');
+  }
+  loadStartupSources();
+  loadCandidates();
+}
+
+async function runAllStartupSources() {
+  const brand = activeBrand();
+  if (!brand) { setStatus('Select a brand first.', 'error'); return; }
+
+  // Get all startup sources and run each one individually (bypasses "due" check)
+  setStatus('Loading startup sources to run…', 'info');
+  const srcRes = await fetch('/api/lead-radar/sources' + (brand ? '?brand_name=' + encodeURIComponent(brand) : ''));
+  const srcJson = await srcRes.json();
+  const startup = (srcJson.data || []).filter(s => STARTUP_SOURCE_TYPES.has(s.source_type));
+  if (!startup.length) {
+    setStatus('No startup sources found. Click "Bootstrap Startup Sources" first.', 'error');
+    return;
+  }
+  setStatus(`Running ${startup.length} startup sources…`, 'info');
+  let totalCandidates = 0, totalItems = 0, lines = [];
+  for (const src of startup) {
+    const res = await fetch('/api/lead-radar/research-jobs/run', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({lead_source_id: src.id})
+    });
+    const json = await res.json();
+    if (!json.success) {
+      lines.push(`  ⚠ ${src.name}: API error`);
+      continue;
+    }
+    const d = json.data;
+    totalCandidates += d.candidates_created || 0;
+    totalItems += d.results_count || 0;
+    const icon = d.status === 'failed' ? '⚠' : (d.candidates_created > 0 ? '✅' : '○');
+    let line = `  ${icon} ${src.name}: ${d.candidates_created || 0} candidates`;
+    if (d.error_message) line += ` — ${d.error_message}`;
+    else if (d.results_count === 0 && d.run_log) line += `\n    ℹ ${d.run_log}`;
+    lines.push(line);
+  }
+  setStatus(
+    `✅ ${startup.length} sources ran — ${totalCandidates} new candidates from ${totalItems} items\n${lines.join('\n')}`,
+    totalCandidates > 0 ? 'success' : 'info'
+  );
   loadStartupSources();
   loadCandidates();
 }
@@ -348,11 +399,25 @@ async function runDueStartupSources() {
   const json = await res.json();
   if (!json.success) { setStatus(json.error || 'Failed', 'error'); return; }
   const d = json.data;
-  const lines = (d.jobs || []).map(j =>
-    `  • ${j.source_name || 'Source ' + j.lead_source_id}: ${j.status} — ${j.candidates_created} candidates`
-    + (j.error_message ? `\n    ⚠ ${j.error_message}` : '')
-  ).join('\n');
-  setStatus(`✅ ${d.sources_considered} sources — ${d.total_candidates_created} new candidates\n${lines}`, 'success');
+  if (!d.sources_considered) {
+    setStatus('No sources are due to run right now. Use the ▶ Run button on a specific source to run it immediately.', 'info');
+    loadStartupSources();
+    loadCandidates();
+    return;
+  }
+  const lines = (d.jobs || []).map(j => {
+    const name = j.source_name || ('Source ' + j.lead_source_id);
+    const icon = j.status === 'failed' ? '⚠' : (j.candidates_created > 0 ? '✅' : '○');
+    let line = `  ${icon} ${name}: ${j.candidates_created || 0} candidates from ${j.results_count || 0} items`;
+    if (j.error_message) line += `\n    ⚠ Error: ${j.error_message}`;
+    else if (j.run_log && j.results_count === 0) line += `\n    ℹ ${j.run_log}`;
+    return line;
+  }).join('\n');
+  const hasErrors = (d.jobs || []).some(j => j.status === 'failed');
+  setStatus(
+    `${hasErrors ? '⚠' : '✅'} ${d.sources_considered} sources ran — ${d.total_candidates_created} new candidates\n${lines}`,
+    hasErrors ? 'error' : (d.total_candidates_created > 0 ? 'success' : 'info')
+  );
   loadStartupSources();
   loadCandidates();
 }

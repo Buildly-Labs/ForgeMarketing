@@ -128,8 +128,8 @@ class YCombinatorAdapter(BaseLeadSourceAdapter):
             )
             resp.raise_for_status()
             data = resp.json()
-        except Exception:
-            return []
+        except Exception as exc:
+            raise RuntimeError(f"YC API error ({self._BASE}): {exc}") from exc
 
         companies = data if isinstance(data, list) else (data.get("companies") or [])
         out = []
@@ -166,6 +166,7 @@ class SBIRAdapter(BaseLeadSourceAdapter):
             return []
         limit = self._max_results(payload, default=20)
         out = []
+        last_error = None
         for kw in keywords[:3]:
             try:
                 resp = requests.get(
@@ -176,7 +177,8 @@ class SBIRAdapter(BaseLeadSourceAdapter):
                 )
                 resp.raise_for_status()
                 data = resp.json()
-            except Exception:
+            except Exception as exc:
+                last_error = exc
                 continue
             for award in (data.get("data") or []):
                 firm = award.get("firm") or {}
@@ -200,6 +202,8 @@ class SBIRAdapter(BaseLeadSourceAdapter):
                 }))
                 if len(out) >= limit:
                     return out
+        if not out and last_error:
+            raise RuntimeError(f"SBIR API error: {last_error}")
         return out
 
 
@@ -222,6 +226,7 @@ class NSFAwardsAdapter(BaseLeadSourceAdapter):
             return []
         limit = self._max_results(payload, default=20)
         out = []
+        last_error = None
         for kw in keywords[:2]:
             try:
                 resp = requests.get(
@@ -232,7 +237,8 @@ class NSFAwardsAdapter(BaseLeadSourceAdapter):
                 )
                 resp.raise_for_status()
                 data = resp.json()
-            except Exception:
+            except Exception as exc:
+                last_error = exc
                 continue
             for award in (data.get("response", {}).get("award") or []):
                 pi = f"{award.get('piFirstName','')} {award.get('piLastName','')}".strip()
@@ -254,6 +260,8 @@ class NSFAwardsAdapter(BaseLeadSourceAdapter):
                 }))
                 if len(out) >= limit:
                     return out
+        if not out and last_error:
+            raise RuntimeError(f"NSF API error: {last_error}")
         return out
 
 
@@ -263,6 +271,7 @@ class SECEdgarFormDAdapter(BaseLeadSourceAdapter):
     """SEC Form D equity fundraising filings — recent raises by private companies."""
     source_type = "sec_edgar"
     _BASE = "https://efts.sec.gov/LATEST/search-index"
+    _SEARCH_BASE = "https://efts.sec.gov/LATEST/search-index"
 
     def fetch_candidates(self, lead_source, payload=None):
         payload = payload or {}
@@ -278,15 +287,14 @@ class SECEdgarFormDAdapter(BaseLeadSourceAdapter):
                     "dateRange": "custom",
                     "startdt": start_dt,
                     "forms": "D",
-                    "_source": "hits.hits._source,hits.total",
                 },
                 timeout=DEFAULT_TIMEOUT,
                 headers={"User-Agent": USER_AGENT, "Accept": "application/json"},
             )
             resp.raise_for_status()
             data = resp.json()
-        except Exception:
-            return []
+        except Exception as exc:
+            raise RuntimeError(f"SEC EDGAR API error: {exc}") from exc
 
         out = []
         for hit in (data.get("hits", {}).get("hits") or [])[:limit]:
