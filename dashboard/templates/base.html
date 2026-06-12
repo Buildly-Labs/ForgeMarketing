@@ -339,7 +339,7 @@
     {% block scripts %}{% endblock %}
 
     <!-- ── Marketing Assistant Chat Widget ─────────────────────────────────── -->
-    <div id="mktChat" x-data="marketingChat()" x-init="init()" class="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-2">
+    <div id="mktChat" x-data="marketingChat()" class="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-2">
 
       <!-- Open/close button -->
       <button @click="open = !open"
@@ -432,7 +432,7 @@
         async init() {
           // Load status to set label
           try {
-            const r = await fetch('/api/status');
+            const r = await fetch('/marketing/api/status');
             const j = await r.json();
             this.statusLabel = j.services?.ai?.available ? 'AI ✓' : 'AI';
           } catch(_) {}
@@ -464,7 +464,7 @@
           this.$nextTick(() => this.scrollBottom());
 
           try {
-            const res = await fetch('/api/chat', {
+            const res = await fetch('/marketing/api/chat', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ message: content, history: this.history.slice(-10) }),
