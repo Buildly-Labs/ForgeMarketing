@@ -2,6 +2,59 @@
 
 {% block content %}
 <div class="space-y-6" x-data="brandManagement()">
+
+    <!-- Edit Brand Modal -->
+    <div x-show="showEditModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50" x-cloak>
+      <div class="bg-white rounded-xl shadow-xl w-full max-w-lg mx-4 p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+        <div class="flex items-center justify-between">
+          <h2 class="text-lg font-semibold">Edit Brand — <span x-text="editData.display_name"></span></h2>
+          <button @click="showEditModal = false" class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+        </div>
+        <div class="space-y-3 text-sm">
+          <div>
+            <label class="block text-gray-700 font-medium mb-1">Display Name</label>
+            <input x-model="editData.display_name" class="w-full border rounded px-3 py-2" placeholder="Buildly">
+          </div>
+          <div>
+            <label class="block text-gray-700 font-medium mb-1">Website URL</label>
+            <input x-model="editData.website_url" class="w-full border rounded px-3 py-2" placeholder="https://buildly.io">
+          </div>
+          <div>
+            <label class="block text-gray-700 font-medium mb-1">Description</label>
+            <textarea x-model="editData.description" class="w-full border rounded px-3 py-2 h-20" placeholder="What does this brand do?"></textarea>
+          </div>
+          <div>
+            <label class="block text-gray-700 font-medium mb-1">Target Audience</label>
+            <input x-model="editData.target_audience" class="w-full border rounded px-3 py-2" placeholder="e.g. developer tools, saas, b2b software">
+          </div>
+          <div>
+            <label class="block text-gray-700 font-medium mb-1">Product Type</label>
+            <input x-model="editData.product_type" class="w-full border rounded px-3 py-2" placeholder="e.g. SaaS platform, API, mobile app">
+          </div>
+          <div>
+            <label class="block text-gray-700 font-medium mb-1">Brand Voice Notes</label>
+            <textarea x-model="editData.brand_voice_notes" class="w-full border rounded px-3 py-2 h-16" placeholder="Tone, style, personality..."></textarea>
+          </div>
+          <div>
+            <label class="block text-gray-700 font-medium mb-1">Primary CTA</label>
+            <input x-model="editData.primary_cta" class="w-full border rounded px-3 py-2" placeholder="e.g. Book a demo, Start free trial">
+          </div>
+          <div>
+            <label class="block text-gray-700 font-medium mb-1">Default Hashtags</label>
+            <input x-model="editData.default_hashtags" class="w-full border rounded px-3 py-2" placeholder="#saas #startup #developer">
+          </div>
+        </div>
+        <div x-show="editError" class="text-red-600 text-sm" x-text="editError"></div>
+        <div class="flex gap-3 pt-2">
+          <button @click="saveBrand()" :disabled="editSaving"
+                  class="flex-1 bg-blue-600 text-white rounded px-4 py-2 hover:bg-blue-700 disabled:opacity-50">
+            <span x-show="!editSaving">Save Changes</span>
+            <span x-show="editSaving">Saving…</span>
+          </button>
+          <button @click="showEditModal = false" class="px-4 py-2 bg-gray-100 text-gray-700 rounded hover:bg-gray-200">Cancel</button>
+        </div>
+      </div>
+    </div>
     <!-- Header -->
     <div class="bg-white rounded-lg p-6 card-shadow">
         <div class="flex items-center justify-between">
@@ -181,6 +234,11 @@
 function brandManagement() {
     return {
         showAddBrand: false,
+        showEditModal: false,
+        editBrandName: '',
+        editData: {},
+        editSaving: false,
+        editError: '',
         brandStats: {},
         totalContent: 0,
         activeToday: 0,
@@ -191,6 +249,50 @@ function brandManagement() {
         async init() {
             await this.loadBrandStats();
             await this.loadRecentActivity();
+        },
+
+        async editBrand(brandName) {
+            this.editBrandName = brandName;
+            this.editError = '';
+            this.editData = {};
+            this.showEditModal = true;
+            try {
+                const res = await fetch(`/api/brands/${encodeURIComponent(brandName)}`);
+                const json = await res.json();
+                if (json.success) {
+                    this.editData = { ...json.data };
+                } else {
+                    // Brand exists but no settings yet — pre-fill with the brand name
+                    this.editData = { display_name: brandName, description: '', website_url: '',
+                        target_audience: '', product_type: '', brand_voice_notes: '',
+                        primary_cta: '', default_hashtags: '' };
+                }
+            } catch(e) {
+                this.editError = 'Failed to load brand data: ' + e.message;
+            }
+        },
+
+        async saveBrand() {
+            this.editSaving = true;
+            this.editError = '';
+            try {
+                const res = await fetch(`/api/brands/${encodeURIComponent(this.editBrandName)}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(this.editData),
+                });
+                const json = await res.json();
+                if (json.success) {
+                    this.showEditModal = false;
+                    showNotification('Brand saved!', 'success');
+                    setTimeout(() => window.location.reload(), 800);
+                } else {
+                    this.editError = json.error || 'Save failed';
+                }
+            } catch(e) {
+                this.editError = 'Save failed: ' + e.message;
+            }
+            this.editSaving = false;
         },
         
         async loadBrandStats() {
@@ -349,10 +451,6 @@ function brandManagement() {
             } catch (error) {
                 showNotification('Failed to generate content', 'error');
             }
-        },
-        
-        editBrand(brandName) {
-            showNotification(`Brand editing for ${brandName} coming soon!`, 'info');
         },
         
         generateContent(brandName) {

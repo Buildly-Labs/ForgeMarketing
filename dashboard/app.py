@@ -1596,36 +1596,23 @@ def marketing_help():
 
 @app.route('/brands')
 def brands():
-    """Brand management page with real configuration status"""
+    """Brand management page."""
+    from dashboard.models import Brand, BrandSettings
     brand_stats = {}
-    
-    # Check if AI is properly configured (supports DB-stored provider settings).
-    ai_configured = dashboard.get_credential_status().get('ai', {}).get('configured', False)
-    
-    for brand in dashboard.brands:
-        # Get basic brand info from AI generator if available
-        if dashboard.ai_generator and brand in dashboard.ai_generator.brand_configs:
-            brand_config = dashboard.ai_generator.brand_configs[brand]
-            brand_info = brand_config.get('brand', {})
-            
-            brand_stats[brand] = {
-                'name': brand_info.get('name', brand.replace('_', ' ').title()),
-                'description': brand_info.get('description', f'{brand.title()} brand configuration'),
-                'status': 'active' if ai_configured else 'needs_config',
-                'ai_configured': ai_configured,
-                'missing_config': [] if ai_configured else ENVIRONMENT_CONFIG['ai']['missing_vars']
-            }
-        else:
-            # No AI generator or brand not configured
-            brand_stats[brand] = {
-                'name': brand.replace('_', ' ').title(),
-                'description': 'AI content generation not configured' if not ai_configured else 'Brand configuration not found',
-                'status': 'needs_config',
-                'ai_configured': ai_configured,
-                'missing_config': ENVIRONMENT_CONFIG['ai']['missing_vars'] if not ai_configured else ['Brand configuration']
-            }
-    
-    return render_template('brands.html', 
+    user_brands, _ = _get_user_brand_context()
+    for brand_obj in user_brands:
+        settings = BrandSettings.query.filter_by(brand_id=brand_obj.id).first()
+        adv = settings.get_advanced_settings() if settings else {}
+        mp = adv.get('marketing_profile', {})
+        has_profile = bool(mp.get('target_audience') or mp.get('product_type') or brand_obj.description)
+        brand_stats[brand_obj.name] = {
+            'name': brand_obj.display_name or brand_obj.name,
+            'description': brand_obj.description or 'Click Edit to add a description and marketing profile.',
+            'status': 'active' if has_profile else 'needs_config',
+            'ai_configured': True,
+            'missing_config': [] if has_profile else ['marketing profile (target audience, product type)'],
+        }
+    return render_template('brands.html',
                          brands=brand_stats,
                          title='Brand Management',
                          environment_config=ENVIRONMENT_CONFIG)
@@ -1892,19 +1879,63 @@ def api_status():
 
 @app.route('/api/brands/<brand_name>')
 def api_brand_info(brand_name):
-    """API endpoint for brand information"""
-    if brand_name not in dashboard.brands:
+    """Return brand + settings data from DB."""
+    from dashboard.models import Brand, BrandSettings
+    brand = Brand.query.filter_by(name=brand_name).first()
+    if not brand:
         return jsonify({'error': 'Brand not found'}), 404
-    
-    if dashboard.ai_generator and brand_name in dashboard.ai_generator.brand_configs:
-        brand_config = dashboard.ai_generator.brand_configs[brand_name]
-        return jsonify({
-            'name': brand_name,
-            'config': brand_config,
-            'status': 'active'
-        })
-    
-    return jsonify({'error': 'Brand configuration not available'}), 500
+    settings = BrandSettings.query.filter_by(brand_id=brand.id).first()
+    adv = settings.get_advanced_settings() if settings else {}
+    mp = adv.get('marketing_profile', {})
+    return jsonify({
+        'success': True,
+        'data': {
+            'name': brand.name,
+            'display_name': brand.display_name or brand.name,
+            'description': brand.description or '',
+            'website_url': brand.website_url or '',
+            'logo_url': brand.logo_url or '',
+            'target_audience': mp.get('target_audience', ''),
+            'product_type': mp.get('product_type', ''),
+            'brand_voice_notes': mp.get('brand_voice_notes', ''),
+            'primary_cta': mp.get('primary_cta', ''),
+            'default_hashtags': mp.get('default_hashtags', ''),
+            'settings': settings.to_dict() if settings else {},
+        }
+    })
+
+
+@app.route('/api/brands/<brand_name>', methods=['PUT'])
+def api_brand_update(brand_name):
+    """Update brand display name, description, website, and marketing profile."""
+    from dashboard.models import Brand, BrandSettings
+    brand = Brand.query.filter_by(name=brand_name).first()
+    if not brand:
+        return jsonify({'success': False, 'error': 'Brand not found'}), 404
+    data = request.get_json() or {}
+    if 'display_name' in data:
+        brand.display_name = data['display_name'].strip()
+    if 'description' in data:
+        brand.description = data['description'].strip()
+    if 'website_url' in data:
+        brand.website_url = data['website_url'].strip()
+    if 'logo_url' in data:
+        brand.logo_url = data['logo_url'].strip()
+
+    settings = BrandSettings.query.filter_by(brand_id=brand.id).first()
+    if not settings:
+        settings = BrandSettings(brand_id=brand.id)
+        db.session.add(settings)
+
+    adv = settings.get_advanced_settings() or {}
+    mp = adv.get('marketing_profile', {})
+    for field in ('target_audience', 'product_type', 'brand_voice_notes', 'primary_cta', 'default_hashtags'):
+        if field in data:
+            mp[field] = data[field].strip()
+    adv['marketing_profile'] = mp
+    settings.set_advanced_settings(adv)
+    db.session.commit()
+    return jsonify({'success': True, 'message': 'Brand updated.'})
 
 @app.route('/api/social/activity')
 def api_social_activity():
