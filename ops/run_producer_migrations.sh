@@ -119,11 +119,17 @@ if [[ $migrate_status -ne 0 ]]; then
         python manage.py migrate production_ledger 0006_auto_20260416_2221 --fake --no-input || true
         python manage.py migrate production_ledger 0007_fix_icon_column_charset --fake --no-input
         python manage.py migrate --no-input
-    elif echo "$migrate_output" | grep -q "production_ledger\.0010_distribution_transcription_shorts" \
-        && echo "$migrate_output" | grep -q "Table 'production_ledger_podcastdistribution' already exists"; then
+    elif echo "$migrate_output" | grep -qi "production_ledger\.0010_distribution_transcription_shorts" \
+        && echo "$migrate_output" | grep -qi "production_ledger_podcastdistribution" \
+        && echo "$migrate_output" | grep -qi "already exists\|OperationalError: (1050\|django\.db\.utils\.OperationalError: (1050"; then
         echo "Detected duplicate table for production_ledger.0010; faking migration and retrying."
         # Compatibility fix for environments where tables were created out-of-band
         # or via a partial prior run, but migration history was not recorded.
+        python manage.py migrate production_ledger 0010_distribution_transcription_shorts --fake --no-input
+        python manage.py migrate --no-input
+    elif echo "$migrate_output" | grep -qi "production_ledger_podcastdistribution" \
+        && echo "$migrate_output" | grep -qi "already exists\|OperationalError: (1050\|django\.db\.utils\.OperationalError: (1050"; then
+        echo "Detected duplicate production_ledger_podcastdistribution table; faking production_ledger.0010 and retrying."
         python manage.py migrate production_ledger 0010_distribution_transcription_shorts --fake --no-input
         python manage.py migrate --no-input
     elif echo "$migrate_output" | grep -q "InconsistentMigrationHistory" \
