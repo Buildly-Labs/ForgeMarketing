@@ -567,8 +567,8 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('\u2705 CRM Contacts loaded with vanilla JavaScript');
     populateBrandSelects();
     updateQuickFilterChips();
+    clearFilters();
     loadStats();
-    loadContacts();
 });
 
 // Modal Functions
@@ -954,11 +954,21 @@ function displayContacts(contacts) {
     const tbody = document.getElementById('contactsTableBody');
     
     if (contacts.length === 0) {
+        const hasActiveFilter = Boolean(
+            (document.getElementById('brandFilter')?.value || '').trim() ||
+            (document.getElementById('typeFilter')?.value || '').trim() ||
+            (document.getElementById('statusFilter')?.value || '').trim() ||
+            (document.getElementById('classificationFilter')?.value || '').trim() ||
+            (document.getElementById('searchFilter')?.value || '').trim() ||
+            quickFilters.responded || quickFilters.external
+        );
+
         tbody.innerHTML = `
             <tr>
                 <td colspan="6" class="px-6 py-8 text-center text-gray-500">
                     <i class="fas fa-users text-2xl mb-2"></i>
-                    <p>No contacts found matching your criteria.</p>
+                    <p>${hasActiveFilter ? 'No contacts match the current filters.' : 'No contacts found.'}</p>
+                    ${hasActiveFilter ? '<button onclick="clearFilters()" class="mt-2 text-blue-600 hover:underline text-sm">Clear filters and show all contacts</button>' : ''}
                 </td>
             </tr>
         `;

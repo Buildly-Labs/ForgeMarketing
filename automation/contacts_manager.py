@@ -930,6 +930,14 @@ class UnifiedContactsManager:
                     else:
                         contact[db_field] = val
 
+                # Accept CSVs that provide first/last name but no explicit full name.
+                if not contact.get('name'):
+                    first_name = (contact.get('first_name') or '').strip()
+                    last_name = (contact.get('last_name') or '').strip()
+                    derived_name = ' '.join(part for part in [first_name, last_name] if part).strip()
+                    if derived_name:
+                        contact['name'] = derived_name
+
                 if not contact.get('name'):
                     skipped += 1
                     continue
