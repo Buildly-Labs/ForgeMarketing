@@ -5,9 +5,9 @@
     <!-- Page Header -->
     <div class="bg-white rounded-lg p-6 card-shadow">
         <h1 class="text-3xl font-bold text-gray-900 mb-4">
-            <i class="fas fa-magic text-purple-600 mr-3"></i>AI Content Generation
+            <i class="fas fa-magic text-purple-600 mr-3"></i>AI Generate And Planning
         </h1>
-        <p class="text-gray-600">Generate brand-specific content using AI. Select your brand, content type, and customize the parameters below.</p>
+        <p class="text-gray-600">Generate brand-specific content and build a marketing agent plan directly in the UI.</p>
     </div>
 
     <!-- Generation Form -->
@@ -159,6 +159,218 @@
         </div>
     </div>
 
+    <!-- Marketing Agent Planner -->
+    <div class="bg-white rounded-lg p-6 card-shadow border border-amber-100">
+        <div class="flex items-start justify-between gap-4 mb-6">
+            <div>
+                <h2 class="text-2xl font-semibold text-gray-900">
+                    <i class="fas fa-robot text-amber-600 mr-2"></i>Marketing Agent Planner
+                </h2>
+                <p class="text-gray-600 mt-1">Describe the goal and the planner will generate a structured execution plan using your connected AI agent.</p>
+            </div>
+            <span class="px-3 py-1 rounded-full bg-amber-50 text-amber-800 text-xs font-medium">DigitalOcean Agent</span>
+        </div>
+
+        <form @submit.prevent="generateMarketingPlan()" class="space-y-5">
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Brand</label>
+                        <select x-model="planForm.brand_name" required
+                                class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
+                            {% for brand in user_brands %}
+                            <option value="{{ brand.name }}" {% if active_brand and active_brand.name == brand.name %}selected{% endif %}>{{ brand.display_name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Goal</label>
+                        <textarea x-model="planForm.goal" rows="4"
+                                  placeholder="Example: Build a 30-day launch plan for our new AI product and prioritize channels that can drive demos quickly."
+                                  class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent"></textarea>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Additional Context</label>
+                        <textarea x-model="planForm.context" rows="5"
+                                  placeholder="Audience, positioning, team constraints, current traction, existing campaigns, seasonal timing, or anything the planner should consider."
+                                  class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent"></textarea>
+                    </div>
+                </div>
+
+                <div class="space-y-4">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Timeframe</label>
+                            <input type="text" x-model="planForm.timeframe"
+                                   placeholder="30 days"
+                                   class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Budget</label>
+                            <input type="text" x-model="planForm.budget"
+                                   placeholder="$5k - $10k"
+                                   class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Preferred Channels</label>
+                        <input type="text" x-model="planForm.channelsInput"
+                               placeholder="linkedin, email, content, webinars"
+                               class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent">
+                        <p class="text-xs text-gray-500 mt-1">Comma-separated. Leave blank to let the planner recommend channels.</p>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Constraints</label>
+                        <textarea x-model="planForm.constraintsInput" rows="4"
+                                  placeholder="Small team, no paid search, founder-led sales, need fast feedback loops"
+                                  class="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-amber-500 focus:border-transparent"></textarea>
+                        <p class="text-xs text-gray-500 mt-1">One line or comma-separated list.</p>
+                    </div>
+
+                    <div class="flex items-center justify-between pt-4">
+                        <button type="submit" :disabled="planLoading || !planForm.brand_name"
+                                class="bg-amber-600 text-white px-6 py-3 rounded-lg hover:bg-amber-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center">
+                            <i class="fas fa-robot mr-2" :class="{'fa-spin': planLoading}"></i>
+                            <span x-text="planLoading ? 'Planning...' : 'Create Marketing Plan'"></span>
+                        </button>
+
+                        <button type="button" @click="clearPlanForm()"
+                                class="bg-gray-500 text-white px-4 py-3 rounded-lg hover:bg-gray-600 transition-colors">
+                            Clear Plan Form
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    <div x-show="marketingPlan" class="bg-white rounded-lg p-6 card-shadow border border-amber-100">
+        <div class="flex items-center justify-between mb-4">
+            <div>
+                <h2 class="text-xl font-semibold text-gray-900">Generated Marketing Plan</h2>
+                <p class="text-sm text-gray-500" x-text="marketingPlanMeta()"></p>
+            </div>
+            <button @click="copyPlanToClipboard()"
+                    class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors">
+                <i class="fas fa-copy mr-2"></i>Copy Plan
+            </button>
+        </div>
+
+        <template x-if="marketingPlan.summary || marketingPlan.objectives || marketingPlan.phases">
+            <div class="space-y-6">
+                <div x-show="marketingPlan.summary" class="bg-amber-50 border border-amber-100 rounded-lg p-4">
+                    <h3 class="text-sm font-semibold uppercase tracking-wide text-amber-900 mb-2">Summary</h3>
+                    <p class="text-sm text-gray-800" x-text="marketingPlan.summary"></p>
+                </div>
+
+                <div x-show="Array.isArray(marketingPlan.objectives) && marketingPlan.objectives.length">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-3">Objectives</h3>
+                    <ul class="space-y-2">
+                        <template x-for="(objective, index) in marketingPlan.objectives" :key="'objective-' + index">
+                            <li class="bg-gray-50 rounded-lg px-4 py-3 text-sm text-gray-800" x-text="objective"></li>
+                        </template>
+                    </ul>
+                </div>
+
+                <div x-show="Array.isArray(marketingPlan.phases) && marketingPlan.phases.length">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-3">Phases</h3>
+                    <div class="space-y-4">
+                        <template x-for="(phase, phaseIndex) in marketingPlan.phases" :key="'phase-' + phaseIndex">
+                            <div class="border border-gray-200 rounded-xl p-4">
+                                <div class="flex items-start justify-between gap-3 mb-3">
+                                    <div>
+                                        <h4 class="font-semibold text-gray-900" x-text="phase.name || ('Phase ' + (phaseIndex + 1))"></h4>
+                                        <p class="text-sm text-gray-500" x-text="phase.duration || ''"></p>
+                                    </div>
+                                </div>
+                                <div class="space-y-3">
+                                    <template x-for="(action, actionIndex) in (phase.actions || [])" :key="'action-' + phaseIndex + '-' + actionIndex">
+                                        <div class="bg-gray-50 rounded-lg p-3">
+                                            <div class="flex flex-wrap items-center gap-2 mb-2">
+                                                <span class="font-medium text-gray-900" x-text="action.title || 'Action'"></span>
+                                                <span class="text-xs px-2 py-1 rounded bg-amber-100 text-amber-800" x-text="action.channel || 'OTHER'"></span>
+                                                <span class="text-xs px-2 py-1 rounded bg-blue-100 text-blue-800" x-text="action.priority || 'MEDIUM'"></span>
+                                            </div>
+                                            <div class="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm text-gray-700">
+                                                <div><strong>Owner:</strong> <span x-text="action.owner || 'Marketing'"></span></div>
+                                                <div><strong>KPI:</strong> <span x-text="action.kpi || 'Not provided'"></span></div>
+                                                <div><strong>Due:</strong> <span x-text="formatDueDays(action.due_in_days)"></span></div>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div x-show="Array.isArray(marketingPlan.content_ideas) && marketingPlan.content_ideas.length">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-3">Content Ideas</h3>
+                        <ul class="space-y-2">
+                            <template x-for="(idea, index) in marketingPlan.content_ideas" :key="'idea-' + index">
+                                <li class="bg-gray-50 rounded-lg px-4 py-3 text-sm text-gray-800" x-text="idea"></li>
+                            </template>
+                        </ul>
+                    </div>
+
+                    <div x-show="Array.isArray(marketingPlan.next_7_days) && marketingPlan.next_7_days.length">
+                        <h3 class="text-lg font-semibold text-gray-900 mb-3">Next 7 Days</h3>
+                        <ul class="space-y-2">
+                            <template x-for="(step, index) in marketingPlan.next_7_days" :key="'next-' + index">
+                                <li class="bg-emerald-50 border border-emerald-100 rounded-lg px-4 py-3 text-sm text-gray-800" x-text="step"></li>
+                            </template>
+                        </ul>
+                    </div>
+                </div>
+
+                <div x-show="Array.isArray(marketingPlan.risks) && marketingPlan.risks.length">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-3">Risks</h3>
+                    <ul class="space-y-2">
+                        <template x-for="(risk, index) in marketingPlan.risks" :key="'risk-' + index">
+                            <li class="bg-rose-50 border border-rose-100 rounded-lg px-4 py-3 text-sm text-gray-800" x-text="risk"></li>
+                        </template>
+                    </ul>
+                </div>
+
+                <div x-show="marketingPlanRaw && !marketingPlan.summary && !(Array.isArray(marketingPlan.objectives) && marketingPlan.objectives.length)">
+                    <h3 class="text-lg font-semibold text-gray-900 mb-3">Raw Plan</h3>
+                    <div class="bg-gray-50 p-4 rounded-lg">
+                        <pre class="whitespace-pre-wrap text-sm text-gray-900" x-text="marketingPlanRaw"></pre>
+                    </div>
+                </div>
+            </div>
+        </template>
+    </div>
+
+    <div class="bg-white rounded-lg p-6 card-shadow">
+        <h2 class="text-xl font-semibold mb-4">Marketing Plan History</h2>
+        <div class="space-y-2">
+            <template x-for="item in planHistory" :key="item.id">
+                <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 cursor-pointer"
+                     @click="loadPlanFromHistory(item)">
+                    <div class="flex-1">
+                        <div class="flex items-center space-x-2">
+                            <span class="font-medium" x-text="item.brand"></span>
+                            <span class="text-sm bg-amber-100 text-amber-800 px-2 py-1 rounded">plan</span>
+                        </div>
+                        <p class="text-sm text-gray-600 truncate" x-text="item.preview"></p>
+                    </div>
+                    <div class="text-sm text-gray-500" x-text="new Date(item.timestamp).toLocaleString()"></div>
+                </div>
+            </template>
+
+            <div x-show="planHistory.length === 0" class="text-center py-8 text-gray-500">
+                <i class="fas fa-robot text-4xl mb-4"></i>
+                <p>No plan history yet. Generate a marketing plan to save one here.</p>
+            </div>
+        </div>
+    </div>
+
     <!-- Generation History -->
     <div class="bg-white rounded-lg p-6 card-shadow">
         <h2 class="text-xl font-semibold mb-4">Generation History</h2>
@@ -204,12 +416,29 @@ function contentGenerator() {
         loading: false,
         generatedContent: null,
         history: [],
+        planLoading: false,
+        marketingPlan: null,
+        marketingPlanRaw: '',
+        planHistory: [],
+        planForm: {
+            brand_name: ACTIVE_BRAND,
+            goal: '',
+            timeframe: '30 days',
+            budget: '',
+            channelsInput: '',
+            constraintsInput: '',
+            context: ''
+        },
         
         init() {
             // Load history from localStorage
             const saved = localStorage.getItem('contentHistory');
             if (saved) {
                 this.history = JSON.parse(saved);
+            }
+            const savedPlans = localStorage.getItem('marketingPlanHistory');
+            if (savedPlans) {
+                this.planHistory = JSON.parse(savedPlans);
             }
         },
         
@@ -279,6 +508,116 @@ function contentGenerator() {
             if (this.generatedContent.content) return this.generatedContent.content;
             if (this.generatedContent.body) return this.generatedContent.body;
             return JSON.stringify(this.generatedContent, null, 2);
+        },
+
+        parseCsvList(input) {
+            return (input || '')
+                .split(/\n|,/)
+                .map(item => item.trim())
+                .filter(Boolean);
+        },
+
+        async generateMarketingPlan() {
+            this.planLoading = true;
+            this.marketingPlan = null;
+            this.marketingPlanRaw = '';
+
+            try {
+                const payload = {
+                    brand_name: this.planForm.brand_name,
+                    goal: this.planForm.goal,
+                    timeframe: this.planForm.timeframe,
+                    budget: this.planForm.budget,
+                    channels: this.parseCsvList(this.planForm.channelsInput),
+                    constraints: this.parseCsvList(this.planForm.constraintsInput),
+                    context: this.planForm.context
+                };
+
+                const result = await apiCall('/api/marketing/agent/marketing-plan', {
+                    method: 'POST',
+                    body: JSON.stringify(payload)
+                });
+
+                if (!result.success) {
+                    showNotification(result.error || 'Plan generation failed', 'error');
+                    return;
+                }
+
+                this.marketingPlan = result.plan || {};
+                this.marketingPlanRaw = result.raw_plan_text || '';
+                showNotification('Marketing plan generated successfully!', 'success');
+
+                const historyItem = {
+                    id: Date.now(),
+                    timestamp: new Date().toISOString(),
+                    brand: this.planForm.brand_name,
+                    plan: this.marketingPlan,
+                    raw: this.marketingPlanRaw,
+                    preview: this.getPlanPreview(this.marketingPlan, this.marketingPlanRaw)
+                };
+
+                this.planHistory.unshift(historyItem);
+                if (this.planHistory.length > 20) {
+                    this.planHistory = this.planHistory.slice(0, 20);
+                }
+                localStorage.setItem('marketingPlanHistory', JSON.stringify(this.planHistory));
+            } catch (error) {
+                showNotification('Failed to generate marketing plan', 'error');
+            } finally {
+                this.planLoading = false;
+            }
+        },
+
+        getPlanPreview(plan, rawText) {
+            if (plan?.summary) return plan.summary;
+            if (Array.isArray(plan?.objectives) && plan.objectives.length) return plan.objectives[0];
+            if (rawText) return rawText.substring(0, 120) + '...';
+            return 'Generated marketing plan';
+        },
+
+        marketingPlanMeta() {
+            if (!this.marketingPlan && !this.marketingPlanRaw) return '';
+            const objectiveCount = Array.isArray(this.marketingPlan?.objectives) ? this.marketingPlan.objectives.length : 0;
+            const phaseCount = Array.isArray(this.marketingPlan?.phases) ? this.marketingPlan.phases.length : 0;
+            return `${this.planForm.brand_name || 'brand'} • ${objectiveCount} objectives • ${phaseCount} phases`;
+        },
+
+        formatDueDays(value) {
+            const days = Number.isFinite(Number(value)) ? Number(value) : 0;
+            if (days === 0) return 'Today';
+            if (days === 1) return 'In 1 day';
+            return `In ${days} days`;
+        },
+
+        clearPlanForm() {
+            this.planForm = {
+                brand_name: ACTIVE_BRAND,
+                goal: '',
+                timeframe: '30 days',
+                budget: '',
+                channelsInput: '',
+                constraintsInput: '',
+                context: ''
+            };
+            this.marketingPlan = null;
+            this.marketingPlanRaw = '';
+        },
+
+        loadPlanFromHistory(item) {
+            this.marketingPlan = item.plan || {};
+            this.marketingPlanRaw = item.raw || '';
+            this.planForm.brand_name = item.brand || this.planForm.brand_name;
+            showNotification('Marketing plan loaded from history', 'info');
+        },
+
+        async copyPlanToClipboard() {
+            const text = this.marketingPlanRaw || JSON.stringify(this.marketingPlan, null, 2);
+            try {
+                await navigator.clipboard.writeText(text);
+                showNotification('Marketing plan copied to clipboard!', 'success');
+            } catch (error) {
+                showNotification('Failed to copy marketing plan', 'error');
+            }
         },
         
         clearForm() {

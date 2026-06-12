@@ -11,8 +11,111 @@ from dashboard.marketing_calendar_models import (
 )
 from dashboard.models import Brand, SystemConfig, db
 import json
+import os
+
+import requests as ext_requests
 
 marketing_calendar_bp = Blueprint('marketing_calendar', __name__, url_prefix='/api/marketing')
+
+
+DEFAULT_DO_AGENT_URL = 'https://upssgpoiscmhlp3uuvm65hyn.agents.do-ai.run'
+
+
+def _resolve_ai_runtime_config():
+    """Resolve AI runtime config with DB settings overriding defaults/env."""
+    cfg = {
+        'provider': 'do_agent',
+        'url': os.getenv('DO_AGENT_URL', DEFAULT_DO_AGENT_URL),
+        'model': os.getenv('DO_AGENT_MODEL', ''),
+        'token': os.getenv('DO_AGENT_TOKEN', ''),
+    }
+
+    try:
+        stored = {c.key: c.value for c in SystemConfig.query.filter(SystemConfig.key.like('ai_%')).all()}
+        provider = (stored.get('ai_provider') or '').strip().lower()
+        if provider:
+            cfg['provider'] = provider
+
+        cfg['url'] = (stored.get('ai_do_agent_url') or stored.get('ai_ollama_url') or cfg['url']).strip()
+        cfg['model'] = (stored.get('ai_model') or cfg['model']).strip()
+        cfg['token'] = (stored.get('ai_do_agent_token') or cfg['token']).strip()
+    except Exception:
+        pass
+
+    if not cfg['url']:
+        cfg['url'] = DEFAULT_DO_AGENT_URL
+    return cfg
+
+
+def _extract_ai_text(payload):
+    """Normalize common response shapes from OpenAI-compatible and custom agent APIs."""
+    if not isinstance(payload, dict):
+        return ''
+
+    choices = payload.get('choices')
+    if isinstance(choices, list) and choices:
+        first = choices[0] or {}
+        message = first.get('message') or {}
+        content = message.get('content')
+        if isinstance(content, str) and content.strip():
+            return content.strip()
+
+    for key in ('response', 'output_text', 'text', 'content'):
+        val = payload.get(key)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+
+    return ''
+
+
+def _call_do_agent_chat(agent_url, prompt, model='', token=''):
+    """Call a DO-hosted agent endpoint with OpenAI-compatible payload fallbacks."""
+    headers = {'Content-Type': 'application/json'}
+    if token:
+        headers['Authorization'] = f'Bearer {token}'
+
+    payload = {
+        'model': model or 'gpt-4o-mini',
+        'messages': [
+            {
+                'role': 'system',
+                'content': (
+                    'You are a senior marketing strategist. Return strict JSON only, '
+                    'with no markdown fences and no explanatory prose.'
+                ),
+            },
+            {'role': 'user', 'content': prompt},
+        ],
+        'temperature': 0.4,
+    }
+
+    endpoint_candidates = [
+        agent_url.rstrip('/'),
+        f"{agent_url.rstrip('/')}/v1/chat/completions",
+        f"{agent_url.rstrip('/')}/chat/completions",
+        f"{agent_url.rstrip('/')}/api/v1/chat/completions",
+    ]
+
+    last_error = None
+    for endpoint in endpoint_candidates:
+        try:
+            resp = ext_requests.post(endpoint, headers=headers, json=payload, timeout=120)
+            if resp.status_code >= 400:
+                last_error = f'HTTP {resp.status_code}: {resp.text[:280]}'
+                continue
+
+            data = resp.json()
+            text = _extract_ai_text(data)
+            if text:
+                return text, endpoint
+            last_error = 'AI response did not include any content text.'
+        except Exception as exc:
+            last_error = str(exc)
+
+    raise RuntimeError(last_error or 'Failed to reach agent endpoint')
+
+
+DEFAULT_DO_MARKETING_AGENT_URL = "https://upssgpoiscmhlp3uuvm65hyn.agents.do-ai.run"
 
 
 def _serialize_datetime(value):
@@ -130,6 +233,196 @@ def _serialize_snapshot(snapshot):
         'created_at': _serialize_datetime(snapshot.created_at),
         'updated_at': _serialize_datetime(snapshot.updated_at),
     }
+
+
+def _get_marketing_agent_config():
+    """Resolve agent URL/token/model from env + SystemConfig with safe defaults."""
+    cfg = {}
+    try:
+        cfg = {c.key: c.value for c in SystemConfig.query.filter(SystemConfig.key.like('ai_%')).all()}
+    except Exception:
+        cfg = {}
+
+    agent_url = (
+        os.getenv('DO_MARKETING_AGENT_URL')
+        or cfg.get('ai_do_agent_url')
+        or DEFAULT_DO_MARKETING_AGENT_URL
+    ).strip().rstrip('/')
+
+    bearer_token = (
+        os.getenv('DO_MARKETING_AGENT_TOKEN')
+        or cfg.get('ai_do_agent_token')
+        or ''
+    ).strip()
+
+    model_name = (
+        os.getenv('DO_MARKETING_AGENT_MODEL')
+        or cfg.get('ai_model')
+        or 'gpt-4.1-mini'
+    ).strip()
+
+    return agent_url, bearer_token, model_name
+
+
+def _build_marketing_plan_prompt(brand, payload):
+    goal = (payload.get('goal') or 'Build a 30-day growth marketing plan').strip()
+    timeframe = (payload.get('timeframe') or '30 days').strip()
+    budget = (payload.get('budget') or 'Not specified').strip()
+    constraints = payload.get('constraints') or []
+    channels = payload.get('channels') or []
+    additional_context = (payload.get('context') or '').strip()
+
+    active_campaigns = MarketingCalendar.query.filter_by(brand_name=brand.name).count()
+    active_tasks = MarketingTask.query.filter_by(brand_name=brand.name).count()
+
+    channels_text = ', '.join(channels) if channels else 'email, social, content, partnerships'
+    constraints_text = '; '.join(constraints) if constraints else 'No additional constraints provided.'
+
+    return f"""You are an expert marketing strategy assistant.
+
+Create a practical marketing agent plan for this brand.
+
+Brand slug: {brand.name}
+Brand display name: {brand.display_name}
+Brand description: {brand.description or 'Not provided'}
+Brand website: {brand.website_url or 'Not provided'}
+Goal: {goal}
+Timeframe: {timeframe}
+Budget: {budget}
+Preferred channels: {channels_text}
+Constraints: {constraints_text}
+Current campaign count in app: {active_campaigns}
+Current task count in app: {active_tasks}
+Additional context: {additional_context or 'None'}
+
+Return ONLY valid JSON with this shape:
+{{
+  "summary": "short executive summary",
+  "objectives": ["..."],
+  "phases": [
+    {{
+      "name": "Phase name",
+      "duration": "e.g. Week 1",
+      "actions": [
+        {{
+          "title": "Action title",
+          "channel": "EMAIL|SOCIAL|CONTENT|ADS|SEO|PARTNERSHIPS|OTHER",
+          "owner": "Marketing|Sales|Founder|Other",
+          "priority": "HIGH|MEDIUM|LOW",
+          "kpi": "measurable KPI",
+          "due_in_days": 0
+        }}
+      ]
+    }}
+  ],
+  "content_ideas": ["..."],
+  "risks": ["..."],
+  "next_7_days": ["..."]
+}}"""
+
+
+def _extract_plan_json(text):
+    """Parse JSON from direct output or fenced code block response."""
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, dict):
+            return parsed
+    except Exception:
+        pass
+
+    fence_start = text.find('```json')
+    if fence_start != -1:
+        fence_start = text.find('\n', fence_start)
+        fence_end = text.find('```', fence_start + 1)
+        if fence_start != -1 and fence_end != -1:
+            snippet = text[fence_start + 1:fence_end].strip()
+            try:
+                parsed = json.loads(snippet)
+                if isinstance(parsed, dict):
+                    return parsed
+            except Exception:
+                pass
+
+    start = text.find('{')
+    end = text.rfind('}')
+    if start != -1 and end != -1 and end > start:
+        snippet = text[start:end + 1]
+        try:
+            parsed = json.loads(snippet)
+            if isinstance(parsed, dict):
+                return parsed
+        except Exception:
+            pass
+
+    return None
+
+
+@marketing_calendar_bp.route('/agent/marketing-plan', methods=['POST'])
+def generate_marketing_agent_plan():
+    """Generate a marketing plan via DigitalOcean agent endpoint."""
+    data = request.get_json() or {}
+    brand_name = (data.get('brand_name') or '').strip()
+    if not brand_name:
+        return jsonify({'success': False, 'error': 'brand_name is required'}), 400
+
+    brand = Brand.query.filter_by(name=brand_name).first()
+    if not brand:
+        return jsonify({'success': False, 'error': 'Brand not found'}), 404
+
+    agent_url, bearer_token, model_name = _get_marketing_agent_config()
+    prompt = _build_marketing_plan_prompt(brand, data)
+
+    import requests as ext_requests
+    headers = {'Content-Type': 'application/json'}
+    if bearer_token:
+        headers['Authorization'] = f'Bearer {bearer_token}'
+
+    # Prefer chat-style payload; fall back to simple input payload for agent runtimes
+    chat_payload = {
+        'model': model_name,
+        'messages': [
+            {'role': 'system', 'content': 'You produce strict JSON output only.'},
+            {'role': 'user', 'content': prompt},
+        ],
+        'stream': False,
+        'temperature': 0.4,
+    }
+
+    response = None
+    last_error = None
+    for payload in (chat_payload, {'input': prompt, 'stream': False}):
+        try:
+            response = ext_requests.post(agent_url, json=payload, headers=headers, timeout=180)
+            if response.status_code < 400:
+                break
+            last_error = f'Agent returned {response.status_code}: {response.text[:300]}'
+        except Exception as exc:
+            last_error = str(exc)
+
+    if response is None or response.status_code >= 400:
+        return jsonify({'success': False, 'error': last_error or 'Agent request failed'}), 502
+
+    raw_text = ''
+    try:
+        body = response.json()
+        raw_text = (
+            body.get('output_text')
+            or body.get('response')
+            or body.get('content')
+            or (body.get('choices', [{}])[0].get('message', {}).get('content') if isinstance(body.get('choices'), list) else '')
+            or json.dumps(body)
+        )
+    except Exception:
+        raw_text = response.text or ''
+
+    structured = _extract_plan_json(raw_text)
+    return jsonify({
+        'success': True,
+        'brand_name': brand.name,
+        'agent_url': agent_url,
+        'plan': structured,
+        'raw_plan_text': raw_text[:20000],
+    })
 
 
 # ============ CAMPAIGNS ============
@@ -1281,27 +1574,38 @@ def generate_content():
         return jsonify({'success': False, 'error': 'Brand not found'}), 404
 
     # Get AI config from SystemConfig
-    ai_provider = 'ollama'
-    ai_url = 'http://localhost:11434'
-    ai_model = 'llama3.2:1b'
-    try:
-        cfg = {c.key: c.value for c in SystemConfig.query.filter(SystemConfig.key.like('ai_%')).all()}
-        ai_provider = cfg.get('ai_provider', ai_provider)
-        ai_url = cfg.get('ai_ollama_url', ai_url)
-        ai_model = cfg.get('ai_model', ai_model)
-    except Exception:
-        pass
+    ai_cfg = _resolve_ai_runtime_config()
+    ai_provider = ai_cfg['provider']
+    ai_url = ai_cfg['url']
+    ai_model = ai_cfg['model'] or 'gpt-4o-mini'
+    ai_token = ai_cfg.get('token', '')
 
     if content_type == 'content_plan':
-        return _generate_content_plan(brand, ai_url, ai_model, topic, num_items, campaign_id)
+        return _generate_content_plan(
+            brand,
+            ai_url,
+            ai_model,
+            topic,
+            num_items,
+            campaign_id,
+            ai_provider=ai_provider,
+            ai_token=ai_token,
+        )
     else:
-        return _generate_single_content(brand, ai_url, ai_model, content_type, platform, topic)
+        return _generate_single_content(
+            brand,
+            ai_url,
+            ai_model,
+            content_type,
+            platform,
+            topic,
+            ai_provider=ai_provider,
+            ai_token=ai_token,
+        )
 
 
-def _generate_single_content(brand, ai_url, ai_model, content_type, platform, topic):
+def _generate_single_content(brand, ai_url, ai_model, content_type, platform, topic, ai_provider='ollama', ai_token=''):
     """Generate a single piece of content"""
-    import requests as ext_requests
-
     type_prompts = {
         'social_post': f"Write a {platform} post for {brand.display_name}. Topic: {topic or 'brand awareness'}. "
                        f"Brand description: {brand.description or 'technology company'}. "
@@ -1317,26 +1621,30 @@ def _generate_single_content(brand, ai_url, ai_model, content_type, platform, to
     prompt = type_prompts.get(content_type, type_prompts['social_post'])
 
     try:
-        resp = ext_requests.post(f'{ai_url}/api/generate', json={
-            'model': ai_model,
-            'prompt': prompt,
-            'stream': False,
-            'options': {'temperature': 0.7, 'num_predict': 1500}
-        }, timeout=120)
-
-        if resp.status_code == 200:
-            content = resp.json().get('response', '').strip()
-            return jsonify({'success': True, 'content': content, 'model': ai_model})
+        if ai_provider in {'do_agent', 'digitalocean'}:
+            content, _ = _call_do_agent_chat(ai_url, prompt, model=ai_model, token=ai_token)
         else:
-            return jsonify({'success': False, 'error': f'AI returned {resp.status_code}'}), 502
+            resp = ext_requests.post(f'{ai_url}/api/generate', json={
+                'model': ai_model,
+                'prompt': prompt,
+                'stream': False,
+                'options': {'temperature': 0.7, 'num_predict': 1500}
+            }, timeout=120)
+
+            if resp.status_code != 200:
+                return jsonify({'success': False, 'error': f'AI returned {resp.status_code}'}), 502
+
+            content = resp.json().get('response', '').strip()
+
+        if content:
+            return jsonify({'success': True, 'content': content, 'model': ai_model})
+        return jsonify({'success': False, 'error': 'AI did not return content'}), 502
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 502
 
 
-def _generate_content_plan(brand, ai_url, ai_model, topic, num_items, campaign_id):
+def _generate_content_plan(brand, ai_url, ai_model, topic, num_items, campaign_id, ai_provider='ollama', ai_token=''):
     """Generate a multi-item content plan with scheduled tasks"""
-    import requests as ext_requests
-
     prompt = f"""Create a {num_items}-item content calendar plan for {brand.display_name}.
 Brand: {brand.description or 'technology company'}
 Website: {brand.website_url or ''}
@@ -1356,17 +1664,20 @@ Example: [{{"task_name":"LinkedIn thought leadership","platform":"LINKEDIN","tas
 Return ONLY the JSON array, no extra text."""
 
     try:
-        resp = ext_requests.post(f'{ai_url}/api/generate', json={
-            'model': ai_model,
-            'prompt': prompt,
-            'stream': False,
-            'options': {'temperature': 0.7, 'num_predict': 3000}
-        }, timeout=180)
+        if ai_provider in {'do_agent', 'digitalocean'}:
+            raw, _ = _call_do_agent_chat(ai_url, prompt, model=ai_model, token=ai_token)
+        else:
+            resp = ext_requests.post(f'{ai_url}/api/generate', json={
+                'model': ai_model,
+                'prompt': prompt,
+                'stream': False,
+                'options': {'temperature': 0.7, 'num_predict': 3000}
+            }, timeout=180)
 
-        if resp.status_code != 200:
-            return jsonify({'success': False, 'error': f'AI returned {resp.status_code}'}), 502
+            if resp.status_code != 200:
+                return jsonify({'success': False, 'error': f'AI returned {resp.status_code}'}), 502
 
-        raw = resp.json().get('response', '').strip()
+            raw = resp.json().get('response', '').strip()
 
         # Try to extract JSON from the response
         items = _extract_json_array(raw)

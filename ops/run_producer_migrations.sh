@@ -119,6 +119,13 @@ if [[ $migrate_status -ne 0 ]]; then
         python manage.py migrate production_ledger 0006_auto_20260416_2221 --fake --no-input || true
         python manage.py migrate production_ledger 0007_fix_icon_column_charset --fake --no-input
         python manage.py migrate --no-input
+    elif echo "$migrate_output" | grep -q "production_ledger\.0010_distribution_transcription_shorts" \
+        && echo "$migrate_output" | grep -q "Table 'production_ledger_podcastdistribution' already exists"; then
+        echo "Detected duplicate table for production_ledger.0010; faking migration and retrying."
+        # Compatibility fix for environments where tables were created out-of-band
+        # or via a partial prior run, but migration history was not recorded.
+        python manage.py migrate production_ledger 0010_distribution_transcription_shorts --fake --no-input
+        python manage.py migrate --no-input
     elif echo "$migrate_output" | grep -q "InconsistentMigrationHistory" \
         && echo "$migrate_output" | grep -q "production_ledger\.0007_fix_icon_column_charset" \
         && echo "$migrate_output" | grep -q "production_ledger\.0006_auto_20260416_2221"; then

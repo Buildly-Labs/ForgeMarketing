@@ -607,6 +607,41 @@ def onboarding_test_ai():
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)})
 
+    if provider in {'do_agent', 'digitalocean'}:
+        if not url:
+            url = os.getenv('DO_AGENT_URL', 'https://upssgpoiscmhlp3uuvm65hyn.agents.do-ai.run')
+        token = (data.get('token') or os.getenv('DO_AGENT_TOKEN', '')).strip()
+        model = (data.get('model') or os.getenv('DO_AGENT_MODEL', 'gpt-4o-mini')).strip()
+        headers = {'Content-Type': 'application/json'}
+        if token:
+            headers['Authorization'] = f'Bearer {token}'
+
+        payload = {
+            'model': model,
+            'messages': [
+                {'role': 'user', 'content': 'Reply with JSON: {"ok":true,"service":"do_agent"}'}
+            ],
+            'temperature': 0,
+        }
+
+        endpoints = [
+            url,
+            f"{url}/v1/chat/completions",
+            f"{url}/chat/completions",
+            f"{url}/api/v1/chat/completions",
+        ]
+        last_error = 'Unknown error'
+        for endpoint in endpoints:
+            try:
+                resp = requests.post(endpoint, json=payload, headers=headers, timeout=15)
+                if resp.status_code < 400:
+                    return jsonify({'success': True, 'models': [{'name': model}], 'endpoint': endpoint})
+                last_error = f"HTTP {resp.status_code}: {resp.text[:200]}"
+            except Exception as exc:
+                last_error = str(exc)
+
+        return jsonify({'success': False, 'error': last_error})
+
     return jsonify({'success': False, 'error': f'Unknown AI provider: {provider}'})
 
 
@@ -628,6 +663,9 @@ def onboarding_save_ai():
 
         if provider == 'ollama':
             configs.append(('ai_ollama_url', data.get('url', 'http://localhost:11434'), 'ai', 'Ollama server URL'))
+        elif provider in {'do_agent', 'digitalocean'}:
+            configs.append(('ai_do_agent_url', data.get('url', 'https://upssgpoiscmhlp3uuvm65hyn.agents.do-ai.run'), 'ai', 'DigitalOcean Agent URL'))
+            configs.append(('ai_do_agent_token', data.get('token', ''), 'ai', 'DigitalOcean Agent bearer token'))
         elif provider == 'openai':
             configs.append(('ai_openai_key', data.get('api_key', ''), 'ai', 'OpenAI API key'))
 
@@ -637,7 +675,7 @@ def onboarding_save_ai():
                 existing.value = value
             else:
                 cfg = SystemConfig(key=key, value=value, category=category, description=desc,
-                                   is_secret=(key == 'ai_openai_key'))
+                                   is_secret=(key in {'ai_openai_key', 'ai_do_agent_token'}))
                 db.session.add(cfg)
 
         db.session.commit()
@@ -5666,6 +5704,27 @@ except ImportError as e:
     print(f"⚠️  Contacts system not available: {e}")
     CONTACTS_SYSTEM_AVAILABLE = False
 
+
+def _resolve_contact_brand(requested_brand: str = '') -> str:
+    """Resolve brand from explicit value, active session brand, or first active DB brand."""
+    brand = (requested_brand or '').strip()
+    if brand:
+        return brand
+
+    session_brand = (session.get('active_brand_name') or '').strip()
+    if session_brand:
+        return session_brand
+
+    try:
+        from dashboard.models import Brand
+        first_brand = Brand.query.filter_by(is_active=True).order_by(Brand.name.asc()).first()
+        if first_brand:
+            return (first_brand.name or '').strip()
+    except Exception:
+        pass
+
+    return ''
+
 @app.route('/api/contacts')
 def api_list_contacts():
     """Get filtered list of contacts"""
@@ -5785,6 +5844,10 @@ def api_create_contact():
         
         if not contact_data:
             return jsonify({'error': 'No contact data provided'}), 400
+
+        contact_data['brand'] = _resolve_contact_brand(contact_data.get('brand'))
+        if not contact_data['brand']:
+            return jsonify({'success': False, 'error': 'No brand available. Create/select a brand first.'}), 400
         
         contact_id = manager.create_contact(contact_data)
         contact = manager.get_contact(contact_id)
@@ -5912,9 +5975,9 @@ def api_import_contacts_csv():
             })
 
         # Full import
-        brand = (data.get('brand') or '').strip()
+        brand = _resolve_contact_brand(data.get('brand'))
         if not brand:
-            return jsonify({'success': False, 'error': 'brand is required'}), 400
+            return jsonify({'success': False, 'error': 'No brand available. Create/select a brand first.'}), 400
 
         mapping = data.get('mapping') or auto_mapping
         source_label = (data.get('source_label') or 'csv_import').strip()
