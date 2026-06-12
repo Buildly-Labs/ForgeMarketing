@@ -1758,6 +1758,162 @@ def contacts():
     return render_template('contacts.html',
                          title='Contact Management')
 
+
+@app.route('/api/chat', methods=['POST'])
+def api_chat():
+    """Marketing Assistant chat endpoint — routes to configured AI with system context."""
+    from dashboard.models import Brand, BrandSettings, SystemConfig
+    from dashboard.marketing_calendar_api import _resolve_ai_runtime_config, _call_do_agent_chat, _extract_ai_text
+    import requests as _req
+
+    data = request.get_json(silent=True) or {}
+    user_message = (data.get('message') or '').strip()
+    history = data.get('history') or []
+    if not user_message:
+        return jsonify({'success': False, 'error': 'message is required'}), 400
+
+    # ── Build system context ────────────────────────────────────────────────
+    try:
+        brands = Brand.query.filter_by(is_active=True).all()
+        brand_lines = []
+        for b in brands:
+            settings = BrandSettings.query.filter_by(brand_id=b.id).first()
+            adv = settings.get_advanced_settings() if settings else {}
+            mp = adv.get('marketing_profile', {})
+            brand_lines.append(
+                f"  - {b.display_name or b.name} (slug: {b.name})"
+                + (f", website: {b.website_url}" if b.website_url else "")
+                + (f", audience: {mp.get('target_audience','')}" if mp.get('target_audience') else "")
+                + (f", product: {mp.get('product_type','')}" if mp.get('product_type') else "")
+            )
+        brands_ctx = "\n".join(brand_lines) if brand_lines else "  (no brands configured yet)"
+
+        # Recent lead counts
+        from dashboard.lead_radar_models import Lead, LeadCandidate, LeadSource
+        lead_count = Lead.query.filter_by(archived_at=None).count()
+        candidate_count = LeadCandidate.query.filter(LeadCandidate.status.in_(['new','needs_review'])).count()
+        source_count = LeadSource.query.filter_by(is_active=True).count()
+
+        # Automation / cron status
+        cron_lines = []
+        try:
+            cron_data = dashboard.get_cron_status() or {}
+            for name, info in (cron_data.get('jobs') or {}).items():
+                last = info.get('last_run') or 'never'
+                cron_lines.append(f"  - {name}: last run {last}, status {info.get('status','unknown')}")
+        except Exception:
+            pass
+        cron_ctx = "\n".join(cron_lines) if cron_lines else "  (no cron jobs tracked)"
+
+        # AI config
+        ai_cfg = _resolve_ai_runtime_config()
+        ai_ctx = f"provider={ai_cfg.get('provider','?')}, token={'set' if ai_cfg.get('token') else 'MISSING'}"
+
+    except Exception as ctx_exc:
+        brands_ctx = "(error loading brand context)"
+        lead_count = candidate_count = source_count = 0
+        cron_ctx = "(error)"
+        ai_ctx = "unknown"
+        _ = ctx_exc
+
+    system_prompt = f"""You are the Marketing Assistant for the ForgeMarketing platform — an AI marketing command center.
+Your job is to help users:
+1. Configure their marketing system (brands, AI, email, social, lead radar sources)
+2. Start and manage marketing plans and campaigns
+3. Understand automation run status and fix issues
+4. Find leads and manage outreach sequences
+5. Generate content for their brands
+
+CURRENT SYSTEM STATE:
+Brands configured:
+{brands_ctx}
+
+Leads in pipeline: {lead_count} leads, {candidate_count} unreviewed candidates, {source_count} active discovery sources
+
+Recent automation runs:
+{cron_ctx}
+
+AI config: {ai_ctx}
+
+KEY URLS in the dashboard:
+- /brands — configure brands (display name, audience, product type)
+- /lead-radar/startup-intel — find startup candidates automatically
+- /leads — manage and assign leads
+- /admin — system config (AI keys, email, social)
+- /marketing/calendar — campaign calendar
+- /generate — AI content generation
+- /automation — automation tools
+- /contacts — contact management
+
+GUIDELINES:
+- Be concise and actionable. Give specific steps, not generic advice.
+- When something is missing or broken, tell the user exactly what to click and where.
+- For multi-step tasks, give a numbered list.
+- If the user asks to "start a marketing plan", ask: brand name, target audience, main goal, and timeframe.
+- Always mention the specific page URL when directing the user somewhere.
+- If AI config is missing token, tell the user to go to /admin → AI Settings.
+- Do not make up data. Use the system state above.
+"""
+
+    # ── Call AI ────────────────────────────────────────────────────────────
+    try:
+        ai_cfg = _resolve_ai_runtime_config()
+        if not ai_cfg.get('token'):
+            return jsonify({'success': False, 'error': 'AI provider not configured. Go to Admin → AI Settings to add your API key.'}), 400
+
+        headers = {'Content-Type': 'application/json'}
+        if ai_cfg['token']:
+            headers['Authorization'] = f"Bearer {ai_cfg['token']}"
+
+        messages = [{'role': 'system', 'content': system_prompt}]
+        # Include prior turns for multi-turn context (trim to last 8 turns)
+        for turn in (history or [])[-8:]:
+            role = turn.get('role', 'user')
+            content = turn.get('content', '')
+            if role in ('user', 'assistant') and content:
+                messages.append({'role': role, 'content': content})
+        messages.append({'role': 'user', 'content': user_message})
+
+        payload = {
+            'model': ai_cfg.get('model') or 'gpt-4o-mini',
+            'messages': messages,
+            'temperature': 0.5,
+            'max_tokens': 800,
+        }
+
+        endpoint_candidates = [
+            ai_cfg['url'].rstrip('/'),
+            f"{ai_cfg['url'].rstrip('/')}/v1/chat/completions",
+            f"{ai_cfg['url'].rstrip('/')}/chat/completions",
+            f"{ai_cfg['url'].rstrip('/')}/api/v1/chat/completions",
+        ]
+        # Deduplicate while preserving order
+        seen = set()
+        endpoints = [e for e in endpoint_candidates if not (e in seen or seen.add(e))]
+
+        reply = None
+        last_error = None
+        for endpoint in endpoints:
+            try:
+                resp = _req.post(endpoint, headers=headers, json=payload, timeout=60)
+                if resp.status_code >= 400:
+                    last_error = f'HTTP {resp.status_code}'
+                    continue
+                reply = _extract_ai_text(resp.json())
+                if reply:
+                    break
+            except Exception as exc:
+                last_error = str(exc)
+
+        if not reply:
+            return jsonify({'success': False, 'error': f'AI call failed: {last_error}'}), 502
+
+        return jsonify({'success': True, 'reply': reply})
+
+    except Exception as exc:
+        return jsonify({'success': False, 'error': str(exc)}), 500
+
+
 @app.route('/api/status')
 def api_status():
     """API endpoint for system status with environment configuration"""

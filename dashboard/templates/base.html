@@ -337,5 +337,177 @@
         }
     </script>
     {% block scripts %}{% endblock %}
+
+    <!-- ── Marketing Assistant Chat Widget ─────────────────────────────────── -->
+    <div id="mktChat" x-data="marketingChat()" x-init="init()" class="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-2">
+
+      <!-- Open/close button -->
+      <button @click="open = !open"
+              class="w-14 h-14 rounded-full bg-indigo-600 text-white shadow-xl flex items-center justify-center hover:bg-indigo-700 transition-colors"
+              title="Marketing Assistant">
+        <i :class="open ? 'fas fa-times text-xl' : 'fas fa-comments text-xl'"></i>
+        <span x-show="unread > 0 && !open"
+              class="absolute top-0 right-0 w-5 h-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center"
+              x-text="unread"></span>
+      </button>
+
+      <!-- Chat panel -->
+      <div x-show="open" x-transition
+           class="w-96 max-w-[calc(100vw-2rem)] bg-white rounded-2xl shadow-2xl border border-gray-200 flex flex-col"
+           style="height: 520px;">
+
+        <!-- Header -->
+        <div class="bg-indigo-600 text-white rounded-t-2xl px-4 py-3 flex items-center justify-between shrink-0">
+          <div class="flex items-center gap-2">
+            <i class="fas fa-robot"></i>
+            <span class="font-semibold text-sm">Marketing Assistant</span>
+            <span class="text-xs bg-indigo-500 px-2 py-0.5 rounded-full" x-text="statusLabel"></span>
+          </div>
+          <button @click="clearChat()" title="Clear chat" class="text-indigo-200 hover:text-white text-xs">
+            <i class="fas fa-trash-alt"></i>
+          </button>
+        </div>
+
+        <!-- Messages -->
+        <div id="chatMessages" class="flex-1 overflow-y-auto px-4 py-3 space-y-3 text-sm">
+          <template x-for="(msg, i) in messages" :key="i">
+            <div :class="msg.role === 'user' ? 'flex justify-end' : 'flex justify-start'">
+              <div :class="msg.role === 'user'
+                    ? 'bg-indigo-600 text-white rounded-2xl rounded-br-sm px-3 py-2 max-w-[80%]'
+                    : 'bg-gray-100 text-gray-800 rounded-2xl rounded-bl-sm px-3 py-2 max-w-[85%]'"
+                   x-html="msg.html || escHtml(msg.content)">
+              </div>
+            </div>
+          </template>
+          <div x-show="thinking" class="flex justify-start">
+            <div class="bg-gray-100 text-gray-500 rounded-2xl rounded-bl-sm px-3 py-2 text-xs italic">
+              <i class="fas fa-spinner fa-spin mr-1"></i>Thinking…
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick-action chips (shown when no messages yet) -->
+        <div x-show="messages.length === 1" class="px-4 pb-2 flex flex-wrap gap-1.5 shrink-0">
+          <template x-for="chip in chips" :key="chip">
+            <button @click="send(chip)"
+                    class="text-xs bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-full px-3 py-1 hover:bg-indigo-100 transition-colors">
+              <span x-text="chip"></span>
+            </button>
+          </template>
+        </div>
+
+        <!-- Input -->
+        <div class="border-t border-gray-200 px-3 py-2 flex gap-2 shrink-0">
+          <input x-model="input" @keydown.enter.prevent="send()"
+                 :disabled="thinking"
+                 class="flex-1 border rounded-full px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 disabled:bg-gray-50"
+                 placeholder="Ask anything about your marketing…">
+          <button @click="send()" :disabled="thinking || !input.trim()"
+                  class="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center hover:bg-indigo-700 disabled:opacity-40">
+            <i class="fas fa-paper-plane text-xs"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+    function marketingChat() {
+      return {
+        open: false,
+        thinking: false,
+        input: '',
+        messages: [],
+        unread: 0,
+        statusLabel: 'AI',
+        chips: [
+          'Set up my marketing system',
+          'Start a new marketing plan',
+          'Show recent automation runs',
+          'What needs to be configured?',
+          'Help me find leads',
+          'Generate content for my brand',
+        ],
+        history: [],   // OpenAI-format message history for multi-turn
+
+        async init() {
+          // Load status to set label
+          try {
+            const r = await fetch('/api/status');
+            const j = await r.json();
+            this.statusLabel = j.services?.ai?.available ? 'AI ✓' : 'AI';
+          } catch(_) {}
+          // Greeting
+          this.pushAssistant(
+            'Hi! I\'m your Marketing Assistant. I can help you:\n' +
+            '• Configure your marketing system\n' +
+            '• Start a new campaign or plan\n' +
+            '• Review recent automation runs\n' +
+            '• Find leads and manage outreach\n\n' +
+            'What would you like to do?'
+          );
+        },
+
+        pushAssistant(text) {
+          this.messages.push({ role: 'assistant', content: text, html: this.renderMarkdown(text) });
+          this.$nextTick(() => this.scrollBottom());
+          if (!this.open) this.unread++;
+        },
+
+        async send(text) {
+          const content = (text || this.input).trim();
+          if (!content) return;
+          this.input = '';
+          this.messages.push({ role: 'user', content });
+          this.history.push({ role: 'user', content });
+          this.thinking = true;
+          this.unread = 0;
+          this.$nextTick(() => this.scrollBottom());
+
+          try {
+            const res = await fetch('/api/chat', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ message: content, history: this.history.slice(-10) }),
+            });
+            const json = await res.json();
+            if (json.success) {
+              this.history.push({ role: 'assistant', content: json.reply });
+              this.pushAssistant(json.reply);
+            } else {
+              this.pushAssistant('⚠ ' + (json.error || 'Something went wrong. Try again.'));
+            }
+          } catch(e) {
+            this.pushAssistant('⚠ Could not reach the AI assistant. Check that an AI provider is configured in Admin → Settings.');
+          }
+          this.thinking = false;
+        },
+
+        clearChat() {
+          this.messages = [];
+          this.history = [];
+          this.unread = 0;
+          this.init();
+        },
+
+        scrollBottom() {
+          const el = document.getElementById('chatMessages');
+          if (el) el.scrollTop = el.scrollHeight;
+        },
+
+        escHtml(s) {
+          return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\n/g,'<br>');
+        },
+
+        renderMarkdown(s) {
+          // Minimal markdown: bold, bullets, newlines
+          return (s || '')
+            .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+            .replace(/^[•\-\*] (.+)$/gm, '<li class="ml-3 list-disc">$1</li>')
+            .replace(/\n/g, '<br>');
+        },
+      };
+    }
+    </script>
 </body>
 </html>
