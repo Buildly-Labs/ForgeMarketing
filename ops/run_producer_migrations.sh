@@ -125,6 +125,11 @@ while [[ $migrate_status -ne 0 && $attempt -lt $MAX_RETRIES ]]; do
         python manage.py migrate production_ledger 0008_add_segment_live_recording_fields --fake --no-input
         fixed=1
 
+    elif echo "$migrate_output" | grep -qi "Duplicate column name 'platform_captions'\|production_ledger\.0013_videoshort_platform_captions"; then
+        echo "Detected duplicate platform_captions column from 0013; faking 0013 (attempt $attempt)."
+        python manage.py migrate production_ledger 0013_videoshort_platform_captions --fake --no-input
+        fixed=1
+
     elif echo "$migrate_output" | grep -qi "0007_fix_icon_column_charset\|Executing DDL statements while in a transaction\|TransactionManagementError"; then
         echo "Detected transactional DDL failure in 0007; faking 0006+0007 (attempt $attempt)."
         python manage.py migrate production_ledger 0006_auto_20260416_2221 --fake --no-input 2>/dev/null || true
