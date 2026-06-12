@@ -13,11 +13,11 @@ cd "$PROJECT_ROOT/Producer"
 
 echo "Running producer database migrations..."
 
-# Preflight repair for known production_ledger migration ordering issue:
-# 0006 recorded as applied while dependency 0005 is missing.
+# Preflight repair: every migration through 0017 was applied to the MySQL schema
+# in prior partial runs but was never recorded in django_migrations.  Fake any
+# unrecorded historical migration so `migrate` only runs genuinely new ones.
 python - <<'PY'
-import os
-import sys
+import os, sys
 
 os.environ.setdefault(
     "DJANGO_SETTINGS_MODULE",
@@ -36,45 +36,52 @@ from django.db import connection
 from django.utils import timezone
 
 APP = "production_ledger"
-MIGRATION_CHAIN = [
+
+# All migrations that must be recorded as applied before `migrate` runs.
+# These were applied to the MySQL schema in prior deploys but the history
+# entry was never written (partial runs, manual schema changes, etc.).
+# 0018+ are left out so they run normally via `migrate`.
+HISTORICAL_MIGRATIONS = [
+    "0001_initial",
+    "0002_add_episode_type_model",
     "0003_add_guest_contact_fields",
     "0004_add_media_platform_and_label",
     "0005_drop_episode_type_old",
     "0006_auto_20260416_2221",
     "0007_fix_icon_column_charset",
+    "0008_add_segment_live_recording_fields",
+    "0009_show_join_request",
+    "0010_distribution_transcription_shorts",
+    "0011_alter_aiartifact_artifact_type",
+    "0012_repair_media_columns",
+    "0013_videoshort_platform_captions",
+    "0014_youtube_config",
+    "0015_platformcomment",
+    "0016_orgapikey",
+    "0017_background_task",
 ]
 
 try:
     with connection.cursor() as cursor:
         cursor.execute(
-            "SELECT name FROM django_migrations WHERE app = %s",
-            [APP],
+            "SELECT name FROM django_migrations WHERE app = %s", [APP]
         )
         applied = {row[0] for row in cursor.fetchall()}
 
-        repaired = []
-        for idx, migration_name in enumerate(MIGRATION_CHAIN):
-            if migration_name in applied:
-                continue
-
-            # If any later migration in the chain is already marked applied,
-            # backfill this missing dependency to repair history consistency.
-            later_applied = any(name in applied for name in MIGRATION_CHAIN[idx + 1 :])
-            if later_applied:
+        faked = []
+        for name in HISTORICAL_MIGRATIONS:
+            if name not in applied:
                 cursor.execute(
                     "INSERT INTO django_migrations (app, name, applied) VALUES (%s, %s, %s)",
-                    [APP, migration_name, timezone.now()],
+                    [APP, name, timezone.now()],
                 )
-                applied.add(migration_name)
-                repaired.append(migration_name)
+                faked.append(name)
 
-        if repaired:
-            print(
-                "Repaired migration history for production_ledger: "
-                + ", ".join(repaired)
-            )
+        if faked:
+            print(f"Preflight faked {len(faked)} unrecorded historical migrations: {', '.join(faked)}")
+        else:
+            print("Preflight: all historical migrations already recorded.")
 except Exception as exc:
-    # Do not hard-fail preflight; migrate step below still handles recovery.
     print(f"Migration preflight check skipped: {exc}")
     raise SystemExit(0)
 PY
