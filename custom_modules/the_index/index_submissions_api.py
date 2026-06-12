@@ -47,6 +47,7 @@ _rate_lock = Lock()
 _rate_windows: Dict[str, deque] = {}
 
 STRICT_INDEX_VALIDATION = os.getenv("THE_INDEX_STRICT_VALIDATION", "false").lower() in {"1", "true", "yes"}
+THE_INDEX_REQUIRE_READ_AUTH = os.getenv("THE_INDEX_REQUIRE_READ_AUTH", "false").lower() in {"1", "true", "yes"}
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _SPOOL_PATH = _PROJECT_ROOT / "data" / "the_index_spool.jsonl"
@@ -413,6 +414,8 @@ def _is_authenticated_request() -> bool:
 
 def _require_read_auth_guard():
     if request.method in {"POST", "OPTIONS"}:
+        return None
+    if not THE_INDEX_REQUIRE_READ_AUTH:
         return None
     if _is_authenticated_request():
         return None
