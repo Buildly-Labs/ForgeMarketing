@@ -13,9 +13,11 @@ cd "$PROJECT_ROOT/Producer"
 
 echo "Running producer database migrations..."
 
-# Preflight repair: every migration through 0017 was applied to the MySQL schema
-# in prior partial runs but was never recorded in django_migrations.  Fake any
-# unrecorded historical migration so `migrate` only runs genuinely new ones.
+# Preflight reset: wipe all production_ledger migration records, then
+# fake-apply every migration so `migrate` never tries to re-run DDL that
+# already exists in the DB.  Any genuinely new migration (added after the
+# schema was last deployed) will be faked along with the rest; to run a
+# new migration for real, add it to REAL_MIGRATIONS below.
 python - <<'PY'
 import os, sys
 
@@ -27,65 +29,28 @@ os.environ.setdefault(
 try:
     import django
 except Exception as exc:
-    print(f"Migration preflight check skipped (django not available): {exc}")
+    print(f"Migration preflight skipped (django not available): {exc}")
     raise SystemExit(0)
 
 django.setup()
 
 from django.db import connection
-from django.utils import timezone
 
 APP = "production_ledger"
 
-# All migrations that must be recorded as applied before `migrate` runs.
-# These were applied to the MySQL schema in prior deploys but the history
-# entry was never written (partial runs, manual schema changes, etc.).
-# 0018+ are left out so they run normally via `migrate`.
-HISTORICAL_MIGRATIONS = [
-    "0001_initial",
-    "0002_add_episode_type_model",
-    "0003_add_guest_contact_fields",
-    "0004_add_media_platform_and_label",
-    "0005_drop_episode_type_old",
-    "0006_auto_20260416_2221",
-    "0007_fix_icon_column_charset",
-    "0008_add_segment_live_recording_fields",
-    "0009_show_join_request",
-    "0010_distribution_transcription_shorts",
-    "0011_alter_aiartifact_artifact_type",
-    "0012_repair_media_columns",
-    "0013_videoshort_platform_captions",
-    "0014_youtube_config",
-    "0015_platformcomment",
-    "0016_orgapikey",
-    "0017_background_task",
-    "0018_alter_orgapikey_options_and_more",
-]
-
 try:
     with connection.cursor() as cursor:
-        cursor.execute(
-            "SELECT name FROM django_migrations WHERE app = %s", [APP]
-        )
-        applied = {row[0] for row in cursor.fetchall()}
-
-        faked = []
-        for name in HISTORICAL_MIGRATIONS:
-            if name not in applied:
-                cursor.execute(
-                    "INSERT INTO django_migrations (app, name, applied) VALUES (%s, %s, %s)",
-                    [APP, name, timezone.now()],
-                )
-                faked.append(name)
-
-        if faked:
-            print(f"Preflight faked {len(faked)} unrecorded historical migrations: {', '.join(faked)}")
-        else:
-            print("Preflight: all historical migrations already recorded.")
+        cursor.execute("SELECT COUNT(*) FROM django_migrations WHERE app = %s", [APP])
+        count_before = cursor.fetchone()[0]
+        cursor.execute("DELETE FROM django_migrations WHERE app = %s", [APP])
+    print(f"Preflight: cleared {count_before} existing {APP} migration records; will fake-apply all.")
 except Exception as exc:
-    print(f"Migration preflight check skipped: {exc}")
-    raise SystemExit(0)
+    print(f"Migration preflight failed: {exc}")
+    raise SystemExit(1)
 PY
+
+echo "Fake-applying all production_ledger migrations (schema already exists in DB)..."
+python manage.py migrate production_ledger --fake --no-input
 
 echo "Applying Django core migrations (contenttypes/auth/admin/sessions)..."
 python manage.py migrate contenttypes --no-input
@@ -93,95 +58,8 @@ python manage.py migrate auth --no-input
 python manage.py migrate admin --no-input
 python manage.py migrate sessions --no-input
 
-# Historical compatibility fakes (safe to repeat; no-op when already applied).
-set +e
-python manage.py migrate production_ledger 0002 --fake --no-input >/tmp/producer_mig_pre_1.log 2>&1
-python manage.py migrate logic 0002 --fake --no-input >/tmp/producer_mig_pre_2.log 2>&1
-set -e
-
-set +e
-migrate_output=$(python manage.py migrate --no-input 2>&1)
-migrate_status=$?
-set -e
-
-# --- Retry loop: each iteration fixes ONE known issue and retries migrate.
-# This handles cases where multiple known issues are stacked (e.g. 0010 table
-# already exists AND 0007 DDL-in-transaction), which previously required two
-# supervisor restart cycles to resolve.
-MAX_RETRIES=6
-attempt=0
-while [[ $migrate_status -ne 0 && $attempt -lt $MAX_RETRIES ]]; do
-    attempt=$((attempt + 1))
-    fixed=0
-
-    if echo "$migrate_output" | grep -q "InconsistentMigrationHistory" \
-        && echo "$migrate_output" | grep -q "production_ledger\.0005_drop_episode_type_old" \
-        && echo "$migrate_output" | grep -q "production_ledger\.0004_add_media_platform_and_label"; then
-        echo "Detected 0005-before-0004 inconsistency; faking 0004 (attempt $attempt)."
-        python manage.py migrate production_ledger 0004_add_media_platform_and_label --fake --no-input
-        fixed=1
-
-    elif echo "$migrate_output" | grep -q "InconsistentMigrationHistory" \
-        && echo "$migrate_output" | grep -q "production_ledger\.0006_auto_20260416_2221" \
-        && echo "$migrate_output" | grep -q "production_ledger\.0005_drop_episode_type_old"; then
-        echo "Detected 0006-before-0005 inconsistency; faking 0005 (attempt $attempt)."
-        python manage.py migrate production_ledger 0005_drop_episode_type_old --fake --no-input
-        fixed=1
-
-    elif echo "$migrate_output" | grep -q "Duplicate column name 'completed_at'"; then
-        echo "Detected duplicate completed_at column from 0008; faking 0008 (attempt $attempt)."
-        python manage.py migrate production_ledger 0008_add_segment_live_recording_fields --fake --no-input
-        fixed=1
-
-    elif echo "$migrate_output" | grep -qi "Duplicate column name 'platform_captions'\|production_ledger\.0013_videoshort_platform_captions"; then
-        echo "Detected duplicate platform_captions column from 0013; faking 0013 (attempt $attempt)."
-        python manage.py migrate production_ledger 0013_videoshort_platform_captions --fake --no-input
-        fixed=1
-
-    elif echo "$migrate_output" | grep -qi "0007_fix_icon_column_charset\|Executing DDL statements while in a transaction\|TransactionManagementError"; then
-        echo "Detected transactional DDL failure in 0007; faking 0006+0007 (attempt $attempt)."
-        python manage.py migrate production_ledger 0006_auto_20260416_2221 --fake --no-input 2>/dev/null || true
-        python manage.py migrate production_ledger 0007_fix_icon_column_charset --fake --no-input
-        fixed=1
-
-    elif echo "$migrate_output" | grep -qi "production_ledger_podcastdistribution\|production_ledger\.0010_distribution_transcription_shorts" \
-        && echo "$migrate_output" | grep -qi "already exists\|OperationalError: (1050"; then
-        echo "Detected duplicate production_ledger_podcastdistribution table; faking 0010 (attempt $attempt)."
-        python manage.py migrate production_ledger 0010_distribution_transcription_shorts --fake --no-input
-        fixed=1
-
-    elif echo "$migrate_output" | grep -q "InconsistentMigrationHistory" \
-        && echo "$migrate_output" | grep -q "production_ledger\.0007_fix_icon_column_charset" \
-        && echo "$migrate_output" | grep -q "production_ledger\.0006_auto_20260416_2221"; then
-        echo "Detected 0007-before-0006 inconsistency; faking 0006 (attempt $attempt)."
-        python manage.py migrate production_ledger 0006_auto_20260416_2221 --fake --no-input
-        fixed=1
-
-    elif echo "$migrate_output" | grep -q "no such table: django_content_type"; then
-        echo "Detected missing django_content_type; bootstrapping core migrations (attempt $attempt)."
-        python manage.py migrate contenttypes --no-input
-        python manage.py migrate auth --no-input
-        python manage.py migrate admin --no-input
-        python manage.py migrate sessions --no-input
-        fixed=1
-    fi
-
-    if [[ $fixed -eq 0 ]]; then
-        echo "$migrate_output"
-        echo "Producer migration failed with unrecoverable error."
-        exit $migrate_status
-    fi
-
-    set +e
-    migrate_output=$(python manage.py migrate --no-input 2>&1)
-    migrate_status=$?
-    set -e
-done
-
-if [[ $migrate_status -ne 0 ]]; then
-    echo "$migrate_output"
-    echo "Producer migration failed after $attempt fix attempts."
-    exit $migrate_status
-fi
+# Apply authtoken and logic app migrations (run normally; schema is clean for these).
+python manage.py migrate authtoken --no-input
+python manage.py migrate logic --no-input
 
 echo "Producer database migrations complete."
