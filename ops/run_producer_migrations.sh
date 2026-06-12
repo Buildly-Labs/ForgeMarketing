@@ -96,60 +96,79 @@ migrate_output=$(python manage.py migrate --no-input 2>&1)
 migrate_status=$?
 set -e
 
-if [[ $migrate_status -ne 0 ]]; then
+# --- Retry loop: each iteration fixes ONE known issue and retries migrate.
+# This handles cases where multiple known issues are stacked (e.g. 0010 table
+# already exists AND 0007 DDL-in-transaction), which previously required two
+# supervisor restart cycles to resolve.
+MAX_RETRIES=6
+attempt=0
+while [[ $migrate_status -ne 0 && $attempt -lt $MAX_RETRIES ]]; do
+    attempt=$((attempt + 1))
+    fixed=0
+
     if echo "$migrate_output" | grep -q "InconsistentMigrationHistory" \
         && echo "$migrate_output" | grep -q "production_ledger\.0005_drop_episode_type_old" \
         && echo "$migrate_output" | grep -q "production_ledger\.0004_add_media_platform_and_label"; then
-        echo "Detected 0005-before-0004 inconsistency during migrate; applying compatibility fix and retrying."
+        echo "Detected 0005-before-0004 inconsistency; faking 0004 (attempt $attempt)."
         python manage.py migrate production_ledger 0004_add_media_platform_and_label --fake --no-input
-        python manage.py migrate --no-input
+        fixed=1
+
     elif echo "$migrate_output" | grep -q "InconsistentMigrationHistory" \
         && echo "$migrate_output" | grep -q "production_ledger\.0006_auto_20260416_2221" \
         && echo "$migrate_output" | grep -q "production_ledger\.0005_drop_episode_type_old"; then
-        echo "Detected 0006-before-0005 inconsistency during migrate; applying compatibility fix and retrying."
+        echo "Detected 0006-before-0005 inconsistency; faking 0005 (attempt $attempt)."
         python manage.py migrate production_ledger 0005_drop_episode_type_old --fake --no-input
-        python manage.py migrate --no-input
+        fixed=1
+
     elif echo "$migrate_output" | grep -q "Duplicate column name 'completed_at'"; then
-        echo "Detected duplicate completed_at column from production_ledger.0008; faking migration and retrying."
+        echo "Detected duplicate completed_at column from 0008; faking 0008 (attempt $attempt)."
         python manage.py migrate production_ledger 0008_add_segment_live_recording_fields --fake --no-input
-        python manage.py migrate --no-input
+        fixed=1
+
     elif echo "$migrate_output" | grep -qi "0007_fix_icon_column_charset\|Executing DDL statements while in a transaction\|TransactionManagementError"; then
-        echo "Detected transactional DDL failure in production_ledger.0007; faking migration and retrying."
-        # Keep dependency chain consistent when 0007 must be faked.
-        python manage.py migrate production_ledger 0006_auto_20260416_2221 --fake --no-input || true
+        echo "Detected transactional DDL failure in 0007; faking 0006+0007 (attempt $attempt)."
+        python manage.py migrate production_ledger 0006_auto_20260416_2221 --fake --no-input 2>/dev/null || true
         python manage.py migrate production_ledger 0007_fix_icon_column_charset --fake --no-input
-        python manage.py migrate --no-input
-    elif echo "$migrate_output" | grep -qi "production_ledger\.0010_distribution_transcription_shorts" \
-        && echo "$migrate_output" | grep -qi "production_ledger_podcastdistribution" \
-        && echo "$migrate_output" | grep -qi "already exists\|OperationalError: (1050\|django\.db\.utils\.OperationalError: (1050"; then
-        echo "Detected duplicate table for production_ledger.0010; faking migration and retrying."
-        # Compatibility fix for environments where tables were created out-of-band
-        # or via a partial prior run, but migration history was not recorded.
+        fixed=1
+
+    elif echo "$migrate_output" | grep -qi "production_ledger_podcastdistribution\|production_ledger\.0010_distribution_transcription_shorts" \
+        && echo "$migrate_output" | grep -qi "already exists\|OperationalError: (1050"; then
+        echo "Detected duplicate production_ledger_podcastdistribution table; faking 0010 (attempt $attempt)."
         python manage.py migrate production_ledger 0010_distribution_transcription_shorts --fake --no-input
-        python manage.py migrate --no-input
-    elif echo "$migrate_output" | grep -qi "production_ledger_podcastdistribution" \
-        && echo "$migrate_output" | grep -qi "already exists\|OperationalError: (1050\|django\.db\.utils\.OperationalError: (1050"; then
-        echo "Detected duplicate production_ledger_podcastdistribution table; faking production_ledger.0010 and retrying."
-        python manage.py migrate production_ledger 0010_distribution_transcription_shorts --fake --no-input
-        python manage.py migrate --no-input
+        fixed=1
+
     elif echo "$migrate_output" | grep -q "InconsistentMigrationHistory" \
         && echo "$migrate_output" | grep -q "production_ledger\.0007_fix_icon_column_charset" \
         && echo "$migrate_output" | grep -q "production_ledger\.0006_auto_20260416_2221"; then
-        echo "Detected 0007-before-0006 inconsistency during migrate; applying compatibility fix and retrying."
+        echo "Detected 0007-before-0006 inconsistency; faking 0006 (attempt $attempt)."
         python manage.py migrate production_ledger 0006_auto_20260416_2221 --fake --no-input
-        python manage.py migrate --no-input
+        fixed=1
+
     elif echo "$migrate_output" | grep -q "no such table: django_content_type"; then
-        echo "Detected missing django_content_type table; bootstrapping Django core migrations and retrying."
+        echo "Detected missing django_content_type; bootstrapping core migrations (attempt $attempt)."
         python manage.py migrate contenttypes --no-input
         python manage.py migrate auth --no-input
         python manage.py migrate admin --no-input
         python manage.py migrate sessions --no-input
-        python manage.py migrate --no-input
-    else
+        fixed=1
+    fi
+
+    if [[ $fixed -eq 0 ]]; then
         echo "$migrate_output"
         echo "Producer migration failed with unrecoverable error."
         exit $migrate_status
     fi
+
+    set +e
+    migrate_output=$(python manage.py migrate --no-input 2>&1)
+    migrate_status=$?
+    set -e
+done
+
+if [[ $migrate_status -ne 0 ]]; then
+    echo "$migrate_output"
+    echo "Producer migration failed after $attempt fix attempts."
+    exit $migrate_status
 fi
 
 echo "Producer database migrations complete."
