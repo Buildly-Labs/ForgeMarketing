@@ -228,10 +228,23 @@
         <div class="mt-4">
             <form id="contactForm" class="space-y-3">
                 <input type="hidden" id="editContactId" value="">
+                <input type="hidden" id="editOriginalType" value="">
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <div>
-                        <label class="text-xs font-medium text-gray-700">Name <span class="text-red-500">*</span></label>
+                        <label class="text-xs font-medium text-gray-700">Display / Full Name <span class="text-red-500">*</span></label>
                         <input type="text" id="cf_name" required class="w-full border rounded px-2 py-1.5 text-sm" placeholder="Full Name">
+                    </div>
+                    <div>
+                        <label class="text-xs font-medium text-gray-700">Contact Title</label>
+                        <input type="text" id="cf_contact_title" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="Mr, Ms, Dr, Prof">
+                    </div>
+                    <div>
+                        <label class="text-xs font-medium text-gray-700">First Name</label>
+                        <input type="text" id="cf_first_name" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="First name">
+                    </div>
+                    <div>
+                        <label class="text-xs font-medium text-gray-700">Last Name</label>
+                        <input type="text" id="cf_last_name" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="Last name">
                     </div>
                     <div>
                         <label class="text-xs font-medium text-gray-700">Email</label>
@@ -242,7 +255,7 @@
                         <input type="text" id="cf_company" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="Company Inc">
                     </div>
                     <div>
-                        <label class="text-xs font-medium text-gray-700">Title / Role</label>
+                        <label class="text-xs font-medium text-gray-700">Job Title / Role</label>
                         <input type="text" id="cf_title" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="VP Marketing">
                     </div>
                     <div>
@@ -269,6 +282,22 @@
                     <div>
                         <label class="text-xs font-medium text-gray-700">Phone</label>
                         <input type="text" id="cf_phone" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="+1 555-555-5555">
+                    </div>
+                    <div>
+                        <label class="text-xs font-medium text-gray-700">City</label>
+                        <input type="text" id="cf_city" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="City">
+                    </div>
+                    <div>
+                        <label class="text-xs font-medium text-gray-700">State / Province</label>
+                        <input type="text" id="cf_state" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="State or province">
+                    </div>
+                    <div>
+                        <label class="text-xs font-medium text-gray-700">Country</label>
+                        <input type="text" id="cf_country" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="Country">
+                    </div>
+                    <div>
+                        <label class="text-xs font-medium text-gray-700">Region Assigned</label>
+                        <input type="text" id="cf_region" class="w-full border rounded px-2 py-1.5 text-sm" placeholder="e.g. SE Asia, North America">
                     </div>
                 </div>
                 <details class="border rounded p-2">
@@ -633,14 +662,18 @@ function populateContactModal() {
                 <h4 class="font-semibold mb-3">Contact Information</h4>
                 <div class="space-y-1.5 text-sm">
                     <div><strong>Name:</strong> ${c.name || 'N/A'}</div>
+                    ${(c.first_name || c.last_name) ? `<div><strong>First / Last:</strong> ${(c.first_name || '')} ${(c.last_name || '')}</div>` : ''}
+                    ${c.contact_title ? `<div><strong>Contact Title:</strong> ${c.contact_title}</div>` : ''}
                     <div><strong>Email:</strong> ${c.email ? `<a href="mailto:${c.email}" class="text-blue-600">${c.email}</a>` : 'N/A'}</div>
                     <div><strong>Company:</strong> ${c.company || 'N/A'}</div>
-                    <div><strong>Title:</strong> ${c.title || 'N/A'}</div>
+                    <div><strong>Job Title:</strong> ${c.title || 'N/A'}</div>
                     <div><strong>Brand:</strong> <span class="capitalize">${c.brand || 'N/A'}</span></div>
                     <div><strong>Type:</strong> <span class="capitalize">${c.contact_type || 'N/A'}</span></div>
                     <div><strong>Classification:</strong> ${classificationBadge(c.classification) || '<span class="text-gray-400">none</span>'}</div>
                     <div><strong>Source:</strong> <span class="text-gray-600">${c.source || 'N/A'}</span></div>
                     <div><strong>Status:</strong> <span class="capitalize">${c.status || 'N/A'}</span></div>
+                    ${(c.city || c.state || c.country) ? `<div><strong>Location:</strong> ${[c.city, c.state, c.country].filter(Boolean).join(', ')}</div>` : ''}
+                    ${c.region ? `<div><strong>Region Assigned:</strong> ${c.region}</div>` : ''}
                     ${c.phone ? `<div><strong>Phone:</strong> ${c.phone}</div>` : ''}
                     ${c.followers_count ? `<div><strong>Followers:</strong> ${formatNumber(c.followers_count)}</div>` : ''}
                 </div>
@@ -934,6 +967,7 @@ function displayContacts(contacts) {
     
     tbody.innerHTML = contacts.map(contact => {
         const socialLinks = extractSocialLinks(contact.notes || '');
+        const locationSummary = [contact.city, contact.state, contact.country].filter(Boolean).join(', ');
         const socialLinksHtml = [
             contact.linkedin_url  ? `<a href="${contact.linkedin_url}" target="_blank" title="LinkedIn" class="mr-1"><i class="fab fa-linkedin text-blue-700"></i></a>` : '',
             contact.twitter_handle ? `<a href="https://twitter.com/${(contact.twitter_handle||'').replace('@','')}" target="_blank" title="Twitter/X" class="mr-1"><i class="fab fa-twitter text-sky-500"></i></a>` : '',
@@ -966,6 +1000,7 @@ function displayContacts(contacts) {
                 <td class="px-6 py-4">
                     <div class="text-sm font-medium text-gray-900">${contact.name}</div>
                     <div class="text-sm text-gray-500">${contact.email || contact.company || 'No email'}</div>
+                    ${(locationSummary || contact.region) ? `<div class="text-xs text-gray-500">${locationSummary || ''}${(locationSummary && contact.region) ? ' · ' : ''}${contact.region ? ('Region: ' + contact.region) : ''}</div>` : ''}
                     ${externalSummary}
                     ${responseSummary}
                 </td>
@@ -1134,7 +1169,8 @@ function handleTagInput(event) {
 }
 
 function resetContactForm() {
-    ['cf_name','cf_email','cf_company','cf_title','cf_source','cf_phone',
+    ['cf_name','cf_contact_title','cf_first_name','cf_last_name','cf_email','cf_company','cf_title','cf_source','cf_phone',
+     'cf_city','cf_state','cf_country','cf_region',
      'cf_linkedin_url','cf_twitter','cf_instagram','cf_youtube','cf_bluesky',
      'cf_tiktok','cf_website','cf_notes','cf_tags_input'].forEach(id => {
         const el = document.getElementById(id); if (el) el.value = '';
@@ -1144,21 +1180,49 @@ function resetContactForm() {
     _cfTags = [];
     renderTagChips();
     document.getElementById('editContactId').value = '';
+    const originalTypeEl = document.getElementById('editOriginalType');
+    if (originalTypeEl) originalTypeEl.value = '';
+    const typeSel = document.getElementById('cf_contact_type');
+    if (typeSel) typeSel.value = 'email';
     const h3 = document.querySelector('#addContactModal h3');
     if (h3) h3.textContent = 'Add New Contact';
     populateBrandSelects();
 }
 
+function ensureContactTypeOption(rawType) {
+    const sel = document.getElementById('cf_contact_type');
+    if (!sel) return;
+    const type = (rawType || '').toString().trim();
+    if (!type) return;
+
+    const existingValues = new Set(Array.from(sel.options).map(o => o.value));
+    if (!existingValues.has(type)) {
+        const label = type
+            .replace(/[_-]+/g, ' ')
+            .replace(/\b\w/g, c => c.toUpperCase());
+        const opt = new Option(label, type);
+        sel.add(opt);
+    }
+}
+
 function openEditContactModal(contact) {
     resetContactForm();
     document.getElementById('editContactId').value = contact.id;
+    const originalTypeEl = document.getElementById('editOriginalType');
+    if (originalTypeEl) originalTypeEl.value = contact.contact_type || '';
     const h3 = document.querySelector('#addContactModal h3');
     if (h3) h3.textContent = 'Edit Contact';
     const set = (id, val) => { const el = document.getElementById(id); if (el && val != null) el.value = val; };
-    set('cf_name', contact.name);         set('cf_email', contact.email);
-    set('cf_company', contact.company);   set('cf_title', contact.title);
-    set('cf_source', contact.source);     set('cf_phone', contact.phone);
-    set('cf_brand', contact.brand);       set('cf_contact_type', contact.contact_type);
+    set('cf_name', contact.name);               set('cf_contact_title', contact.contact_title);
+    set('cf_first_name', contact.first_name);   set('cf_last_name', contact.last_name);
+    set('cf_email', contact.email);             set('cf_company', contact.company);
+    set('cf_title', contact.title);             set('cf_source', contact.source);
+    set('cf_phone', contact.phone);             set('cf_city', contact.city);
+    set('cf_state', contact.state);             set('cf_country', contact.country);
+    set('cf_region', contact.region);
+    set('cf_brand', contact.brand);
+    ensureContactTypeOption(contact.contact_type);
+    set('cf_contact_type', contact.contact_type);
     set('cf_linkedin_url', contact.linkedin_url);
     set('cf_twitter', contact.twitter_handle);
     set('cf_instagram', contact.instagram_handle);
@@ -1183,15 +1247,23 @@ async function saveContact() {
     const tagInputEl = document.getElementById('cf_tags_input');
     if (tagInputEl && tagInputEl.value.trim()) addTag(tagInputEl.value);
     const editId = document.getElementById('editContactId').value;
+    const originalType = (document.getElementById('editOriginalType').value || '').trim();
     const payload = {
         name, brand,
+        contact_title:    (document.getElementById('cf_contact_title').value || '').trim(),
+        first_name:       (document.getElementById('cf_first_name').value || '').trim(),
+        last_name:        (document.getElementById('cf_last_name').value || '').trim(),
         email:            (document.getElementById('cf_email').value    || '').trim(),
         company:          (document.getElementById('cf_company').value  || '').trim(),
         title:            (document.getElementById('cf_title').value    || '').trim(),
-        contact_type:     document.getElementById('cf_contact_type').value,
+        contact_type:     (document.getElementById('cf_contact_type').value || 'email').trim(),
         source:           (document.getElementById('cf_source').value   || '').trim() || 'manual',
         status:           'active',
         phone:            (document.getElementById('cf_phone').value    || '').trim(),
+        city:             (document.getElementById('cf_city').value     || '').trim(),
+        state:            (document.getElementById('cf_state').value    || '').trim(),
+        country:          (document.getElementById('cf_country').value  || '').trim(),
+        region:           (document.getElementById('cf_region').value   || '').trim(),
         linkedin_url:     (document.getElementById('cf_linkedin_url').value || '').trim(),
         twitter_handle:   (document.getElementById('cf_twitter').value  || '').trim(),
         instagram_handle: (document.getElementById('cf_instagram').value|| '').trim(),
@@ -1212,6 +1284,17 @@ async function saveContact() {
         if (data.success || data.contact) {
             showNotification(editId ? 'Contact updated.' : 'Contact created.', 'success');
             closeAddContactModal();
+
+            const typeFilterEl = document.getElementById('typeFilter');
+            const activeTypeFilter = (typeFilterEl && typeFilterEl.value) ? typeFilterEl.value.trim() : '';
+            const newType = (payload.contact_type || '').trim();
+            if (editId && activeTypeFilter && newType && activeTypeFilter !== newType) {
+                typeFilterEl.value = '';
+                if (originalType && originalType !== newType) {
+                    showNotification('Type updated. Cleared Type filter so you can see the updated contact.', 'info');
+                }
+            }
+
             loadContacts();
             loadStats();
         } else {
@@ -1222,7 +1305,9 @@ async function saveContact() {
 
 // ── Import CSV ─────────────────────────────────────────────────────────────
 const DB_FIELD_LABELS = {
-    name:'Name', email:'Email', company:'Company', title:'Title/Role',
+    name:'Name', first_name:'First Name', last_name:'Last Name', contact_title:'Contact Title',
+    email:'Email', company:'Company', title:'Job Title/Role',
+    city:'City', state:'State/Province', country:'Country', region:'Region',
     linkedin_url:'LinkedIn URL', twitter_handle:'Twitter/X', instagram_handle:'Instagram',
     youtube_channel:'YouTube', bluesky_handle:'Bluesky', tiktok_handle:'TikTok',
     website_url:'Website', phone:'Phone', followers_count:'Followers',

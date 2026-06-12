@@ -5857,6 +5857,11 @@ def api_create_contact():
             'contact': contact
         }), 201
         
+    except ValueError as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 409
     except Exception as e:
         return jsonify({
             'success': False,
@@ -5888,6 +5893,11 @@ def api_update_contact(contact_id):
             'contact': contact
         })
         
+    except ValueError as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 409
     except Exception as e:
         return jsonify({
             'success': False,

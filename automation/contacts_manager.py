@@ -134,6 +134,13 @@ class UnifiedContactsManager:
                 ('phone',           'TEXT DEFAULT ""'),
                 ('bluesky_handle',  'TEXT DEFAULT ""'),
                 ('tiktok_handle',   'TEXT DEFAULT ""'),
+                ('first_name',      'TEXT DEFAULT ""'),
+                ('last_name',       'TEXT DEFAULT ""'),
+                ('contact_title',   'TEXT DEFAULT ""'),
+                ('city',            'TEXT DEFAULT ""'),
+                ('state',           'TEXT DEFAULT ""'),
+                ('country',         'TEXT DEFAULT ""'),
+                ('region',          'TEXT DEFAULT ""'),
                 # classification: warm_lead, cold_lead, advocate, partner_prospect,
                 #                  media, do_not_contact, customer, alumni, other
                 ('classification',  'TEXT DEFAULT ""'),
@@ -297,9 +304,17 @@ class UnifiedContactsManager:
             params.append(status)
         
         if search:
-            query += " AND (c.name LIKE ? OR c.email LIKE ? OR c.company LIKE ?)"
+            query += (
+                " AND (c.name LIKE ? OR c.first_name LIKE ? OR c.last_name LIKE ? "
+                "OR c.email LIKE ? OR c.company LIKE ? OR c.city LIKE ? "
+                "OR c.state LIKE ? OR c.country LIKE ? OR c.region LIKE ?)"
+            )
             search_term = f"%{search}%"
-            params.extend([search_term, search_term, search_term])
+            params.extend([
+                search_term, search_term, search_term,
+                search_term, search_term, search_term,
+                search_term, search_term, search_term,
+            ])
 
         if classification:
             query += " AND c.classification = ?"
@@ -404,27 +419,62 @@ class UnifiedContactsManager:
     def create_contact(self, contact_data: Dict[str, Any]) -> int:
         """Create new contact"""
         with sqlite3.connect(self.db_path) as conn:
+            first_name = (contact_data.get('first_name') or '').strip()
+            last_name = (contact_data.get('last_name') or '').strip()
+            name = (contact_data.get('name') or '').strip()
+            if not name:
+                name = ' '.join(p for p in [first_name, last_name] if p).strip()
+            if name and not first_name and not last_name:
+                parts = name.split()
+                if parts:
+                    first_name = parts[0]
+                    last_name = ' '.join(parts[1:]) if len(parts) > 1 else ''
+
+            brand = (contact_data.get('brand') or '').strip()
+            if not name:
+                raise ValueError('name is required')
+            if not brand:
+                raise ValueError('brand is required')
+
             normalized_email = self._normalize_optional_text(contact_data.get('email'))
+
+            # Avoid SQLite ON CONFLICT IGNORE silent no-op behavior.
+            if normalized_email:
+                existing = conn.execute(
+                    "SELECT id FROM contacts WHERE email = ? AND brand = ? LIMIT 1",
+                    (normalized_email, brand),
+                ).fetchone()
+                if existing:
+                    raise ValueError(f"Contact with email '{normalized_email}' already exists for brand '{brand}'")
+
             # Prepare tags as JSON
             tags_value = contact_data.get('tags', [])
             tags = tags_value if isinstance(tags_value, str) else json.dumps(tags_value)
             
             cursor = conn.execute("""
                 INSERT INTO contacts 
-                (name, email, company, title, brand, contact_type, source, status,
+                (name, first_name, last_name, contact_title, email, company, title, brand, contact_type, source, status,
+                 city, state, country, region,
                  linkedin_url, twitter_handle, instagram_handle, youtube_channel,
                  website_url, followers_count, engagement_rate, alignment_score,
                  platform, tags, notes, classification)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
-                contact_data.get('name'),
+                name,
+                first_name,
+                last_name,
+                (contact_data.get('contact_title') or '').strip(),
                 normalized_email,
                 contact_data.get('company'),
                 contact_data.get('title'),
-                contact_data.get('brand'),
+                brand,
                 contact_data.get('contact_type', 'email'),
                 contact_data.get('source', 'manual'),
                 contact_data.get('status', 'active'),
+                (contact_data.get('city') or '').strip(),
+                (contact_data.get('state') or '').strip(),
+                (contact_data.get('country') or '').strip(),
+                (contact_data.get('region') or '').strip(),
                 contact_data.get('linkedin_url'),
                 contact_data.get('twitter_handle'),
                 contact_data.get('instagram_handle'),
@@ -438,7 +488,10 @@ class UnifiedContactsManager:
                 contact_data.get('notes'),
                 contact_data.get('classification', ''),
             ))
-            
+
+            if cursor.lastrowid is None or cursor.lastrowid <= 0:
+                raise RuntimeError('Contact insert did not produce a valid id')
+
             return cursor.lastrowid
 
     def upsert_contact(self, contact_data: Dict[str, Any]) -> Dict[str, Any]:
@@ -480,7 +533,8 @@ class UnifiedContactsManager:
             conn.row_factory = sqlite3.Row
             contact_id = None
             allowed_keys = {
-                'name', 'email', 'company', 'title', 'brand', 'contact_type', 'status', 'source',
+                'name', 'first_name', 'last_name', 'contact_title', 'email', 'company', 'title',
+                'brand', 'contact_type', 'status', 'source', 'city', 'state', 'country', 'region',
                 'linkedin_url', 'twitter_handle', 'instagram_handle', 'youtube_channel', 'website_url',
                 'followers_count', 'engagement_rate', 'alignment_score', 'platform', 'tags', 'notes',
                 'phone', 'bluesky_handle', 'tiktok_handle', 'classification',
@@ -523,26 +577,81 @@ class UnifiedContactsManager:
     def update_contact(self, contact_id: int, update_data: Dict[str, Any]) -> bool:
         """Update existing contact"""
         with sqlite3.connect(self.db_path) as conn:
+            existing = conn.execute(
+                "SELECT id, brand, first_name, last_name FROM contacts WHERE id = ? LIMIT 1",
+                (contact_id,),
+            ).fetchone()
+            if not existing:
+                return False
+
             # Prepare tags as JSON if provided
             if 'tags' in update_data:
                 update_data['tags'] = json.dumps(update_data['tags'])
+
+            if 'email' in update_data:
+                update_data['email'] = self._normalize_optional_text(update_data.get('email'))
+
+            if 'name' in update_data and isinstance(update_data['name'], str):
+                update_data['name'] = update_data['name'].strip()
+
+            if 'brand' in update_data and isinstance(update_data['brand'], str):
+                update_data['brand'] = update_data['brand'].strip()
+
+            if 'first_name' in update_data and isinstance(update_data['first_name'], str):
+                update_data['first_name'] = update_data['first_name'].strip()
+
+            if 'last_name' in update_data and isinstance(update_data['last_name'], str):
+                update_data['last_name'] = update_data['last_name'].strip()
+
+            for loc_field in ['contact_title', 'city', 'state', 'country', 'region']:
+                if loc_field in update_data and isinstance(update_data[loc_field], str):
+                    update_data[loc_field] = update_data[loc_field].strip()
+
+            if ('first_name' in update_data or 'last_name' in update_data) and 'name' not in update_data:
+                merged_first = update_data.get('first_name', existing[2] or '').strip()
+                merged_last = update_data.get('last_name', existing[3] or '').strip()
+                merged_name = ' '.join(p for p in [merged_first, merged_last] if p).strip()
+                if merged_name:
+                    update_data['name'] = merged_name
+
+            if update_data.get('email'):
+                candidate_brand = update_data.get('brand') or existing[1]
+                duplicate = conn.execute(
+                    "SELECT id FROM contacts WHERE email = ? AND brand = ? AND id != ? LIMIT 1",
+                    (update_data['email'], candidate_brand, contact_id),
+                ).fetchone()
+                if duplicate:
+                    raise ValueError(
+                        f"Contact with email '{update_data['email']}' already exists for brand '{candidate_brand}'"
+                    )
+
+            allowed_fields = {
+                'name', 'first_name', 'last_name', 'contact_title', 'email', 'company', 'title',
+                'brand', 'contact_type', 'source', 'status', 'city', 'state', 'country', 'region',
+                'linkedin_url', 'twitter_handle', 'instagram_handle', 'youtube_channel', 'website_url',
+                'followers_count', 'engagement_rate', 'alignment_score', 'platform', 'tags', 'notes',
+                'phone', 'bluesky_handle', 'tiktok_handle', 'classification', 'last_contact_at',
+            }
             
             # Build dynamic update query
             fields = []
             values = []
             for field, value in update_data.items():
-                if field != 'id':  # Don't update ID
+                if field != 'id' and field in allowed_fields:  # Don't update ID
                     fields.append(f"{field} = ?")
                     values.append(value)
             
             if not fields:
-                return False
+                # Treat empty update payload as success no-op for UI robustness.
+                return True
             
             values.append(contact_id)
             query = f"UPDATE contacts SET {', '.join(fields)} WHERE id = ?"
             
-            cursor = conn.execute(query, values)
-            return cursor.rowcount > 0
+            conn.execute(query, values)
+            # SQLite rowcount can be 0 for conflict-ignore/no-op updates; contact exists,
+            # so return success and let callers fetch the current record.
+            return True
     
     def delete_contact(self, contact_id: int) -> bool:
         """Delete contact and all associated touches"""
@@ -664,9 +773,16 @@ class UnifiedContactsManager:
 
     FIELD_SYNONYMS: dict = {
         'name':             ['name', 'full name', 'fullname', 'contact name', 'contact_name', 'full_name', 'person'],
+        'first_name':       ['first name', 'first_name', 'firstname', 'given name', 'given_name', 'forename'],
+        'last_name':        ['last name', 'last_name', 'lastname', 'surname', 'family name', 'family_name'],
+        'contact_title':    ['contact title', 'person title', 'honorific', 'prefix', 'title prefix'],
         'email':            ['email', 'email address', 'email_address', 'e-mail', 'work email', 'personal email', 'mail'],
         'company':          ['company', 'company name', 'company_name', 'organization', 'org', 'employer', 'firm'],
         'title':            ['title', 'job title', 'job_title', 'position', 'role', 'job role', 'occupation'],
+        'city':             ['city', 'town', 'locality'],
+        'state':            ['state', 'province', 'county', 'state region', 'state_region'],
+        'country':          ['country', 'nation'],
+        'region':           ['region', 'territory', 'market region', 'geo', 'geography'],
         'linkedin_url':     ['linkedin', 'linkedin url', 'linkedin_url', 'linkedin profile', 'li url', 'li profile', 'linkedin link'],
         'twitter_handle':   ['twitter', 'twitter handle', 'twitter_handle', 'x handle', 'x url', 'twitter url'],
         'instagram_handle': ['instagram', 'instagram handle', 'instagram_handle', 'ig', 'ig handle'],
@@ -889,8 +1005,9 @@ class UnifiedContactsManager:
         writer = csv.DictWriter(
             buffer,
             fieldnames=[
-                'id', 'name', 'email', 'company', 'title', 'brand', 'contact_type', 'classification',
-                'status', 'source', 'phone', 'linkedin_url', 'twitter_handle', 'instagram_handle',
+                'id', 'name', 'first_name', 'last_name', 'contact_title', 'email', 'company', 'title',
+                'brand', 'contact_type', 'classification', 'status', 'source',
+                'city', 'state', 'country', 'region', 'phone', 'linkedin_url', 'twitter_handle', 'instagram_handle',
                 'youtube_channel', 'bluesky_handle', 'tiktok_handle', 'website_url', 'followers_count',
                 'tags', 'notes', 'total_touches', 'response_count', 'last_touch_at',
                 'last_external_touch_at', 'last_response_at',
@@ -906,6 +1023,9 @@ class UnifiedContactsManager:
             writer.writerow({
                 'id': contact.get('id'),
                 'name': contact.get('name', ''),
+                'first_name': contact.get('first_name', ''),
+                'last_name': contact.get('last_name', ''),
+                'contact_title': contact.get('contact_title', ''),
                 'email': contact.get('email', ''),
                 'company': contact.get('company', ''),
                 'title': contact.get('title', ''),
@@ -914,6 +1034,10 @@ class UnifiedContactsManager:
                 'classification': contact.get('classification', ''),
                 'status': contact.get('status', ''),
                 'source': contact.get('source', ''),
+                'city': contact.get('city', ''),
+                'state': contact.get('state', ''),
+                'country': contact.get('country', ''),
+                'region': contact.get('region', ''),
                 'phone': contact.get('phone', ''),
                 'linkedin_url': contact.get('linkedin_url', ''),
                 'twitter_handle': contact.get('twitter_handle', ''),
