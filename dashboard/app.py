@@ -1863,7 +1863,7 @@ def api_chat():
         'model': ai_cfg.get('model') or 'gpt-4o-mini',
         'messages': messages,
         'temperature': 0.5,
-        'max_tokens': 600,
+        'max_tokens': 350,
     }
     headers = {
         'Content-Type': 'application/json',
