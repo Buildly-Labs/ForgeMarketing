@@ -17,7 +17,8 @@ cryptography>=41.0.3
 SQLAlchemy>=2.0.0
 Flask-SQLAlchemy>=3.1.0
 psycopg2-binary>=2.9.0  # PostgreSQL driver
-mysqlclient>=2.2.0  # MySQL driver
+mysqlclient>=2.2.0  # MySQL driver (used by Django Producer)
+PyMySQL>=1.1.0      # Pure-Python MySQL driver for Flask app (gevent-safe)
 
 # Web framework for dashboard
 flask>=2.3.3

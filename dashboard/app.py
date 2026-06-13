@@ -178,6 +178,13 @@ def _sanitize_database_url(database_url: str) -> str:
         if not (scheme.startswith('mysql') or scheme.startswith('mariadb')):
             return database_url
 
+        # Use PyMySQL (pure Python) instead of mysqlclient (C ext) so gevent
+        # monkey-patching works correctly in async gunicorn workers.
+        if scheme in ('mysql', 'mysql+mysqldb', 'mariadb'):
+            new_scheme = 'mysql+pymysql'
+        else:
+            new_scheme = parts.scheme
+
         query_items = parse_qsl(parts.query, keep_blank_values=True)
         filtered = [
             (k, v)
@@ -186,7 +193,7 @@ def _sanitize_database_url(database_url: str) -> str:
         ]
 
         return urlunsplit((
-            parts.scheme,
+            new_scheme,
             parts.netloc,
             parts.path,
             urlencode(filtered, doseq=True),
