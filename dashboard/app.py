@@ -1779,12 +1779,17 @@ def api_chat():
     if not user_message:
         return jsonify({'success': False, 'error': 'message is required'}), 400
 
+    import time as _time
+    _t0 = _time.time()
+    print(f"CHAT_DEBUG step=start msg_len={len(user_message)}", flush=True)
+
     # ── Build lightweight system context (fast DB queries only) ───────────
     brands_ctx = "(error loading brands)"
     lead_count = candidate_count = source_count = 0
     ai_ctx = "unknown"
     try:
         brands = Brand.query.filter_by(is_active=True).all()
+        print(f"CHAT_DEBUG step=brands_ok count={len(brands)} t={_time.time()-_t0:.2f}s", flush=True)
         brand_lines = []
         for b in brands:
             settings = BrandSettings.query.filter_by(brand_id=b.id).first()
@@ -1803,11 +1808,13 @@ def api_chat():
         lead_count = Lead.query.filter_by(archived_at=None).count()
         candidate_count = LeadCandidate.query.filter(LeadCandidate.status.in_(['new', 'needs_review'])).count()
         source_count = LeadSource.query.filter_by(is_active=True).count()
-    except Exception:
-        pass
+        print(f"CHAT_DEBUG step=leads_ok leads={lead_count} t={_time.time()-_t0:.2f}s", flush=True)
+    except Exception as _exc:
+        print(f"CHAT_DEBUG step=leads_fail err={_exc} t={_time.time()-_t0:.2f}s", flush=True)
     try:
         ai_cfg = _resolve_ai_runtime_config()
         ai_ctx = f"provider={ai_cfg.get('provider','?')}, token={'set' if ai_cfg.get('token') else 'MISSING'}"
+        print(f"CHAT_DEBUG step=aicfg_ok provider={ai_cfg.get('provider')} t={_time.time()-_t0:.2f}s", flush=True)
     except Exception:
         ai_cfg = None
 
@@ -1868,6 +1875,7 @@ def api_chat():
     last_error = None
     for endpoint in endpoint_candidates:
         try:
+            print(f"CHAT_DEBUG step=ai_attempt url={endpoint} t={_time.time()-_t0:.2f}s", flush=True)
             resp = _req.post(endpoint, headers=headers, json=payload, timeout=20)
             if resp.status_code >= 400:
                 last_error = f'HTTP {resp.status_code} from {endpoint}'
