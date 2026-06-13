@@ -1841,13 +1841,30 @@ def api_chat():
         return jsonify({'success': False, 'error': 'AI provider not configured. Go to /admin → AI Settings to add your API key.'}), 400
 
     # ── Build message list ─────────────────────────────────────────────────
-    messages = [{'role': 'system', 'content': system_prompt}]
-    for turn in (history or [])[-6:]:
-        role = turn.get('role', 'user')
-        content = turn.get('content', '')
-        if role in ('user', 'assistant') and content:
-            messages.append({'role': role, 'content': content})
-    messages.append({'role': 'user', 'content': user_message})
+    # DO Agents API does not allow 'system' role — instructions are set in agent config.
+    # Pass context as the first user turn only when there's no prior history.
+    messages = []
+    provider = (ai_cfg.get('provider') or '').lower()
+    if provider in ('do_agent', 'do-agent', '') and not history:
+        # Prepend context as first user message so the agent has platform info
+        context_prelude = (
+            f"[Platform context — do not repeat this to the user]\n"
+            f"BRANDS: {brands_ctx}\n"
+            f"LEADS: {lead_count} in pipeline, {candidate_count} candidates, {source_count} active sources\n"
+            f"KEY URLS: /brands /lead-radar/startup-intel /leads /admin /generate /automation /contacts\n"
+            f"---\n"
+        )
+        messages.append({'role': 'user', 'content': context_prelude + user_message})
+    else:
+        # OpenAI and similar providers support system role
+        if provider not in ('do_agent', 'do-agent', ''):
+            messages.append({'role': 'system', 'content': system_prompt})
+        for turn in (history or [])[-6:]:
+            role = turn.get('role', 'user')
+            content = turn.get('content', '')
+            if role in ('user', 'assistant') and content:
+                messages.append({'role': role, 'content': content})
+        messages.append({'role': 'user', 'content': user_message})
 
     payload = {
         'model': ai_cfg.get('model') or 'gpt-4o-mini',
@@ -1862,14 +1879,19 @@ def api_chat():
 
     # Try known-good paths first; base URL last. 20s timeout each, max 3 attempts.
     base = ai_cfg['url'].rstrip('/')
-    endpoint_candidates = [
-        f"{base}/api/v1/chat/completions",
-        f"{base}/v1/chat/completions",
-        f"{base}/chat/completions",
-    ]
-    # If the stored URL already ends with a path component, also try it directly
-    if '/' in base.split('://', 1)[-1].lstrip('/'):
-        endpoint_candidates.insert(0, base)
+    if provider in ('do_agent', 'do-agent', ''):
+        # DO Agents API: only /api/v1/chat/completions is valid
+        endpoint_candidates = [f"{base}/api/v1/chat/completions"]
+        # If stored URL already includes the path, use it directly
+        if base.endswith('/completions'):
+            endpoint_candidates = [base]
+    else:
+        endpoint_candidates = [
+            f"{base}/v1/chat/completions",
+            f"{base}/chat/completions",
+        ]
+        if '/' in base.split('://', 1)[-1].lstrip('/'):
+            endpoint_candidates.insert(0, base)
 
     reply = None
     last_error = None
