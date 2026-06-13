@@ -1879,6 +1879,7 @@ def api_chat():
             resp = _req.post(endpoint, headers=headers, json=payload, timeout=20)
             if resp.status_code >= 400:
                 last_error = f'HTTP {resp.status_code} from {endpoint}'
+                print(f"CHAT_DEBUG step=ai_http_err code={resp.status_code} body={resp.text[:200]} t={_time.time()-_t0:.2f}s", flush=True)
                 continue
             reply = _extract_ai_text(resp.json())
             if reply:
@@ -1886,8 +1887,10 @@ def api_chat():
             last_error = f'Empty response from {endpoint}'
         except Exception as exc:
             last_error = str(exc)
+            print(f"CHAT_DEBUG step=ai_exception err={exc!r} t={_time.time()-_t0:.2f}s", flush=True)
 
     if not reply:
+        print(f"CHAT_DEBUG step=ai_all_failed last_err={last_error!r} t={_time.time()-_t0:.2f}s", flush=True)
         return jsonify({'success': False, 'error': f'AI call failed: {last_error}'}), 502
 
     return jsonify({'success': True, 'reply': reply})
