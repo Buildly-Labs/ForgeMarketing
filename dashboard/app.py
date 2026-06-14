@@ -226,8 +226,20 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 from dashboard.models import db
 db.init_app(app)
 
-from flask_migrate import Migrate
-Migrate(app, db)
+# Initialize Flask-Migrate if available (for CLI commands like `flask db upgrade`).
+# Migration is optional at runtime; migrations run before app startup in the container.
+try:
+    from flask_migrate import Migrate
+    Migrate(app, db)
+except ImportError:
+    import warnings
+    warnings.warn(
+        "flask_migrate not available; running 'flask db' commands will not be possible. "
+        "This is expected if running in a minimal environment. Ensure migrations run "
+        "via run_marketing_migrations.sh before app startup.",
+        ImportWarning,
+        stacklevel=2,
+    )
 
 # Initialize admin API blueprint
 from dashboard.admin_api import admin_bp

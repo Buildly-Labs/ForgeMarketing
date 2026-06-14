@@ -11,14 +11,28 @@ fi
 
 cd "$PROJECT_ROOT/Producer"
 
+# Use one interpreter consistently for all migration/bootstrap commands.
+# This avoids mismatches where `python` points to a different environment
+# than the one used to install app dependencies.
+PYTHON_BIN="${PYTHON_BIN:-python}"
+if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+    if command -v python3 >/dev/null 2>&1; then
+        PYTHON_BIN="python3"
+    else
+        echo "No usable Python interpreter found (tried '$PYTHON_BIN' and 'python3')."
+        exit 1
+    fi
+fi
+
 echo "Running producer database migrations..."
+echo "Using Python interpreter: $(command -v "$PYTHON_BIN")"
 
 # Preflight reset: wipe all production_ledger migration records, then
 # fake-apply every migration so `migrate` never tries to re-run DDL that
 # already exists in the DB.  Any genuinely new migration (added after the
 # schema was last deployed) will be faked along with the rest; to run a
 # new migration for real, add it to REAL_MIGRATIONS below.
-python - <<'PY'
+"$PYTHON_BIN" - <<'PY'
 import os, sys
 
 os.environ.setdefault(
@@ -50,16 +64,16 @@ except Exception as exc:
 PY
 
 echo "Fake-applying all production_ledger migrations (schema already exists in DB)..."
-python manage.py migrate production_ledger --fake --no-input
+"$PYTHON_BIN" manage.py migrate production_ledger --fake --no-input
 
 echo "Applying Django core migrations (contenttypes/auth/admin/sessions)..."
-python manage.py migrate contenttypes --no-input
-python manage.py migrate auth --no-input
-python manage.py migrate admin --no-input
-python manage.py migrate sessions --no-input
+"$PYTHON_BIN" manage.py migrate contenttypes --no-input
+"$PYTHON_BIN" manage.py migrate auth --no-input
+"$PYTHON_BIN" manage.py migrate admin --no-input
+"$PYTHON_BIN" manage.py migrate sessions --no-input
 
 # Apply authtoken and logic app migrations (run normally; schema is clean for these).
-python manage.py migrate authtoken --no-input
-python manage.py migrate logic --no-input
+"$PYTHON_BIN" manage.py migrate authtoken --no-input
+"$PYTHON_BIN" manage.py migrate logic --no-input
 
 echo "Producer database migrations complete."
