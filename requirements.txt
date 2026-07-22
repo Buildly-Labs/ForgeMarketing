@@ -49,6 +49,7 @@ lxml>=4.9.0
 # Analytics and monitoring
 google-analytics-data>=0.17.0
 google-api-python-client>=2.95.0
+google-ads>=22.0.0  # Google Ads API client for campaign management
 
 # Scheduling and automation
 schedule>=1.2.0
