@@ -23,14 +23,15 @@ RUN pip install --no-cache-dir --upgrade pip \
 COPY . /app
 
 # ── Clone Producer submodule ────────────────────────────────
-# DigitalOcean's Docker builds don't clone submodules by default.
-# Download Producer directly from GitHub if not present.
-RUN if [ -f /app/.gitmodules ] && [ ! -d /app/Producer ]; then \
-        echo "Cloning Producer submodule from GitHub..."; \
+# DigitalOcean tries to clone submodules and may fail. Always ensure
+# Producer is present by downloading from GitHub.
+RUN if [ -f /app/.gitmodules ]; then \
+        echo "Ensuring Producer is present..."; \
+        rm -rf /app/Producer; \
         mkdir -p /app/Producer && \
         cd /app/Producer && \
-        curl -L https://github.com/Buildly-Labs/Producer/archive/main.tar.gz | tar -xz --strip-components=1 && \
-        echo "Producer cloned successfully"; \
+        curl -sL https://github.com/Buildly-Labs/Producer/archive/main.tar.gz | tar -xz --strip-components=1 && \
+        echo "✅ Producer downloaded successfully"; \
     fi
 
 # ── Producer deps (optional) ─────────────────────────────────
