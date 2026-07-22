@@ -16,12 +16,13 @@ NC='\033[0m' # No Color
 # Configuration
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENV_DIR="${PROJECT_ROOT}/.venv"
-PORT=8003
+PORT=8002
 SKIP_VENV=false
 CLEAN_MODE=false
 PID_FILE="${PROJECT_ROOT}/ops/.server.pid"
 LOG_FILE="${PROJECT_ROOT}/ops/server.log"
 GUNICORN_WORKERS="${GUNICORN_WORKERS:-1}"
+RUNNING_IN_DOCKER="${RUNNING_IN_DOCKER:-false}"
 
 # Functions
 print_header() {
@@ -44,6 +45,25 @@ print_warning() {
 
 print_info() {
     echo -e "${BLUE}ℹ${NC} $1"
+}
+
+find_open_port() {
+    local start_port=$1
+    local port=$start_port
+    local max_attempts=20
+    local attempt=0
+
+    while [ $attempt -lt $max_attempts ]; do
+        if ! lsof -i ":$port" > /dev/null 2>&1; then
+            echo $port
+            return 0
+        fi
+        port=$((port + 1))
+        attempt=$((attempt + 1))
+    done
+
+    echo $start_port
+    return 1
 }
 
 run_marketing_migrations() {
@@ -84,22 +104,23 @@ Options (for setup command):
     --help              Show this help message
 
 Options (for start/restart):
-    --port PORT         Specify port (default: 8002)
-    
+    --port PORT         Specify port (default: 8002, auto-find next available in development)
+
 Examples:
     ./ops/startup.sh setup                    # Initial setup with defaults
     ./ops/startup.sh setup --port 9000        # Setup with custom port
     ./ops/startup.sh setup --clean            # Fresh installation
-    ./ops/startup.sh start                    # Start server on default port
+    ./ops/startup.sh start                    # Start server (auto-finds port 8002+ in dev)
     ./ops/startup.sh start --port 9000        # Start server on custom port
     ./ops/startup.sh stop                     # Stop the server
     ./ops/startup.sh restart                  # Restart the server
 
 Environment Variables:
-    FLASK_ENV          Flask environment (development/production)
-    OLLAMA_HOST        Ollama server address (default: localhost:11434)
-    DATABASE_URL       Database connection string
-    
+    FLASK_ENV              Flask environment (development/production)
+    OLLAMA_HOST            Ollama server address (default: localhost:11434)
+    DATABASE_URL           Database connection string
+    RUNNING_IN_DOCKER      Set to 'true' when running in Docker (uses default port)
+
 EOF
 }
 
@@ -333,9 +354,9 @@ print('Database initialization complete!')
         
     start)
         print_header "Starting ForgeMark Server"
-        
+
         cd "$PROJECT_ROOT"
-        
+
         # Check if server is already running
         if [ -f "$PID_FILE" ]; then
             EXISTING_PID=$(cat "$PID_FILE")
@@ -347,21 +368,30 @@ print('Database initialization complete!')
                 rm -f "$PID_FILE"
             fi
         fi
-        
+
         # Check if venv exists
         if [ ! -d "$VENV_DIR" ]; then
             print_error "Virtual environment not found. Please run: ./ops/startup.sh setup"
             exit 1
         fi
-        
+
         # Activate virtual environment
         source "$VENV_DIR/bin/activate"
         print_success "Virtual environment activated"
-        
+
         # Check environment configuration
         FLASK_ENV="${FLASK_ENV:-development}"
         OLLAMA_HOST="${OLLAMA_HOST:-localhost:11434}"
-        
+
+        # Auto-find open port in development mode (unless running in Docker)
+        if [ "$RUNNING_IN_DOCKER" != "true" ] && [ "$FLASK_ENV" = "development" ]; then
+            FOUND_PORT=$(find_open_port $PORT)
+            if [ "$FOUND_PORT" != "$PORT" ]; then
+                print_warning "Port $PORT is in use, using port $FOUND_PORT instead"
+                PORT=$FOUND_PORT
+            fi
+        fi
+
         print_info "FLASK_ENV: $FLASK_ENV"
         print_info "OLLAMA_HOST: $OLLAMA_HOST"
         print_info "Server port: $PORT"
