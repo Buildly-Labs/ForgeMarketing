@@ -4,11 +4,12 @@ ARG DEBIAN_FRONTEND=noninteractive
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
-# System deps
+# System deps (including git for submodule initialization)
 RUN apt-get update && apt-get install -y --no-install-recommends \
         nginx supervisor netcat-traditional poppler-utils \
         libsm6 libxext6 libxrender-dev postgresql-client \
         pkg-config default-libmysqlclient-dev build-essential \
+        git curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
@@ -20,6 +21,23 @@ RUN pip install --no-cache-dir --upgrade pip \
 
 # ── Copy application code ────────────────────────────────────
 COPY . /app
+
+# ── Initialize git submodules (Producer) ─────────────────────
+# DigitalOcean's Docker builds don't clone submodules by default.
+# If .gitmodules exists, clone Producer submodule from GitHub.
+RUN if [ -f /app/.gitmodules ]; then \
+        echo "Cloning git submodules..."; \
+        cd /app && \
+        git init && \
+        git config user.email "build@docker.local" && \
+        git config user.name "Docker Build" && \
+        git add . && \
+        git submodule update --init --recursive --depth 1 || \
+        (echo "Submodule init via git failed, trying direct clone..."; \
+         mkdir -p /app/Producer && \
+         cd /app/Producer && \
+         curl -L https://github.com/Buildly-Labs/Producer/archive/main.tar.gz | tar -xz --strip-components=1) \
+    fi
 
 # ── Producer deps (optional) ─────────────────────────────────
 RUN if [ -f /app/Producer/requirements.txt ]; then \
