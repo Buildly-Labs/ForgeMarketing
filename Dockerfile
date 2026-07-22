@@ -22,21 +22,15 @@ RUN pip install --no-cache-dir --upgrade pip \
 # ── Copy application code ────────────────────────────────────
 COPY . /app
 
-# ── Initialize git submodules (Producer) ─────────────────────
+# ── Clone Producer submodule ────────────────────────────────
 # DigitalOcean's Docker builds don't clone submodules by default.
-# If .gitmodules exists, clone Producer submodule from GitHub.
-RUN if [ -f /app/.gitmodules ]; then \
-        echo "Cloning git submodules..."; \
-        cd /app && \
-        git init && \
-        git config user.email "build@docker.local" && \
-        git config user.name "Docker Build" && \
-        git add . && \
-        git submodule update --init --recursive --depth 1 || \
-        (echo "Submodule init via git failed, trying direct clone..."; \
-         mkdir -p /app/Producer && \
-         cd /app/Producer && \
-         curl -L https://github.com/Buildly-Labs/Producer/archive/main.tar.gz | tar -xz --strip-components=1) \
+# Download Producer directly from GitHub if not present.
+RUN if [ -f /app/.gitmodules ] && [ ! -d /app/Producer ]; then \
+        echo "Cloning Producer submodule from GitHub..."; \
+        mkdir -p /app/Producer && \
+        cd /app/Producer && \
+        curl -L https://github.com/Buildly-Labs/Producer/archive/main.tar.gz | tar -xz --strip-components=1 && \
+        echo "Producer cloned successfully"; \
     fi
 
 # ── Producer deps (optional) ─────────────────────────────────
