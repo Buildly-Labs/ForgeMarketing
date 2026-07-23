@@ -54,10 +54,18 @@ APP = "production_ledger"
 
 try:
     with connection.cursor() as cursor:
-        cursor.execute("SELECT COUNT(*) FROM django_migrations WHERE app = %s", [APP])
-        count_before = cursor.fetchone()[0]
-        cursor.execute("DELETE FROM django_migrations WHERE app = %s", [APP])
-    print(f"Preflight: cleared {count_before} existing {APP} migration records; will fake-apply all.")
+        # Check if migrations table exists; if not, skip preflight (migrations table will be created by migrate)
+        try:
+            cursor.execute("SELECT COUNT(*) FROM django_migrations WHERE app = %s", [APP])
+            count_before = cursor.fetchone()[0]
+            cursor.execute("DELETE FROM django_migrations WHERE app = %s", [APP])
+            print(f"Preflight: cleared {count_before} existing {APP} migration records; will fake-apply all.")
+        except Exception as table_exc:
+            # Table doesn't exist yet; normal for fresh DB. Let migrate create it.
+            if "no such table" in str(table_exc).lower() or "doesn't exist" in str(table_exc).lower():
+                print(f"Preflight: django_migrations table doesn't exist yet; will let migrate create it")
+            else:
+                raise
 except Exception as exc:
     print(f"Migration preflight failed: {exc}")
     raise SystemExit(1)
