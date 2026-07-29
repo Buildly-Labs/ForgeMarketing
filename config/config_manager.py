@@ -29,28 +29,37 @@ class ConfigManager:
         self._load_system_config()
     
     def _load_system_config(self):
-        """Load system configuration with environment overrides"""
+        """Load system configuration with environment overrides."""
         system_config_path = self.config_dir / 'system_config.yaml'
-        
-        if not system_config_path.exists():
-            raise ConfigurationError(f"System configuration not found: {system_config_path}")
-        
+        fallback_path = self.config_dir / 'ai_config.yaml'
+
+        config_path = system_config_path if system_config_path.exists() else fallback_path
+
+        if not config_path.exists():
+            # Last-resort empty config so startup never hard-fails.
+            self.logger.warning(
+                'No system config found at %s or %s; using empty defaults',
+                system_config_path,
+                fallback_path,
+            )
+            self.system_config = {}
+            return
+
         try:
-            with open(system_config_path, 'r') as f:
-                self.system_config = yaml.safe_load(f)
-            
-            # Apply environment-specific overrides
-            if 'deployment' in self.system_config and 'environments' in self.system_config['deployment']:
-                env_overrides = self.system_config['deployment']['environments'].get(self.environment, {})
-                self._apply_overrides(self.system_config, env_overrides)
-            
-            # Substitute environment variables
+            with open(config_path, 'r') as f:
+                self.system_config = yaml.safe_load(f) or {}
+
+            # Apply environment-specific overrides when using system_config.yaml.
+            if config_path == system_config_path:
+                if 'deployment' in self.system_config and 'environments' in self.system_config['deployment']:
+                    env_overrides = self.system_config['deployment']['environments'].get(self.environment, {})
+                    self._apply_overrides(self.system_config, env_overrides)
+
             self._substitute_env_vars(self.system_config)
-            
-            self.logger.info(f"System configuration loaded for environment: {self.environment}")
-            
-        except Exception as e:
-            raise ConfigurationError(f"Failed to load system configuration: {e}")
+            self.logger.info('System configuration loaded from %s for environment: %s', config_path, self.environment)
+
+        except Exception as exc:
+            raise ConfigurationError(f'Failed to load system configuration from {config_path}: {exc}') from exc
     
     def _apply_overrides(self, config: Dict[str, Any], overrides: Dict[str, Any]):
         """Apply environment-specific configuration overrides"""

@@ -6,6 +6,7 @@ import json
 import sqlite3
 import subprocess
 import sys
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List
@@ -161,12 +162,46 @@ def main() -> int:
 
     task = _load_task(args.task_id)
     command = _build_command(task)
-    result = subprocess.run(command, capture_output=True, text=True, cwd=str(project_root), timeout=3600)
-    output = (result.stdout or '') + (result.stderr or '')
-    _write_task_result(args.task_id, result.returncode == 0, output)
+
+    task_name = f"task_{args.task_id}_{task.get('task_type')}"
+    success = False
+    output = ''
+    max_attempts = 3
+    base_delay = 5
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            result = subprocess.run(
+                command,
+                capture_output=True,
+                text=True,
+                cwd=str(project_root),
+                timeout=3600,
+            )
+            output = (result.stdout or '') + (result.stderr or '')
+            success = result.returncode == 0
+            if success:
+                break
+
+            retryable = result.returncode != 2
+            if not retryable:
+                break
+        except subprocess.TimeoutExpired as exc:
+            output = f"Timed out after 3600s: {exc}\n"
+            success = False
+        except Exception as exc:
+            output = f"Scheduler error: {exc}\n"
+            success = False
+
+        if attempt < max_attempts:
+            delay = base_delay * (2 ** (attempt - 1))
+            output += f"Attempt {attempt} failed; retrying in {delay}s\n"
+            time.sleep(delay)
+
+    _write_task_result(args.task_id, success, output)
     if output:
         print(output)
-    return result.returncode
+    return 0 if success else 1
 
 
 if __name__ == '__main__':

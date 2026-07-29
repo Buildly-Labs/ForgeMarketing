@@ -2774,11 +2774,12 @@ def api_analytics_summary():
         if ANALYTICS_AVAILABLE and get_analytics_for_dashboard:
             # Get multi-brand summary
             data = get_analytics_for_dashboard()
-            source = 'real_analytics'
+            source = 'live'
         else:
             # Use fallback summary
             data = dashboard.get_fallback_analytics()
-            source = 'fallback'
+            source = data.get('data_source', 'fallback_mock') if isinstance(data, dict) else 'fallback_mock'
+            data = data.get('data', data) if isinstance(data, dict) and 'data' in data else data
         
         # Enhance with real activity data if available
         if real_time_data:

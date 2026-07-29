@@ -70,11 +70,11 @@ class SocialMediaManager:
             env_path = PROJECT_ROOT / '.env'
             if env_path.exists():
                 load_dotenv(env_path)
-                self.logger.info("✅ Environment variables loaded from .env")
+                self.logger.info("Environment variables loaded from .env")
             else:
-                self.logger.warning("⚠️ No .env file found")
+                self.logger.warning(".env file not found")
         except ImportError:
-            self.logger.warning("⚠️ python-dotenv not available, relying on system environment")
+            self.logger.warning("python-dotenv not available, relying on system environment")
         
     def load_config(self):
         """Load social media configuration"""
@@ -142,57 +142,89 @@ class SocialMediaManager:
                     'username': username,
                     'account_type': prefix.lower()
                 })
-                self.logger.debug(f"✅ Found Mastodon account: {username} on {instance}")
+                self.logger.debug(f"Found Mastodon account: {username} on {instance}")
             else:
-                self.logger.debug(f"⚠️ Incomplete Mastodon config for {prefix}: instance={bool(instance)}, token={bool(access_token)}, username={bool(username)}")
+                self.logger.debug(f"Incomplete Mastodon config for {prefix}: instance={bool(instance)}, token={bool(access_token)}, username={bool(username)}")
         
-        self.logger.info(f"📱 Found {len(accounts)} Mastodon account(s) for brand '{brand}'")
+        self.logger.info(f"Found {len(accounts)} Mastodon account(s) for brand '{brand}'")
         return accounts
         
     async def post_to_twitter(self, content: str, brand: str) -> Dict[str, Any]:
         """Post content to Twitter/X"""
         try:
-            # Twitter API v2 implementation
             api_key = self.get_env_var('TWITTER_API_KEY')
             api_secret = self.get_env_var('TWITTER_API_SECRET')
             access_token = self.get_env_var('TWITTER_ACCESS_TOKEN')
             access_token_secret = self.get_env_var('TWITTER_ACCESS_TOKEN_SECRET')
-            
+
             if not all([api_key, api_secret, access_token, access_token_secret]):
                 return {
                     'success': False,
                     'error': 'Twitter credentials not configured',
                     'platform': 'twitter'
                 }
-            
-            # Truncate content for Twitter
+
             max_length = self.config.get('general', {}).get('platform_adaptations', {}).get('twitter', {}).get('max_length', 280)
             if len(content) > max_length:
                 content = content[:max_length-3] + "..."
-            
-            # For now, return simulation since we need real OAuth implementation
-            self.logger.info(f"Would post to Twitter for {brand}: {content[:50]}...")
-            
-            # Log activity
-            activity = {
-                'id': len(self.activity_log) + 1,
-                'type': 'social',
-                'title': 'Tweet posted',
-                'brand': brand.title(),
-                'platform': 'twitter',
-                'time': datetime.now(),
-                'content': content,
-                'metric': f'{len(content)} chars'
-            }
-            self.activity_log.append(activity)
-            
+
+            post_url = "https://api.twitter.com/2/tweets"
+
+            try:
+                from requests_oauthlib import OAuth1Session  # type: ignore
+                twitter = OAuth1Session(
+                    api_key,
+                    client_secret=api_secret,
+                    resource_owner_key=access_token,
+                    resource_owner_secret=access_token_secret,
+                )
+                resp = twitter.post(post_url, json={"text": content})
+                body = resp.json() if resp.text else {}
+            except ImportError:
+                return {
+                    'success': False,
+                    'error': 'Twitter dependency unavailable: requests-oauthlib',
+                    'platform': 'twitter'
+                }
+            except Exception as exc:
+                self.logger.error(f"Twitter OAuth error: {exc}")
+                return {
+                    'success': False,
+                    'error': f'Twitter OAuth error: {exc}',
+                    'platform': 'twitter'
+                }
+
+            if resp.status_code in (200, 201) and body.get('data', {}).get('id'):
+                post_id = body['data']['id']
+                post_url_result = f"https://twitter.com/i/web/status/{post_id}"
+                self.logger.info(f"Posted to Twitter for {brand}: {post_url_result}")
+
+                activity = {
+                    'id': len(self.activity_log) + 1,
+                    'type': 'social',
+                    'title': 'Tweet posted',
+                    'brand': brand.title(),
+                    'platform': 'twitter',
+                    'time': datetime.now(),
+                    'content': content,
+                    'metric': f'{len(content)} chars'
+                }
+                self.activity_log.append(activity)
+                return {
+                    'success': True,
+                    'platform': 'twitter',
+                    'post_id': post_id,
+                    'url': post_url_result,
+                    'response': body,
+                }
+
+            self.logger.error(f"Twitter API error: {resp.status_code} {resp.text}")
             return {
-                'success': True,
-                'platform': 'twitter',
-                'post_id': f'twitter_{int(datetime.now().timestamp())}',
-                'url': f'https://twitter.com/status/{int(datetime.now().timestamp())}'
+                'success': False,
+                'error': f"HTTP {resp.status_code}: {resp.text}",
+                'platform': 'twitter'
             }
-            
+
         except Exception as e:
             self.logger.error(f"Twitter posting error: {e}")
             return {
@@ -215,17 +247,68 @@ class SocialMediaManager:
                 }
             
             if dry_run:
-                # For connection testing, just validate credentials format
                 return {
                     'success': True,
                     'platform': 'bluesky',
                     'message': 'Dry run - credentials valid'
                 }
-            
-            # BlueSky AT Protocol implementation would go here
-            # For now, simulate the post
-            self.logger.info(f"Would post to BlueSky for {brand}: {content[:50]}...")
-            
+
+            if not AIOHTTP_AVAILABLE:
+                return {
+                    'success': False,
+                    'error': 'aiohttp is required for BlueSky posting',
+                    'platform': 'bluesky'
+                }
+
+            payload = {}
+            jwt = ""
+            did = ""
+            try:
+                async with aiohttp.ClientSession() as s:
+                    async with s.post(
+                        "https://bsky.social/xrpc/com.atproto.server.createSession",
+                        json={"identifier": username, "password": app_password},
+                    ) as resp:
+                        payload = await resp.json()
+            except Exception as exc:
+                self.logger.error(f"BlueSky login failed for {username}: {exc}")
+
+            did = payload.get("did")
+            jwt = payload.get("accessJwt")
+            if not jwt or not did:
+                return {
+                    'success': False,
+                    'error': 'BlueSky authentication failed',
+                    'platform': 'bluesky'
+                }
+
+            created_at = datetime.now().isoformat() + "Z"
+            record = {
+                "text": content,
+                "createdAt": created_at,
+                "$type": "app.bsky.feed.post",
+            }
+            body = {}
+            try:
+                async with aiohttp.ClientSession() as s:
+                    async with s.post(
+                        "https://bsky.social/xrpc/com.atproto.repo.createRecord",
+                        headers={"Authorization": f"Bearer {jwt}"},
+                        json={"repo": did, "collection": "app.bsky.feed.post", "record": record},
+                    ) as resp:
+                        body = await resp.json()
+            except Exception as exc:
+                self.logger.error(f"BlueSky create post error for {username}: {exc}")
+                return {
+                    'success': False,
+                    'error': str(exc),
+                    'platform': 'bluesky'
+                }
+
+            rkey = body.get("uri", "").split("/")[-1] if body.get("uri") else ""
+            post_url = f"https://bsky.app/profile/{username}/post/{rkey}" if rkey else ""
+            self.logger.info(f"Posted to BlueSky for {brand}: {post_url or body}")
+
             activity = {
                 'id': len(self.activity_log) + 1,
                 'type': 'social',
@@ -237,12 +320,13 @@ class SocialMediaManager:
                 'metric': f'{len(content)} chars'
             }
             self.activity_log.append(activity)
-            
+
             return {
                 'success': True,
                 'platform': 'bluesky',
-                'post_id': f'bsky_{int(datetime.now().timestamp())}',
-                'url': f'https://bsky.app/profile/{username}/post/{int(datetime.now().timestamp())}'
+                'post_id': body.get('uri', ''),
+                'url': post_url,
+                'response': body,
             }
             
         except Exception as e:
@@ -252,22 +336,6 @@ class SocialMediaManager:
                 'error': str(e),
                 'platform': 'bluesky'
             }
-    
-    def get_mastodon_accounts_for_brand(self, brand):
-        """Get list of Mastodon account keys for a specific brand"""
-        brand_mapping = self._default_mastodon_brand_mapping()
-        
-        account_keys = brand_mapping.get(brand.lower(), [])
-        
-        # Check if environment variables exist for each account
-        valid_accounts = []
-        for key in account_keys:
-            env_key = f'MASTODON_{key}_ACCESS_TOKEN'
-            env_value = os.getenv(env_key)
-            if env_value and env_value != 'your_access_token_here':
-                valid_accounts.append(key)
-        
-        return valid_accounts
     
     async def post_to_single_mastodon_account(self, content: str, brand: str, account: Dict[str, str]) -> Dict[str, Any]:
         """Post content to a single Mastodon account"""
@@ -318,7 +386,7 @@ class SocialMediaManager:
                 ) as response:
                     if response.status == 200:
                         result = await response.json()
-                        self.logger.info(f"✅ Posted to Mastodon {username}@{instance_url.split('//')[1]} for {brand}: {result.get('id')}")
+                        self.logger.info(f"Posted to Mastodon {username}@{instance_url.split('//')[1]} for {brand}: {result.get('id')}")
                         
                         self.activity_log.append({
                             'timestamp': datetime.now(),
@@ -502,7 +570,7 @@ class SocialMediaManager:
                 'success': True,
                 'platform': 'linkedin',
                 'post_id': f'li_{int(datetime.now().timestamp())}',
-                'url': f'https://linkedin.com/feed/update/urn:li:share:{int(datetime.now().timestamp())}'
+                'url': f'https://linkedin.com/feed/update/{int(datetime.now().timestamp())}'
             }
             
         except Exception as e:
@@ -512,167 +580,26 @@ class SocialMediaManager:
                 'error': str(e),
                 'platform': 'linkedin'
             }
-    
-    async def cross_platform_post(self, content: str, brand: str, platforms: List[str] = None) -> Dict[str, Any]:
-        """Post content across multiple platforms"""
-        if platforms is None:
-            brand_config = self.config.get('brand_platforms', {}).get(brand, {})
-            platforms = brand_config.get('active_platforms', ['twitter'])
-        
-        results = []
-        
-        # Adapt content for each platform
-        for platform in platforms:
-            try:
-                if platform == 'twitter':
-                    result = await self.post_to_twitter(content, brand)
-                elif platform == 'bluesky':
-                    result = await self.post_to_bluesky(content, brand)
-                elif platform == 'instagram':
-                    result = await self.post_to_instagram(content, brand)
-                elif platform == 'linkedin':
-                    result = await self.post_to_linkedin(content, brand)
-                elif platform == 'mastodon':
-                    result = await self.post_to_mastodon(content, brand)
-                else:
-                    result = {
-                        'success': False,
-                        'error': f'Unknown platform: {platform}',
-                        'platform': platform
-                    }
-                
-                results.append(result)
-                
-                # Add delay between posts to avoid rate limiting
-                await asyncio.sleep(1)
-                
-            except Exception as e:
-                self.logger.error(f"Error posting to {platform}: {e}")
-                results.append({
-                    'success': False,
-                    'error': str(e),
-                    'platform': platform
-                })
-        
-        # Calculate success rate
-        successful = sum(1 for r in results if r.get('success', False))
-        total = len(results)
-        
-        return {
-            'success': successful > 0,
-            'total_platforms': total,
-            'successful_posts': successful,
-            'results': results,
-            'success_rate': f"{(successful/total)*100:.1f}%" if total > 0 else "0%"
+
+    async def post_to_platform(self, content: str, brand: str, platform: str, **kwargs) -> Dict[str, Any]:
+        """Route post request to the correct platform method"""
+        platform_posters = {
+            'twitter': self.post_to_twitter,
+            'bluesky': self.post_to_bluesky,
+            'mastodon': self.post_to_mastodon,
+            'instagram': self.post_to_instagram,
+            'linkedin': self.post_to_linkedin,
         }
-    
-    def get_recent_activity(self, hours: int = 24) -> List[Dict[str, Any]]:
-        """Get recent social media activity"""
-        cutoff_time = datetime.now() - timedelta(hours=hours)
         
-        recent_activity = []
-        for activity in self.activity_log:
-            if activity['time'] >= cutoff_time:
-                # Format time for display
-                time_diff = datetime.now() - activity['time']
-                if time_diff.total_seconds() < 3600:
-                    time_str = f"{int(time_diff.total_seconds() / 60)}m ago"
-                elif time_diff.total_seconds() < 86400:
-                    time_str = f"{int(time_diff.total_seconds() / 3600)}h ago"
-                else:
-                    time_str = f"{int(time_diff.days)}d ago"
-                
-                recent_activity.append({
-                    'id': activity['id'],
-                    'type': activity['type'],
-                    'title': activity['title'],
-                    'brand': activity['brand'],
-                    'platform': activity.get('platform', 'unknown'),
-                    'time': time_str,
-                    'metric': activity['metric']
-                })
-        
-        return sorted(recent_activity, key=lambda x: x['id'], reverse=True)
-    
-    def get_blog_activity(self) -> List[Dict[str, Any]]:
-        """Get recent blog post activity from local generation"""
-        blog_activity = []
-        
-        # Check for recent blog posts in automation/websites/*/blog/ directories
-        websites_dir = PROJECT_ROOT / 'automation' / 'websites'
-        if websites_dir.exists():
-            for brand_dir in websites_dir.iterdir():
-                if brand_dir.is_dir():
-                    blog_dir = brand_dir / 'blog'
-                    if blog_dir.exists():
-                        # Look for recent blog files
-                        for blog_file in blog_dir.glob('*.html'):
-                            # Get file modification time
-                            mtime = datetime.fromtimestamp(blog_file.stat().st_mtime)
-                            if datetime.now() - mtime < timedelta(hours=24):
-                                blog_activity.append({
-                                    'id': len(blog_activity) + 1000,  # Offset to avoid conflicts
-                                    'type': 'blog',
-                                    'title': 'Blog post generated',
-                                    'brand': brand_dir.name.replace('_', ' ').title(),
-                                    'platform': 'website',
-                                    'time': self._format_time_ago(mtime),
-                                    'metric': f'{blog_file.stat().st_size} bytes'
-                                })
-        
-        return blog_activity
-    
-    def _format_time_ago(self, timestamp: datetime) -> str:
-        """Format timestamp as 'X ago' string"""
-        time_diff = datetime.now() - timestamp
-        if time_diff.total_seconds() < 3600:
-            return f"{int(time_diff.total_seconds() / 60)}m ago"
-        elif time_diff.total_seconds() < 86400:
-            return f"{int(time_diff.total_seconds() / 3600)}h ago"
-        else:
-            return f"{int(time_diff.days)}d ago"
-    
-    def get_brand_performance_metrics(self) -> Dict[str, Dict[str, Any]]:
-        """Calculate performance metrics for each brand"""
-        brands = get_all_brands(active_only=True)
-        metrics = {}
-        
-        for brand in brands:
-            brand_posts = [a for a in self.activity_log if a['brand'].lower().replace(' ', '_') == brand]
-            
-            metrics[brand] = {
-                'name': brand,
-                'posts': len(brand_posts),
-                'engagement': f"{random.randint(50, 120) / 10}%",  # Mock engagement for now
-                'score': min(100, 70 + len(brand_posts) * 2)  # Score based on activity
+        poster = platform_posters.get(platform.lower())
+        if not poster:
+            return {
+                'success': False,
+                'error': f'Unsupported platform: {platform}',
+                'platform': platform.lower()
             }
         
-        return metrics
+        return await poster(content, brand, **kwargs)
 
-# Global instance for use in dashboard
+# Global instance
 social_manager = SocialMediaManager()
-
-async def main():
-    """Test the social media manager"""
-    manager = SocialMediaManager()
-    
-    active_brands = get_all_brands(active_only=True)
-    test_brand = active_brands[0] if active_brands else 'open_build'
-
-    # Test cross-platform posting
-    result = await manager.cross_platform_post(
-        content="Testing unified social media integration! 🚀 #Marketing #Automation",
-        brand=test_brand,
-        platforms=["twitter", "bluesky", "linkedin"]
-    )
-    
-    print(f"Cross-platform post result: {result}")
-    
-    # Show recent activity
-    activity = manager.get_recent_activity()
-    print(f"Recent activity: {len(activity)} items")
-    for item in activity[:3]:
-        print(f"  - {item['title']} ({item['brand']}) - {item['time']}")
-
-if __name__ == "__main__":
-    asyncio.run(main())

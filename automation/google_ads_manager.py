@@ -212,8 +212,8 @@ class GoogleAdsManager:
         # Brand configurations
         self.brands = {
             'foundry': {
-                'name': 'The Foundry',
-                'customer_id': '123-456-7890',  # Replace with actual customer ID
+                'name': 'First City Foundry',
+                'customer_id': self.config.get('customer_ids', {}).get('foundry', ''),
                 'target_audience': 'manufacturing professionals',
                 'primary_keywords': ['manufacturing software', 'production optimization', 'industrial automation'],
                 'budget_daily_micros': 50000000,  # $50 daily
@@ -221,7 +221,7 @@ class GoogleAdsManager:
             },
             'buildly': {
                 'name': 'Buildly',
-                'customer_id': '234-567-8901',  # Replace with actual customer ID
+                'customer_id': self.config.get('customer_ids', {}).get('buildly', ''),
                 'target_audience': 'software developers and CTOs',
                 'primary_keywords': ['low-code platform', 'API gateway', 'microservices'],
                 'budget_daily_micros': 75000000,  # $75 daily
@@ -229,7 +229,7 @@ class GoogleAdsManager:
             },
             'open_build': {
                 'name': 'Open Build',
-                'customer_id': open_build_customer_id,
+                'customer_id': self.config.get('customer_ids', {}).get('open_build', ''),
                 'target_audience': 'open source developers',
                 'primary_keywords': ['open source tools', 'developer community', 'coding collaboration'],
                 'budget_daily_micros': 30000000,  # $30 daily
@@ -237,7 +237,7 @@ class GoogleAdsManager:
             },
             'radical_therapy': {
                 'name': 'Radical Therapy',
-                'customer_id': '456-789-0123',  # Replace with actual customer ID
+                'customer_id': self.config.get('customer_ids', {}).get('radical_therapy', ''),
                 'target_audience': 'therapy seekers and mental health professionals',
                 'primary_keywords': ['online therapy', 'mental health support', 'counseling services'],
                 'budget_daily_micros': 40000000,  # $40 daily

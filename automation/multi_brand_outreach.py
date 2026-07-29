@@ -78,14 +78,8 @@ class OutreachTarget:
         if self.brand_relevance is None:
             self.brand_relevance = {}
 
-# Add necessary imports at top of file
-import sys
-from pathlib import Path as PathLib
-
-project_root = PathLib(__file__).parent.parent
-sys.path.insert(0, str(project_root))
-
 from config.brand_loader import get_all_brands, get_brand_details
+
 
 def _load_brand_discovery_strategies() -> Dict[str, Dict[str, Any]]:
     """Load brand-specific discovery strategies from database"""
@@ -109,6 +103,7 @@ def _load_brand_discovery_strategies() -> Dict[str, Dict[str, Any]]:
             }
     
     return strategies
+
 
 # Brand-specific discovery strategies - loaded from database
 BRAND_DISCOVERY_STRATEGIES = _load_brand_discovery_strategies()

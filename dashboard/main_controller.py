@@ -113,62 +113,30 @@ class MarketingController:
             await self.send_error_notification(e)
     
     async def run_social_automation(self):
-        """Execute social media automation across all brands"""
-        self.logger.info("📱 Running social media automation")
-        
-        # TODO: Implement unified Twitter automation
-        # - Load content from all brand queues
-        # - Post scheduled content
-        # - Track engagement metrics
-        
-        brands = []  # Load from database via Brand model
-        for brand in brands:
-            self.logger.info(f"Processing social media for {brand}")
-            # Placeholder for social automation
-    
+        """Social automation is handled by social_media_manager.py/Ads/*
+        This controller currently provides scheduling status only.
+        """
+        self.logger.info("Social automation integration not yet wired in MarketingController")
+
     async def run_outreach_automation(self):
-        """Execute outreach campaigns across configured brands"""
-        self.logger.info("📧 Running outreach automation")
-        
-        # TODO: Load campaigns from the database and dispatch outreach tasks
-        pass
-    
+        """Outreach automation is handled by multi_brand_outreach.py/run_unified_outreach.py"""
+        self.logger.info("Outreach automation integration not yet wired in MarketingController")
+
     async def run_content_automation(self):
-        """Generate and schedule content across all brands"""
-        self.logger.info("📝 Running content automation")
-        
-        # TODO: Implement content generation
-        # - Blog posts for Open Build
-        # - Social media content for all brands
-        # - Marketing copy and campaigns
-        
+        """Content automation is handled by article_publisher.py and Ads/ modules"""
+        self.logger.info("Content automation integration not yet wired in MarketingController")
+
     async def run_analytics_collection(self):
-        """Collect analytics from all sources"""
-        self.logger.info("📊 Collecting analytics data")
-        
-        # TODO: Implement analytics collection
-        # - Website traffic from all brand sites
-        # - Social media engagement metrics
-        # - Outreach campaign performance
-        # - Content performance metrics
-        
+        """Analytics collection is handled by automation/analytics/* and unified_analytics.py"""
+        self.logger.info("Analytics collection integration not yet wired in MarketingController")
+
     async def generate_daily_reports(self):
-        """Generate comprehensive daily reports"""
-        self.logger.info("📈 Generating daily reports")
-        
-        # TODO: Create unified reporting
-        # - Cross-brand performance summary
-        # - Campaign effectiveness
-        # - Key metrics dashboard
-        
+        """Report generation is not yet implemented in MarketingController"""
+        self.logger.info("Daily report generation integration not yet wired in MarketingController")
+
     async def send_error_notification(self, error: Exception):
-        """Send error notifications to team"""
-        self.logger.error(f"Sending error notification: {error}")
-        
-        # TODO: Implement error notifications
-        # - Email alerts to team@open.build
-        # - Slack notifications
-        # - Dashboard alerts
+        """Error notification is not yet implemented"""
+        self.logger.info(f"send_error_notification not implemented; original error: {error}")
     
     def get_system_status(self) -> Dict[str, Any]:
         """Get current system status"""

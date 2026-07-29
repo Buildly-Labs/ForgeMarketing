@@ -22,6 +22,31 @@ class UnifiedAnalytics:
         project_root = Path(__file__).parent.parent
         default_db = project_root / 'data' / 'unified_outreach.db'
         self.db_path = db_path or os.getenv('UNIFIED_DB_PATH', str(default_db))
+        self._assert_schema()
+    
+    def _assert_schema(self) -> None:
+        """Verify expected unified_outreach.db schema at startup"""
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+            tables = {row[0] for row in cursor.fetchall()}
+            required_tables = {'targets', 'campaigns', 'discovery_sessions'}
+            missing = sorted(required_tables - tables)
+            if missing:
+                raise RuntimeError(f"Missing tables in {self.db_path}: {missing}")
+            cursor.execute("PRAGMA table_info(campaigns)")
+            campaign_cols = {row[1] for row in cursor.fetchall()}
+            if 'brand' not in campaign_cols or 'target_id' not in campaign_cols:
+                raise RuntimeError("campaigns table missing expected brand/target_id columns")
+            cursor.execute("PRAGMA table_info(targets)")
+            target_cols = {row[1] for row in cursor.fetchall()}
+            if 'id' not in target_cols:
+                raise RuntimeError("targets table missing expected id column")
+            conn.close()
+        except Exception as exc:
+            self.logger.error(f"Unified analytics schema assertion failed: {exc}")
+            raise
     
     def get_all_brands_overview(self, days: int = 30) -> Dict[str, Any]:
         """Get comprehensive overview across all brands"""

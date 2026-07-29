@@ -1,0 +1,18 @@
+{
+  "foundry": [
+    "Manufacturing moves fast — {brand} gives you the digital controls to keep up. #ManufacturingTech",
+    "Production optimization is no longer optional. {brand} helps builders cut waste without slowing down."
+  ],
+  "buildly": [
+    "APIs, microservices, low-code — {brand} ties the stack together so teams can ship instead of glue-coding. #Buildly",
+    "If your team is still hand-stitching integrations, you're losing weeks. {brand} turns that plumbing into configuration."
+  ],
+  "open_build": [
+    "Open source only works if the tooling is actually open. {brand} is building the developer toolkit the community needs. #OpenSource",
+    "Developer experience should be a first-class citizen. {brand} ships the collaboration tooling builders asked for."
+  ],
+  "radical_therapy": [
+    "Therapy should be accessible, not a luxury. {brand} removes the friction between clients and clinicians. #MentalHealth",
+    "Online counseling only works when the experience is as human as the real thing. {brand} is raising that standard."
+  ]
+}

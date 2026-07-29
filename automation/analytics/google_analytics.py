@@ -89,8 +89,8 @@ class GoogleAnalyticsIntegration:
         property_id = self.brand_properties[brand]['property_id']
         if not property_id:
             self.logger.warning(f"No GA property ID configured for brand: {brand}")
-            return self._get_mock_analytics(brand, days)
-        
+            return self._get_unconfigured_mock_analytics(brand, days)
+
         try:
             # Define date range
             end_date = datetime.now()
@@ -304,7 +304,7 @@ class GoogleAnalyticsIntegration:
         
         return sorted(locations, key=lambda x: x['sessions'], reverse=True)[:20]
     
-    def _get_mock_analytics(self, brand: str, days: int) -> Dict[str, Any]:
+    def _get_unconfigured_mock_analytics(self, brand: str, days: int) -> Dict[str, Any]:
         """Return empty analytics data when GA is not configured"""
         return {
             'brand': brand,
@@ -322,7 +322,30 @@ class GoogleAnalyticsIntegration:
             'devices': {'devices': {}, 'browsers': {}},
             'geographic': [],
             'last_updated': datetime.now().isoformat(),
+            'data_source': 'not_configured',
             'note': 'Google Analytics not configured — add GA credentials in Settings'
+        }
+
+    def _get_mock_analytics(self, brand: str, days: int) -> Dict[str, Any]:
+        """Return mock analytics data when GA client is unavailable"""
+        return {
+            'brand': brand,
+            'website': self.brand_properties.get(brand, {}).get('website', ''),
+            'period': f"Last {days} days",
+            'overview': {
+                'sessions': 0,
+                'users': 0,
+                'pageviews': 0,
+                'avg_session_duration': 0,
+                'bounce_rate': 0
+            },
+            'pages': [],
+            'traffic_sources': [],
+            'devices': {'devices': {}, 'browsers': {}},
+            'geographic': [],
+            'last_updated': datetime.now().isoformat(),
+            'data_source': 'unavailable',
+            'note': 'Google Analytics client unavailable — using stub response'
         }
 
     async def get_all_brands_analytics(self, days: int = 30) -> Dict[str, Any]:
