@@ -1092,7 +1092,7 @@ class MarketingDashboard:
                     'number_of_brands': summary_data.get('total_brands', 0),
                     'average_performance_score': 7.8,  # Calculate from real data
                     'overall_rating': 'good',
-                    'data_source': 'real_analytics'
+                    'data_source': 'configured_analytics'
                 }
                 
                 return results
@@ -2629,16 +2629,13 @@ def api_comprehensive_analytics():
         # Start with base analytics
         if ANALYTICS_AVAILABLE and get_analytics_for_dashboard:
             if brand:
-                # Get specific brand data
                 base_data = get_analytics_for_dashboard(brand)
             else:
-                # Get multi-brand summary
                 base_data = dashboard.get_real_comprehensive_analytics()
-            source = 'real_analytics'
+            source = 'live_outreach+activity+analytics'
         else:
-            # Use fallback analytics
             base_data = dashboard.get_fallback_analytics()
-            source = 'fallback'
+            source = 'fallback_mock'
         
         # Enhance with unified outreach analytics
         if OUTREACH_AUTOMATION_AVAILABLE and UnifiedOutreachAnalytics:
