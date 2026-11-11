@@ -265,6 +265,19 @@ if THE_INDEX_MODULE_ENABLED:
         logger.warning(f"⚠️  The Index custom module not loaded: {e}")
 
 
+# Quarterly Room matching intake (First City Foundry). Independent of The Index.
+QUARTERLY_ROOM_ENABLED = os.getenv('ENABLE_QUARTERLY_ROOM_MODULE', 'true').lower() in {'1', 'true', 'yes'}
+if QUARTERLY_ROOM_ENABLED:
+    try:
+        from custom_modules.quarterly_room import models as quarterly_room_models  # noqa: F401
+        from custom_modules.quarterly_room.api import quarterly_room_bp
+
+        app.register_blueprint(quarterly_room_bp)
+        logger.info("✅ Quarterly Room intake module enabled")
+    except Exception as e:
+        logger.warning(f"⚠️  Quarterly Room module not loaded: {e}")
+
+
 def _get_user_brand_context():
     """Return user-scoped brand list and active brand from DB/session."""
     try:
