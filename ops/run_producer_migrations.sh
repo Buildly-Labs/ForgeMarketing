@@ -87,6 +87,33 @@ except Exception:
 PY
 )
 
+# Last migration in the original "fake everything" baseline. Anything newer is a
+# normal migration and must be applied for REAL. (Faking every migration on every
+# deploy silently skipped new tables and columns.)
+BASELINE_MIGRATION="0021_orgapikey_production__organiz_6459bb_idx_and_more"
+export BASELINE_MIGRATION
+
+# If the baseline is already recorded in django_migrations, the one-time
+# reset/fake below is unnecessary (and would hide new migrations).
+BASELINE_RECORDED=$("$PYTHON_BIN" - <<'PY'
+import os
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", os.getenv("DJANGO_SETTINGS_MODULE", "logic_service.settings.docker"))
+try:
+    import django
+    django.setup()
+    from django.db import connection
+    with connection.cursor() as cursor:
+        cursor.execute(
+            "SELECT COUNT(*) FROM django_migrations WHERE app = %s AND name = %s",
+            ["production_ledger", os.environ["BASELINE_MIGRATION"]],
+        )
+        print("yes" if cursor.fetchone()[0] else "no")
+except Exception:
+    print("no")
+PY
+)
+export BASELINE_RECORDED
+
 # Preflight reset: wipe all production_ledger migration records, then
 # fake-apply every migration so `migrate` never tries to re-run DDL that
 # already exists in the DB. Any genuinely new migration (added after the
@@ -94,6 +121,10 @@ PY
 # new migration for real, add it to REAL_MIGRATIONS_TO_CATCH_UP above.
 "$PYTHON_BIN" - <<'PY'
 import os, sys
+
+if os.environ.get("BASELINE_RECORDED") == "yes":
+    print("Baseline already recorded; not resetting migration records.")
+    raise SystemExit(0)
 
 os.environ.setdefault(
     "DJANGO_SETTINGS_MODULE",
@@ -131,8 +162,10 @@ except Exception as exc:
     raise SystemExit(1)
 PY
 
-echo "Fake-applying all production_ledger migrations (schema already exists in DB)..."
-"$PYTHON_BIN" manage.py migrate production_ledger --fake --no-input
+if [[ "$BASELINE_RECORDED" != "yes" ]]; then
+    echo "Fake-applying production_ledger migrations up to the baseline (schema already exists in DB)..."
+    "$PYTHON_BIN" manage.py migrate production_ledger "$BASELINE_MIGRATION" --fake --no-input
+fi
 
 if [[ "$NEEDS_CATCH_UP" == "yes" ]]; then
     echo "Schema catch-up needed: un-faking and re-applying the following migrations for real..."
@@ -161,6 +194,9 @@ PY
         "$PYTHON_BIN" manage.py migrate production_ledger "$migration" --no-input
     done
 fi
+
+echo "Applying production_ledger migrations newer than the baseline (for real)..."
+"$PYTHON_BIN" manage.py migrate production_ledger --no-input
 
 echo "Applying Django core migrations (contenttypes/auth/admin/sessions)..."
 "$PYTHON_BIN" manage.py migrate contenttypes --no-input
